@@ -13,15 +13,19 @@ import { TimeSystem } from './timeSystem';
 import { VitalSystem } from './vitalSystem';
 import { EconomySystem } from './economySystem';
 import { PerceptionSystem } from './perceptionSystem';
+import { WeatherSystem } from './weatherSystem';
+import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption } from '../server/protocol';
 
-// === 世界事件日志 ===
+// === 世界事件日志（含因果链） ===
 export interface WorldEvent {
   tick: number;
   time: string;       // ISO timestamp
-  type: 'npc' | 'player' | 'economy' | 'state' | 'move';
+  type: 'npc' | 'player' | 'economy' | 'state' | 'move' | 'weather' | 'ecology';
   category: string;   // 子分类
   message: string;    // 描述
+  cause?: string;     // 因果标记（触发原因）
+  source?: string;    // 来源分类
 }
 
 export interface TickTimings {
@@ -50,6 +54,8 @@ export interface TickResult {
     shichen: string;
     day: number;
     season: string;
+    weather: string;
+    weatherDesc: string;
     prices: Record<string, number>;
   };
   playerState: {
@@ -65,8 +71,10 @@ export interface TickResult {
     events: number;
     npcActions: number;
     priceChanges: Record<string, string>;
+    weather: string;
+    weatherDesc: string;
   };
-  distantNews: string[];
+  distantNews: { message: string; cause: string; source: string }[];
 }
 
 // ============================================================
@@ -87,28 +95,15 @@ interface SceneContext {
   fatigue: number;
   copper: number;
   prices: Record<string, number>;
+  weather: string;
+  weatherDesc: string;
+  causalEvents: CausalEvent[];  // 本回合因果事件
 }
 
 const NPC_NAMES = ['王掌柜', '刘寡妇', '张三', '李大夫', '赵秀才', '陈猎户', '孙铁匠', '周嫂子'];
-const NPC_TITLES = ['掌柜', '寡妇', '混混', '大夫', '秀才', '猎户', '铁匠', '嫂子'];
 
 function pickNPC(): string {
-  const i = Math.floor(Math.random() * NPC_NAMES.length);
-  return NPC_NAMES[i];
-}
-
-function pickChatter(): string {
-  const chatters = [
-    `一个挑夫擦着汗说："最近粮价涨了不少，一天赚的钱还不够买两斤米。"`,
-    `两个商人在角落低声说："听说城南闹了匪，布庄都不敢进货了。"`,
-    `一个妇人对邻居说："我家那口子说药铺的药也贵了，这日子…"`,
-    `一个书生摇着扇子感叹："这世道，连笔墨纸砚都涨了价。"`,
-    `一个老汉叹道："今年雨水多，庄稼不好，米价怕是还要涨。"`,
-    `一个小孩跑过喊："快去看！码头来了好大一条船！"`,
-    `一个捕快匆匆走过："让开让开！城门那边出事了！"`,
-    `一个卖花姑娘怯怯地说："姑娘，买朵花吧？只要两文钱…"`,
-  ];
-  return chatters[Math.floor(Math.random() * chatters.length)];
+  return NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)];
 }
 
 function seasonDesc(season: string): string {
@@ -263,6 +258,8 @@ export class WorldEngine {
   readonly perception: PerceptionSystem;
   readonly regionSim: RegionSimulator;
   readonly lod: LODManager;
+  readonly weather: WeatherSystem;
+  readonly eventEngine: EventEngine;
 
   private l0Entities: number[] = [];  // GOAP NPC
   private l1Entities: number[] = [];  // 行为树 NPC
@@ -282,6 +279,8 @@ export class WorldEngine {
     this.perception = new PerceptionSystem(this.em, this.worldMap);
     this.regionSim = new RegionSimulator();
     this.lod = new LODManager(this.em, this.worldMap, this.regionSim);
+    this.weather = new WeatherSystem();
+    this.eventEngine = new EventEngine();
   }
 
   /** 记录世界事件 */
