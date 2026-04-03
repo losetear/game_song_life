@@ -620,10 +620,335 @@ body::before {
 
 /* ===== 响应式 ===== */
 @media (min-width: 768px) {
-  .bench-section, .demo-section, .radar-section, .breakdown-section, .propagation-section {
+  .bench-section, .demo-section, .radar-section, .breakdown-section, .propagation-section, .monitor-section {
     padding-left: 24px;
     padding-right: 24px;
   }
+}
+
+/* ===== 世界监控面板 ===== */
+.monitor-section { padding: 16px; max-width: 900px; margin: 0 auto; }
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .monitor-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .monitor-grid .full-width { grid-column: 1 / -1; }
+}
+
+.monitor-card {
+  background: var(--paper-light);
+  border-radius: var(--radius);
+  border: 1px solid rgba(44, 24, 16, 0.08);
+  padding: 16px;
+  box-shadow: 0 1px 4px var(--shadow);
+  position: relative;
+}
+
+.monitor-card-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+  padding-left: 10px;
+  border-left: 3px solid var(--vermillion);
+}
+
+/* 概览大数字 */
+.stat-big {
+  font-family: 'Noto Serif SC', serif;
+  font-size: clamp(36px, 10vw, 56px);
+  font-weight: 900;
+  color: var(--vermillion);
+  text-align: center;
+  line-height: 1;
+}
+.stat-big-label {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(44, 24, 16, 0.5);
+  letter-spacing: 0.2em;
+  margin-top: 4px;
+}
+
+/* 概览行 */
+.overview-row {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(44, 24, 16, 0.1);
+}
+.overview-item {
+  text-align: center;
+}
+.overview-value {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+.overview-label {
+  font-size: 11px;
+  color: rgba(44, 24, 16, 0.5);
+  margin-top: 2px;
+}
+
+/* 饼图（CSS） */
+.pie-chart {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  margin: 12px auto;
+  position: relative;
+  background: conic-gradient(
+    var(--vermillion) 0deg,
+    var(--vermillion) 28.8deg,
+    var(--jade) 28.8deg,
+    var(--jade) 72deg,
+    #6b8e23 72deg,
+    #6b8e23 216deg,
+    #8b7355 216deg,
+    #8b7355 252deg,
+    var(--gold) 252deg,
+    var(--gold) 270deg,
+    var(--indigo) 270deg,
+    var(--indigo) 360deg
+  );
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.pie-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70px; height: 70px;
+  border-radius: 50%;
+  background: var(--paper-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.pie-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  justify-content: center;
+  margin-top: 8px;
+  font-size: 11px;
+}
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pie-legend-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* LOD 条 */
+.lod-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.lod-item {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.lod-item .lod-num {
+  font-weight: 700;
+  font-size: 16px;
+}
+.lod-l0 { background: rgba(194, 58, 46, 0.1); color: var(--vermillion); }
+.lod-l1 { background: rgba(184, 134, 11, 0.1); color: var(--gold); }
+.lod-l2 { background: rgba(58, 79, 122, 0.1); color: var(--indigo); }
+
+/* 筛选器 */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.filter-select, .filter-input {
+  padding: 6px 10px;
+  border: 1px solid rgba(44, 24, 16, 0.15);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+.filter-input { flex: 1; min-width: 100px; }
+
+/* 实体表格 */
+.entity-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.entity-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.entity-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 700;
+  color: rgba(44, 24, 16, 0.6);
+  border-bottom: 2px double rgba(44, 24, 16, 0.15);
+  white-space: nowrap;
+}
+.entity-table td {
+  padding: 7px 10px;
+  border-bottom: 1px dashed rgba(44, 24, 16, 0.08);
+  white-space: nowrap;
+}
+.entity-table tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.entity-table tbody tr:hover {
+  background: rgba(184, 134, 11, 0.06);
+}
+.entity-table tbody tr.expanded {
+  background: rgba(184, 134, 11, 0.08);
+}
+
+/* 实体详情展开 */
+.entity-detail {
+  display: none;
+  padding: 10px 14px;
+  background: rgba(44, 24, 16, 0.02);
+  border-bottom: 1px solid rgba(44, 24, 16, 0.06);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.entity-detail.visible { display: block; }
+.entity-detail pre {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: rgba(44, 24, 16, 0.7);
+}
+
+/* 分页 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.page-btn {
+  padding: 6px 14px;
+  border: 1px solid rgba(44, 24, 16, 0.15);
+  border-radius: 6px;
+  background: var(--paper);
+  cursor: pointer;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  color: var(--ink);
+  transition: var(--transition);
+}
+.page-btn:hover { border-color: var(--gold); }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Grid 热力图 */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+.heatmap-cell {
+  padding: 10px 8px;
+  border-radius: 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+.heatmap-cell:hover {
+  border-color: var(--gold);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow);
+}
+.heatmap-cell-name {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 3px;
+}
+.heatmap-cell-count {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* 事件日志 */
+.event-list {
+  max-height: 400px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.event-item {
+  padding: 8px 10px;
+  border-bottom: 1px dashed rgba(44, 24, 16, 0.06);
+  font-size: 12px;
+  line-height: 1.6;
+  animation: fadeIn 0.3s ease;
+}
+.event-time {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: rgba(44, 24, 16, 0.35);
+  margin-right: 6px;
+}
+.event-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 6px;
+}
+.event-tag.npc { background: rgba(58, 79, 122, 0.12); color: var(--indigo); }
+.event-tag.player { background: rgba(46, 139, 87, 0.12); color: var(--jade); }
+.event-tag.economy { background: rgba(184, 134, 11, 0.12); color: var(--gold); }
+.event-tag.state { background: rgba(194, 58, 46, 0.1); color: var(--vermillion); }
+.event-tag.move { background: rgba(139, 105, 20, 0.1); color: #8b6914; }
+
+/* 自动刷新指示器 */
+.refresh-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(44, 24, 16, 0.4);
+  margin-bottom: 8px;
+}
+.refresh-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--jade);
+  animation: pulse 2s infinite;
 }
 </style>
 </head>
@@ -643,6 +968,9 @@ body::before {
   </div>
   <div class="tab" data-tab="demo" onclick="switchTab('demo', this)">
     <span class="tab-icon">🏯</span>市井游
+  </div>
+  <div class="tab" data-tab="monitor" onclick="switchTab('monitor', this)">
+    <span class="tab-icon">🔍</span>世界监控
   </div>
   <div class="tab" data-tab="about" onclick="switchTab('about', this)">
     <span class="tab-icon">📖</span>架构
@@ -720,6 +1048,113 @@ body::before {
   </div>
 </div>
 
+<!-- ============ 世界监控面板 ============ -->
+<div id="monitor-panel" class="panel">
+  <div class="monitor-section">
+    <div class="refresh-indicator">
+      <span class="refresh-dot"></span>
+      <span id="monitor-refresh-text">自动刷新中…</span>
+    </div>
+    <div class="monitor-grid">
+
+      <!-- 面板 A: 世界概览 -->
+      <div class="monitor-card">
+        <div class="monitor-card-title">世界概览</div>
+        <div class="stat-big" id="monitor-total">—</div>
+        <div class="stat-big-label">实体总数</div>
+        <div class="overview-row" id="monitor-time-row">
+          <div class="overview-item">
+            <div class="overview-value" id="monitor-day">—</div>
+            <div class="overview-label">天</div>
+          </div>
+          <div class="overview-item">
+            <div class="overview-value" id="monitor-shichen">—</div>
+            <div class="overview-label">时辰</div>
+          </div>
+          <div class="overview-item">
+            <div class="overview-value" id="monitor-season">—</div>
+            <div class="overview-label">季节</div>
+          </div>
+        </div>
+        <div class="overview-row">
+          <div class="overview-item">
+            <div class="overview-value" id="monitor-ecs">—</div>
+            <div class="overview-label">ECS 实体</div>
+          </div>
+          <div class="overview-item">
+            <div class="overview-value" id="monitor-mem">—</div>
+            <div class="overview-label">内存 MB</div>
+          </div>
+          <div class="overview-item">
+            <div class="overview-value" id="monitor-uptime">—</div>
+            <div class="overview-label">运行时间</div>
+          </div>
+        </div>
+        <div class="pie-chart">
+          <div class="pie-center" id="monitor-pie-center">—</div>
+        </div>
+        <div class="pie-legend" id="monitor-pie-legend"></div>
+        <div class="lod-bar" id="monitor-lod"></div>
+      </div>
+
+      <!-- 面板 B: 实体浏览器 -->
+      <div class="monitor-card">
+        <div class="monitor-card-title">实体浏览器</div>
+        <div class="filter-bar">
+          <select class="filter-select" id="entity-filter-type" onchange="loadEntities()">
+            <option value="">全部类型</option>
+            <option value="npc">NPC</option>
+            <option value="animal">动物</option>
+            <option value="plant">植物</option>
+            <option value="mineral">矿物</option>
+            <option value="building">建筑</option>
+            <option value="item">物品</option>
+          </select>
+          <select class="filter-select" id="entity-filter-lod" onchange="loadEntities()">
+            <option value="">全部 LOD</option>
+            <option value="0">L0 GOAP</option>
+            <option value="1">L1 行为树</option>
+            <option value="2">L2 统计</option>
+          </select>
+          <input class="filter-input" id="entity-search" placeholder="搜索名称…" oninput="loadEntities()">
+        </div>
+        <div class="entity-table-wrap">
+          <table class="entity-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>类型</th>
+                <th>名称</th>
+                <th>职业/Grid</th>
+                <th>饱腹</th>
+                <th>铜钱</th>
+              </tr>
+            </thead>
+            <tbody id="entity-tbody"></tbody>
+          </table>
+        </div>
+        <div id="entity-detail-row" class="entity-detail">
+          <pre id="entity-detail-pre">点击行查看详情</pre>
+        </div>
+        <div class="pagination" id="entity-pagination"></div>
+      </div>
+
+      <!-- 面板 C: Grid 热力图 -->
+      <div class="monitor-card full-width">
+        <div class="monitor-card-title">Grid 热力图</div>
+        <div class="heatmap-grid" id="heatmap-grid"></div>
+      </div>
+
+      <!-- 面板 D: 事件日志 -->
+      <div class="monitor-card full-width">
+        <div class="monitor-card-title">事件日志</div>
+        <div class="event-list" id="event-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ============ 架构面板 ============ -->
 <div id="about-panel" class="panel">
   <div class="bench-section">
@@ -774,6 +1209,8 @@ function switchTab(name, el) {
   else document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
   document.getElementById(name + '-panel').classList.add('active');
   if (name === 'demo' && !ws) connectWS();
+  if (name === 'monitor') startMonitor();
+  else stopMonitor();
 }
 
 // ============================================================
@@ -1510,6 +1947,250 @@ function addLog(text) {
   entry.innerHTML = `<span class="log-timing">${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}</span> ${text}`;
   el.insertBefore(entry, el.firstChild);
   if (el.children.length > 50) el.removeChild(el.lastChild);
+}
+
+// ============================================================
+// 世界监控
+// ============================================================
+let monitorStatsTimer = null;
+let monitorEventsTimer = null;
+let entityPage = 0;
+const entityPageSize = 50;
+let lastEventCount = 0;
+
+const GRID_NAMES = {
+  center_street: '中心大街', east_market: '东市', west_market: '西市',
+  dock: '汴河码头', cloth_shop: '锦绣布庄', tea_house: '清风茶楼',
+  government: '府衙', temple: '大相国寺', residential_north: '北坊住宅',
+  residential_south: '南坊住宅', east_farm: '东郊农庄', south_farm: '南郊农田',
+  irrigation: '灌渠', shallow_mountain: '浅山', deep_mountain: '深山',
+  stream: '溪涧', mountain_village: '山村', upstream: '汴河上游',
+  downstream: '汴河下游', riverbank: '河岸',
+};
+
+const TYPE_LABELS = {
+  npc: { label: 'NPC', color: '#c23a2e' },
+  animal: { label: '动物', color: '#2e8b57' },
+  plant: { label: '植物', color: '#6b8e23' },
+  mineral: { label: '矿物', color: '#8b7355' },
+  building: { label: '建筑', color: '#b8860b' },
+  item: { label: '物品', color: '#3a4f7a' },
+};
+
+const SEASON_MAP = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
+
+function startMonitor() {
+  if (monitorStatsTimer) return;
+  loadWorldStats();
+  loadEntities();
+  loadWorldEvents();
+  monitorStatsTimer = setInterval(loadWorldStats, 5000);
+  monitorEventsTimer = setInterval(loadWorldEvents, 3000);
+}
+
+function stopMonitor() {
+  if (monitorStatsTimer) { clearInterval(monitorStatsTimer); monitorStatsTimer = null; }
+  if (monitorEventsTimer) { clearInterval(monitorEventsTimer); monitorEventsTimer = null; }
+}
+
+async function loadWorldStats() {
+  try {
+    const res = await fetch('/api/world/stats');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderWorldStats(data);
+  } catch (err) {
+    document.getElementById('monitor-refresh-text').textContent = '服务器未连接';
+  }
+}
+
+function renderWorldStats(data) {
+  document.getElementById('monitor-total').textContent = data.totalEntities.toLocaleString();
+  document.getElementById('monitor-day').textContent = data.day;
+  document.getElementById('monitor-shichen').textContent = data.shichen;
+  document.getElementById('monitor-season').textContent = SEASON_MAP[data.season] || data.season;
+  document.getElementById('monitor-ecs').textContent = data.ecsEntities.toLocaleString();
+  document.getElementById('monitor-mem').textContent = data.memoryMB;
+  document.getElementById('monitor-uptime').textContent = formatUptime(data.uptimeSec);
+  document.getElementById('monitor-pie-center').textContent = data.totalEntities.toLocaleString();
+
+  // Pie legend
+  const legendEl = document.getElementById('monitor-pie-legend');
+  legendEl.innerHTML = Object.entries(data.byType).map(([type, count]) => {
+    const t = TYPE_LABELS[type] || { label: type, color: '#999' };
+    return `<div class="pie-legend-item"><span class="pie-legend-dot" style="background:${t.color}"></span>${t.label} ${count}</div>`;
+  }).join('');
+
+  // LOD bar
+  const lodEl = document.getElementById('monitor-lod');
+  lodEl.innerHTML = `
+    <div class="lod-item lod-l0"><div class="lod-num">${data.byLOD.L0}</div>GOAP</div>
+    <div class="lod-item lod-l1"><div class="lod-num">${data.byLOD.L1}</div>行为树</div>
+    <div class="lod-item lod-l2"><div class="lod-num">${data.byLOD.L2}</div>统计</div>
+  `;
+
+  // Heatmap
+  renderHeatmap(data.byGrid);
+
+  document.getElementById('monitor-refresh-text').textContent = '自动刷新中…';
+}
+
+function formatUptime(sec) {
+  if (sec < 60) return sec + '秒';
+  if (sec < 3600) return Math.floor(sec / 60) + '分';
+  return Math.floor(sec / 3600) + '时' + Math.floor((sec % 3600) / 60) + '分';
+}
+
+function renderHeatmap(byGrid) {
+  const el = document.getElementById('heatmap-grid');
+  const values = Object.values(byGrid);
+  const maxVal = Math.max(...values, 1);
+
+  const sortedGrids = Object.entries(byGrid).sort((a, b) => b[1] - a[1]);
+
+  el.innerHTML = sortedGrids.map(([gridId, count]) => {
+    const ratio = count / maxVal;
+    const alpha = 0.08 + ratio * 0.35;
+    const bg = `rgba(44, 24, 16, ${alpha.toFixed(2)})`;
+    const textColor = ratio > 0.5 ? 'var(--paper-light)' : 'var(--ink)';
+    const name = GRID_NAMES[gridId] || gridId;
+    return `
+      <div class="heatmap-cell" style="background:${bg};color:${textColor}" onclick="filterByGrid('${gridId}')">
+        <div class="heatmap-cell-name">${name}</div>
+        <div class="heatmap-cell-count">${count}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterByGrid(gridId) {
+  // Switch to entity browser with grid filter
+  const gridSelect = document.getElementById('entity-filter-grid');
+  if (gridSelect) gridSelect.value = gridId;
+  loadEntities();
+}
+
+async function loadEntities() {
+  const type = document.getElementById('entity-filter-type').value;
+  const lod = document.getElementById('entity-filter-lod').value;
+  const search = document.getElementById('entity-search').value;
+
+  const params = new URLSearchParams();
+  if (type) params.set('type', type);
+  if (lod !== '') params.set('lod', lod);
+  if (search) params.set('search', search);
+  params.set('limit', entityPageSize);
+  params.set('offset', entityPage * entityPageSize);
+
+  try {
+    const res = await fetch('/api/world/entities?' + params);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderEntityTable(data);
+  } catch (err) {
+    document.getElementById('entity-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(44,24,16,0.3)">无法连接服务器</td></tr>';
+  }
+}
+
+function renderEntityTable(data) {
+  const tbody = document.getElementById('entity-tbody');
+  tbody.innerHTML = data.entities.map(e => {
+    const hungerColor = e.hunger >= 70 ? 'var(--jade)' : e.hunger >= 40 ? 'var(--gold)' : 'var(--vermillion)';
+    const typeInfo = TYPE_LABELS[e.type] || { label: e.type, color: '#999' };
+    const displayField = e.profession || (GRID_NAMES[e.grid] || e.grid) || '';
+    return `
+      <tr onclick="toggleEntityDetail(${e.id}, this)">
+        <td>${e.id}</td>
+        <td><span style="color:${typeInfo.color};font-weight:700">${typeInfo.label}</span></td>
+        <td>${e.name || '—'}</td>
+        <td style="font-size:11px">${displayField}</td>
+        <td><span style="color:${hungerColor};font-weight:700">${e.hunger >= 0 ? Math.round(e.hunger) : '—'}</span></td>
+        <td>${e.copper >= 0 ? e.copper + '文' : '—'}</td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:rgba(44,24,16,0.3)">无数据</td></tr>';
+
+  // Pagination
+  const pagEl = document.getElementById('entity-pagination');
+  const totalPages = Math.ceil(data.total / entityPageSize);
+  pagEl.innerHTML = `
+    <button class="page-btn" onclick="entityPage=0;loadEntities()" ${entityPage === 0 ? 'disabled' : ''}>首页</button>
+    <button class="page-btn" onclick="entityPage--;loadEntities()" ${entityPage === 0 ? 'disabled' : ''}>上一页</button>
+    <span style="color:rgba(44,24,16,0.5)">第 ${entityPage + 1} / ${totalPages} 页 · 共 ${data.total} 条</span>
+    <button class="page-btn" onclick="entityPage++;loadEntities()" ${entityPage >= totalPages - 1 ? 'disabled' : ''}>下一页</button>
+  `;
+}
+
+async function toggleEntityDetail(id, row) {
+  const detailEl = document.getElementById('entity-detail-row');
+  const preEl = document.getElementById('entity-detail-pre');
+
+  if (row.classList.contains('expanded')) {
+    row.classList.remove('expanded');
+    detailEl.classList.remove('visible');
+    return;
+  }
+
+  // Remove previous expanded
+  document.querySelectorAll('.entity-table tr.expanded').forEach(r => r.classList.remove('expanded'));
+
+  row.classList.add('expanded');
+  detailEl.classList.add('visible');
+  preEl.textContent = '加载中…';
+
+  try {
+    const res = await fetch('/api/world/entity/' + id);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    preEl.textContent = JSON.stringify(data, null, 2);
+
+    // Move detail after this row
+    row.after(detailEl);
+  } catch (err) {
+    preEl.textContent = '加载失败: ' + err.message;
+  }
+}
+
+async function loadWorldEvents() {
+  try {
+    const res = await fetch('/api/world/events?count=50');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderWorldEvents(data.events);
+  } catch (err) {
+    // silently ignore
+  }
+}
+
+function renderWorldEvents(events) {
+  const el = document.getElementById('event-list');
+  if (!el) return;
+
+  const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+
+  // Only re-render if events changed
+  if (events.length === lastEventCount) return;
+  lastEventCount = events.length;
+
+  const typeLabels = { npc: 'NPC', player: '玩家', economy: '经济', state: '状态', move: '移动' };
+
+  el.innerHTML = events.reverse().map(evt => {
+    const time = new Date(evt.time);
+    const timeStr = time.getHours().toString().padStart(2, '0') + ':' +
+                    time.getMinutes().toString().padStart(2, '0') + ':' +
+                    time.getSeconds().toString().padStart(2, '0');
+    return `
+      <div class="event-item">
+        <span class="event-time">T${evt.tick} ${timeStr}</span>
+        <span class="event-tag ${evt.type}">${typeLabels[evt.type] || evt.type}</span>
+        ${evt.message}
+      </div>
+    `;
+  }).join('');
+
+  if (wasAtBottom) {
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 // ============================================================

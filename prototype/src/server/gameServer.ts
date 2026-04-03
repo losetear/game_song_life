@@ -59,6 +59,166 @@ export class GameServer {
         res.status(500).json({ error: String(err) });
       }
     });
+
+    // ── 世界监控 API ──────────────────────────────────────────
+
+    // GET /api/world/stats — 世界整体统计
+    this.app.get('/api/world/stats', (_req, res) => {
+      try {
+        const em = this.engine.em;
+        const wm = this.engine.worldMap;
+        const time = this.engine.time;
+
+        // 按类型统计
+        const byType: Record<string, number> = { npc: 0, animal: 0, plant: 0, mineral: 0, building: 0, item: 0 };
+        const allIds = em.allEntities();
+        for (const id of allIds) {
+          const t = em.getType(id);
+          if (t) byType[t] = (byType[t] || 0) + 1;
+        }
+        // 加上 L2 统计的虚拟实体
+        byType.npc += 300;
+        byType.animal += 1000;
+        byType.plant += 4000;
+        byType.mineral += 1000;
+
+        // 按 LOD 统计
+        const l0Count = this.engine['l0Entities'].length;
+        const l1Count = this.engine['l1Entities'].length;
+        const totalWithL2 = Object.values(byType).reduce((s, v) => s + v, 0);
+        const l2Count = totalWithL2 - l0Count - l1Count;
+
+        // 按 Grid 统计
+        const gridStats = wm.stats();
+
+        // 内存估算（粗略）
+        const memMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 10) / 10;
+        const uptimeSec = Math.round((Date.now() - this.engine.startTime) / 1000);
+
+        res.json({
+          totalEntities: totalWithL2,
+          ecsEntities: em.entityCount,
+          tick: time.tick,
+          day: time.day,
+          shichen: time.shichenName,
+          season: time.season,
+          byType,
+          byLOD: { L0: l0Count, L1: l1Count, L2: l2Count },
+          byGrid: gridStats,
+          memoryMB: memMB,
+          uptimeSec,
+        });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/entities — 实体列表（支持筛选和分页）
+    this.app.get('/api/world/entities', (req, res) => {
+      try {
+        const type = req.query.type as string | undefined;
+        const lod = req.query.lod !== undefined ? parseInt(req.query.lod as string) : undefined;
+        const grid = req.query.grid as string | undefined;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const search = req.query.search as string | undefined;
+
+        const em = this.engine.em;
+        const allIds = em.allEntities();
+
+        // 筛选
+        const filtered: number[] = [];
+        for (const id of allIds) {
+          if (type && em.getType(id) !== type) continue;
+
+          if (lod !== undefined) {
+            const ai = em.getComponent(id, 'AI');
+            if (!ai || ai.aiLevel !== lod) continue;
+          }
+
+          if (grid) {
+            const pos = em.getComponent(id, 'Position');
+            if (!pos || pos.gridId !== grid) continue;
+          }
+
+          if (search) {
+            const identity = em.getComponent(id, 'Identity');
+            if (!identity || !identity.name.includes(search)) continue;
+          }
+
+          filtered.push(id);
+        }
+
+        // 排序（按 ID）
+        filtered.sort((a, b) => a - b);
+
+        const total = filtered.length;
+        const page = filtered.slice(offset, offset + limit);
+
+        const entities = page.map(id => {
+          const identity = em.getComponent(id, 'Identity');
+          const vital = em.getComponent(id, 'Vital');
+          const pos = em.getComponent(id, 'Position');
+          const wallet = em.getComponent(id, 'Wallet');
+          const ai = em.getComponent(id, 'AI');
+
+          return {
+            id,
+            type: em.getType(id),
+            lod: ai?.aiLevel ?? -1,
+            grid: pos?.gridId ?? '',
+            name: identity?.name ?? '',
+            profession: identity?.profession ?? '',
+            hunger: vital?.hunger ?? -1,
+            fatigue: vital?.fatigue ?? -1,
+            health: vital?.health ?? -1,
+            mood: vital?.mood ?? -1,
+            copper: wallet?.copper ?? -1,
+          };
+        });
+
+        res.json({ total, offset, limit, entities });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/entity/:id — 单个实体详情
+    this.app.get('/api/world/entity/:id', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const em = this.engine.em;
+
+        if (!em.isAlive(id)) {
+          res.status(404).json({ error: 'Entity not found' });
+          return;
+        }
+
+        const exported = em.exportEntity(id);
+        if (!exported) {
+          res.status(404).json({ error: 'Export failed' });
+          return;
+        }
+
+        // 获取 Grid 信息
+        const gridId = this.engine.worldMap.getEntityGrid(id);
+
+        res.json({ id, ...exported, gridId });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/events — 世界事件日志
+    this.app.get('/api/world/events', (req, res) => {
+      try {
+        const count = Math.min(parseInt(req.query.count as string) || 50, 100);
+        const events = this.engine.getEvents(count);
+        res.json({ total: events.length, events });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
   }
 
   private setupWebSocket(): void {
@@ -146,6 +306,10 @@ export class GameServer {
       console.log(`   GET  /              → 前端页面`);
       console.log(`   GET  /api/benchmark → 基准测试报告`);
       console.log(`   POST /api/action    → 玩家操作`);
+      console.log(`   GET  /api/world/stats    → 世界统计`);
+      console.log(`   GET  /api/world/entities → 实体列表`);
+      console.log(`   GET  /api/world/entity/:id → 实体详情`);
+      console.log(`   GET  /api/world/events   → 事件日志`);
       console.log(`   WebSocket           → 游戏交互`);
     });
   }

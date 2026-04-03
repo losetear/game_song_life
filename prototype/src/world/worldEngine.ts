@@ -15,6 +15,15 @@ import { EconomySystem } from './economySystem';
 import { PerceptionSystem } from './perceptionSystem';
 import { SceneOption } from '../server/protocol';
 
+// === 世界事件日志 ===
+export interface WorldEvent {
+  tick: number;
+  time: string;       // ISO timestamp
+  type: 'npc' | 'player' | 'economy' | 'state' | 'move';
+  category: string;   // 子分类
+  message: string;    // 描述
+}
+
 export interface TickTimings {
   total: number;
   playerAction: number;
@@ -250,6 +259,11 @@ export class WorldEngine {
   private l0Entities: number[] = [];  // GOAP NPC
   private l1Entities: number[] = [];  // 行为树 NPC
 
+  // 世界事件环形缓冲区
+  private eventLog: WorldEvent[] = [];
+  private readonly maxEvents = 100;
+  readonly startTime: number = Date.now();
+
   constructor() {
     this.em = new EntityManager();
     this.worldMap = new WorldMap();
@@ -261,6 +275,26 @@ export class WorldEngine {
     this.lod = new LODManager(this.em, this.worldMap, this.regionSim);
   }
 
+  /** 记录世界事件 */
+  logEvent(type: WorldEvent['type'], category: string, message: string): void {
+    const evt: WorldEvent = {
+      tick: this.time.tick,
+      time: new Date().toISOString(),
+      type,
+      category,
+      message,
+    };
+    if (this.eventLog.length >= this.maxEvents) {
+      this.eventLog.shift();
+    }
+    this.eventLog.push(evt);
+  }
+
+  /** 获取最近 N 条事件 */
+  getEvents(count: number = 50): WorldEvent[] {
+    return this.eventLog.slice(-count);
+  }
+
   /** 注册 L0 实体 */
   registerL0(ids: number[]): void {
     this.l0Entities.push(...ids);
@@ -269,6 +303,73 @@ export class WorldEngine {
   /** 注册 L1 实体 */
   registerL1(ids: number[]): void {
     this.l1Entities.push(...ids);
+  }
+
+  /** 在 Tick 中生成事件 */
+  private generateTickEvents(): void {
+    // 随机生成 L0 NPC 行为事件
+    for (const entityId of this.l0Entities) {
+      if (Math.random() > 0.3) continue;
+      const identity = this.em.getComponent(entityId, 'Identity');
+      const wallet = this.em.getComponent(entityId, 'Wallet');
+      const vital = this.em.getComponent(entityId, 'Vital');
+      const pos = this.em.getComponent(entityId, 'Position');
+      if (!identity) continue;
+
+      const actions = [
+        () => `${identity.name}在${this.gridDisplayName(pos?.gridId)}叫卖${identity.profession === '商贩' ? '货物' : '手艺'}`,
+        () => `${identity.name}${vital && vital.hunger < 40 ? '肚子饿了，去买炊饼' : '在忙着手头的活'}`,
+        () => `${identity.name}${wallet && wallet.copper > 100 ? '数了数钱袋，满意地点点头' : '翻遍了口袋，叹了口气'}`,
+        () => `${identity.name}和路人攀谈了几句`,
+        () => `${identity.name}在${this.gridDisplayName(pos?.gridId)}来回踱步`,
+      ];
+      const action = actions[Math.floor(Math.random() * actions.length)];
+      this.logEvent('npc', identity.profession, action());
+    }
+
+    // 随机生成 L1 NPC 行为事件
+    for (const entityId of this.l1Entities) {
+      if (Math.random() > 0.95) continue;
+      const identity = this.em.getComponent(entityId, 'Identity');
+      const pos = this.em.getComponent(entityId, 'Position');
+      if (!identity) continue;
+
+      const templates = [
+        `一个${identity.profession}在${this.gridDisplayName(pos?.gridId)}忙碌着`,
+        `${identity.name}在街边歇脚`,
+        `一个${identity.profession}推着小车叫卖`,
+      ];
+      this.logEvent('npc', identity.profession, templates[Math.floor(Math.random() * templates.length)]);
+    }
+
+    // 经济事件
+    if (Math.random() > 0.8) {
+      const prices = this.economy.getPrices();
+      const goods = Object.keys(prices);
+      if (goods.length > 0) {
+        const good = goods[Math.floor(Math.random() * goods.length)];
+        const price = prices[good];
+        const basePrices: Record<string, number> = { food: 10, herbs: 15, cloth: 20, material: 8, cargo: 12 };
+        const base = basePrices[good] || 10;
+        const change = ((price - base) / base * 100).toFixed(0);
+        const dir = price > base ? '涨' : '跌';
+        this.logEvent('economy', '物价', `${good}价${dir}了${Math.abs(parseFloat(change))}%，现价${price.toFixed(1)}文`);
+      }
+    }
+  }
+
+  /** Grid ID 转中文显示名 */
+  private gridDisplayName(gridId?: string): string {
+    const names: Record<string, string> = {
+      center_street: '中心大街', east_market: '东市', west_market: '西市',
+      dock: '汴河码头', cloth_shop: '锦绣布庄', tea_house: '清风茶楼',
+      government: '府衙', temple: '大相国寺', residential_north: '北坊住宅',
+      residential_south: '南坊住宅', east_farm: '东郊农庄', south_farm: '南郊农田',
+      irrigation: '灌渠', shallow_mountain: '浅山', deep_mountain: '深山',
+      stream: '溪涧', mountain_village: '山村', upstream: '汴河上游',
+      downstream: '汴河下游', riverbank: '河岸',
+    };
+    return names[gridId || ''] || gridId || '某处';
   }
 
   /** 获取场景模板 */
@@ -313,6 +414,9 @@ export class WorldEngine {
     t0 = performance.now();
     this.updateL1();
     timings.l1BehaviorTree = performance.now() - t0;
+
+    // 记录 L0/L1 事件
+    this.generateTickEvents();
 
     // 4. L2 统计更新
     t0 = performance.now();
@@ -416,27 +520,33 @@ export class WorldEngine {
         wallet.copper -= 5;
         if (vital) vital.hunger = Math.min(100, vital.hunger + 30);
         if (vital) vital.mood = Math.min(100, vital.mood + 5);
+        this.logEvent('player', '交易', '你花5文买了个炊饼');
         return '买了一个热腾腾的炊饼，一口咬下去，外皮酥脆，馅料喷香。';
       }
       case 'go_east_market': {
         if (pos) { this.worldMap.moveEntity(playerId, 'east_market'); pos.gridId = 'east_market'; pos.areaId = 'city'; }
+        this.logEvent('player', '移动', '你从中心大街走到了东市');
         return '你沿着大街向东走去，穿过熙熙攘攘的人群，来到了东市。';
       }
       case 'go_tea_house': {
         if (pos) { this.worldMap.moveEntity(playerId, 'tea_house'); pos.gridId = 'tea_house'; pos.areaId = 'city'; }
         if (wallet && wallet.copper >= 2) { wallet.copper -= 2; }
+        this.logEvent('player', '移动', '你去了清风茶楼喝茶');
         return '你走进清风茶楼，茶香袅袅，说书先生正讲到精彩处。';
       }
       case 'go_dock': {
         if (pos) { this.worldMap.moveEntity(playerId, 'dock'); pos.gridId = 'dock'; pos.areaId = 'city'; }
+        this.logEvent('player', '移动', '你去了汴河码头');
         return '你向城南走去，到了汴河码头。';
       }
       case 'go_residential': {
         if (pos) { this.worldMap.moveEntity(playerId, 'residential_north'); pos.gridId = 'residential'; pos.areaId = 'residential'; }
+        this.logEvent('player', '移动', '你回到家中');
         return '你沿着小巷回到家中。';
       }
       case 'chat': {
         if (vital) vital.mood = Math.min(100, vital.mood + 5);
+        this.logEvent('player', '社交', '你和路人攀谈了几句');
         return '你和路人攀谈了几句。';
       }
 
@@ -463,12 +573,14 @@ export class WorldEngine {
         if (!wallet || wallet.copper < 50) return '"这点钱…怕是买不了什么。"王掌柜摇头。';
         wallet.copper -= 50;
         if (vital) vital.mood = Math.min(100, vital.mood + 3);
+        this.logEvent('player', '交易', '你在布庄买了匹粗麻布，花了50文');
         return '你买了匹粗麻布，虽粗糙但结实。王掌柜说："实用就好，实在人。"';
       }
       case 'buy_cotton': {
         if (!wallet || wallet.copper < 200) return '"这个价…您怕是买不起。"王掌柜的笑容淡了几分。';
         wallet.copper -= 200;
         if (vital) vital.mood = Math.min(100, vital.mood + 8);
+        this.logEvent('player', '交易', '你在布庄买了匹上好的棉布，花了200文');
         return '你买了匹上好的棉布，柔软透气。王掌柜眉开眼笑："好眼光！"';
       }
       case 'ask_silk':
@@ -528,6 +640,7 @@ export class WorldEngine {
           vital.hunger = Math.max(0, vital.hunger - 10);
         }
         if (wallet) wallet.copper += 15;
+        this.logEvent('player', '工作', '你在码头扛包赚了15文');
         return '你扛了一下午麻袋，累得腰酸背痛，赚了 15 文。';
       }
       case 'chat_foreman':
