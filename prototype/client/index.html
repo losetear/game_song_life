@@ -735,7 +735,7 @@ body::before {
       <p><strong style="color:var(--vermillion)">信息传播引擎</strong> — 关系图谱 + hop 衰减 + 细节失真</p>
       <p><strong style="color:var(--gold)">感知系统</strong> — 同 Grid 可见，相邻 Grid 可闻</p>
       <p><strong style="color:var(--indigo)">时辰系统</strong> — 12 时辰 / 天，30 天 / 季</p>
-      <p><strong style="color:var(--jade)">SQLite 存档</strong> — 万级实体序列化 / 反序列化</p>
+      <p><strong style="color:var(--jade)">内存存档</strong> — 万级实体序列化 / 反序列化（纯 Map，无 SQLite）</p>
     </div>
     <div style="margin-top:16px">
       <div class="section-title">实体规模</div>
@@ -784,7 +784,7 @@ const BENCH_COLORS = ['#3a4f7a','#6b5b3a','#c23a2e','#2e8b57','#b8860b','#8b6914
 
 async function runBenchmark() {
   try {
-    const res = await fetch('/benchmark');
+    const res = await fetch('/api/benchmark');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     benchData = await res.json();
     renderBenchmark(benchData);
@@ -1153,8 +1153,9 @@ function connectWS() {
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
-      if (msg.type === 'actionResult' && msg.seqId === 0) {
-        // Welcome message
+      if (msg.type === 'welcome') {
+        // Initial scene from server
+        handleWelcome(msg);
         return;
       }
       if (msg.type === 'actionResult') {
@@ -1189,15 +1190,66 @@ function updateConnStatus(status) {
 
 function handleServerResponse(msg) {
   const data = msg.data;
-  if (data.message) {
+  if (data.sceneDescription) {
+    updateSceneText(data.sceneDescription);
+  } else if (data.message) {
     updateSceneText(data.message);
+  }
+  if (data.sceneLocation) {
+    document.getElementById('scene-location').textContent = data.sceneLocation;
+  }
+  if (data.options) {
+    renderServerOptions(data.options);
+  }
+  if (data.playerState) {
+    updatePlayerState(data.playerState);
   }
   if (data.worldState) {
     updateWorldState(data.worldState);
   }
+  if (data.npcMessages && data.npcMessages.length > 0) {
+    data.npcMessages.forEach(m => addLog(`💬 ${m}`));
+  }
   if (msg.timings) {
     addLog(`操作耗时: ${msg.timings.total.toFixed(1)}ms (GOAP: ${msg.timings.l0GOAP.toFixed(1)} / BT: ${msg.timings.l1BehaviorTree.toFixed(1)} / 感知: ${msg.timings.perception.toFixed(1)})`);
   }
+}
+
+function handleWelcome(msg) {
+  const data = msg.data;
+  if (data.sceneDescription) {
+    updateSceneText(data.sceneDescription);
+  }
+  if (data.sceneLocation) {
+    document.getElementById('scene-location').textContent = data.sceneLocation;
+  }
+  if (data.options) {
+    renderServerOptions(data.options);
+  }
+  if (data.playerState) {
+    updatePlayerState(data.playerState);
+  }
+  if (data.worldState) {
+    updateWorldState(data.worldState);
+  }
+  addLog('✅ 已连接服务器，欢迎来到汴京！');
+}
+
+function renderServerOptions(options) {
+  const area = document.getElementById('options-area');
+  area.innerHTML = options.map(opt => {
+    const disabled = opt.cost && playerState.copper < opt.cost;
+    return `
+      <button class="option-btn" onclick="doAction('${opt.id}')" ${disabled ? 'disabled' : ''}>
+        <div class="option-icon">${opt.icon || '🔘'}</div>
+        <div class="option-text">
+          <div>${opt.text}</div>
+          ${opt.desc ? `<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:1px">${opt.desc}</div>` : ''}
+        </div>
+        ${opt.costLabel ? `<div class="option-cost">${opt.costLabel}</div>` : (opt.cost ? `<div class="option-cost">${opt.cost}文</div>` : '')}
+      </button>
+    `;
+  }).join('');
 }
 
 // ============================================================

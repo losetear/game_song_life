@@ -1,6 +1,7 @@
 // === 经济系统（简化供需） ===
 
 export interface MarketPrices {
+  [key: string]: number;
   food: number;
   herbs: number;
   cloth: number;

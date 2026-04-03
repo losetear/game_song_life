@@ -3,15 +3,55 @@
 export interface ClientMessage {
   type: 'action';
   actionId: string;
-  params: any;
+  params: Record<string, any>;
   seqId: number;
 }
 
+export interface SceneOption {
+  id: string;
+  icon: string;
+  text: string;
+  cost?: number;        // 铜钱花费
+  costLabel?: string;   // 显示文本如 "5文"
+  desc?: string;        // 选项描述
+}
+
 export interface ServerMessage {
-  type: 'actionResult' | 'error' | 'benchmarkResult';
+  type: 'actionResult' | 'error' | 'welcome' | 'benchmarkResult';
   seqId?: number;
-  data?: any;
-  timings?: any;
+  data?: {
+    message?: string;
+    sceneDescription?: string;   // 古风场景描述文本
+    sceneLocation?: string;      // 当前位置名
+    options?: SceneOption[];     // 可选行动
+    npcMessages?: string[];      // NPC 对话
+    worldState?: {
+      tick: number;
+      shichen: string;
+      day: number;
+      season: string;
+      prices: Record<string, number>;
+    };
+    perception?: any;
+    playerState?: {
+      hunger: number;
+      fatigue: number;
+      health: number;
+      mood: number;
+      copper: number;
+    };
+  };
+  timings?: {
+    total: number;
+    l0GOAP: number;
+    l1BehaviorTree: number;
+    l2Statistics: number;
+    economy: number;
+    perception: number;
+    vitalDecay: number;
+    playerAction: number;
+    assemble: number;
+  };
 }
 
 export interface BenchmarkReport {

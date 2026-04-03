@@ -1,5 +1,5 @@
-// === SQLite 兼容内存数据库 ===
-// 使用 Map 实现，接口对标 better-sqlite3，用于存档基准测试
+// === 纯内存数据库 ===
+// 使用 Map 实现，无 SQLite 依赖，用于存档基准测试
 
 interface EntityRow {
   id: number;
