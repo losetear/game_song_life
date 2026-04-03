@@ -408,6 +408,43 @@ body::before {
 }
 .scene-text.fading { opacity: 0; }
 
+/* 回合摘要 */
+.turn-summary {
+  margin: 0 16px;
+  padding: 10px 14px;
+  border-top: 1px dashed var(--paper-dark);
+  background: rgba(255,255,255,0.3);
+  font-size: 12px;
+}
+.turn-summary-header {
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+.ts-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+.ts-label {
+  color: rgba(44,24,16,0.5);
+  min-width: 40px;
+}
+.ts-value {
+  color: var(--ink);
+  text-align: right;
+}
+.ts-news {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dotted var(--paper-dark);
+  color: rgba(44,24,16,0.7);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* 状态栏 */
 .status-bar {
   display: flex;
@@ -1033,6 +1070,10 @@ body::before {
           <span style="color:rgba(44,24,16,0.4);font-size:13px">—— 你站在中心大街上，该做点什么呢？</span>
         </div>
       </div>
+      <div class="turn-summary" id="turn-summary" style="display:none">
+        <div class="turn-summary-header">本回合</div>
+        <div class="turn-summary-body" id="turn-summary-body"></div>
+      </div>
       <div class="status-bar" id="status-bar">
         <div class="status-item"><span class="status-icon">🍖</span>饱腹 <span class="status-value high" id="sv-hunger">80</span></div>
         <div class="status-item"><span class="status-icon">💤</span>精力 <span class="status-value high" id="sv-fatigue">80</span></div>
@@ -1650,6 +1691,30 @@ function handleServerResponse(msg) {
   if (msg.timings) {
     addLog(`操作耗时: ${msg.timings.total.toFixed(1)}ms (GOAP: ${msg.timings.l0GOAP.toFixed(1)} / BT: ${msg.timings.l1BehaviorTree.toFixed(1)} / 感知: ${msg.timings.perception.toFixed(1)})`);
   }
+  if (data.turnSummary) {
+    renderTurnSummary(data.turnSummary, data.distantNews);
+  }
+}
+
+function renderTurnSummary(summary, distantNews) {
+  const el = document.getElementById('turn-summary');
+  const body = document.getElementById('turn-summary-body');
+  if (!summary) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+
+  let html = `<div class="ts-row"><span class="ts-label">时间</span><span class="ts-value">第${summary.day}天 · ${summary.shichen}时</span></div>`;
+  html += `<div class="ts-row"><span class="ts-label">本回合</span><span class="ts-value">${summary.npcActions}个NPC行动，${summary.events}个事件</span></div>`;
+
+  const prices = Object.entries(summary.priceChanges);
+  if (prices.length > 0) {
+    html += `<div class="ts-row"><span class="ts-label">物价</span><span class="ts-value">${prices.map(([k,v]) => `${k}${v}`).join(' ')}</span></div>`;
+  }
+
+  if (distantNews && distantNews.length > 0) {
+    html += `<div class="ts-news">${distantNews.map(n => `<div>📰 ${n}</div>`).join('')}</div>`;
+  }
+
+  body.innerHTML = html;
 }
 
 function handleWelcome(msg) {

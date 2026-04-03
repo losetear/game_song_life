@@ -40,6 +40,14 @@ export interface ServerMessage {
       mood: number;
       copper: number;
     };
+    turnSummary?: {
+      shichen: string;
+      day: number;
+      events: number;
+      npcActions: number;
+      priceChanges: Record<string, string>;
+    };
+    distantNews?: string[];
   };
   timings?: {
     total: number;

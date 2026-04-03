@@ -59,6 +59,14 @@ export interface TickResult {
     mood: number;
     copper: number;
   };
+  turnSummary: {
+    shichen: string;
+    day: number;
+    events: number;
+    npcActions: number;
+    priceChanges: Record<string, string>;
+  };
+  distantNews: string[];
 }
 
 // ============================================================
@@ -258,6 +266,7 @@ export class WorldEngine {
 
   private l0Entities: number[] = [];  // GOAP NPC
   private l1Entities: number[] = [];  // 行为树 NPC
+  private lastTickEvents = 0;
 
   // 世界事件环形缓冲区
   private eventLog: WorldEvent[] = [];
@@ -392,6 +401,138 @@ export class WorldEngine {
     };
   }
 
+  /** 回合模拟：全世界推进一回合 */
+  private simulateTurn(): { npcActions: number; priceChanges: Record<string, string> } {
+    // 保存当前物价
+    const oldPrices = this.economy.getPrices();
+
+    // 1. 时间推进
+    this.time.advance();
+
+    // 2. L0 NPC 行动 (优先级规则, 10个核心NPC)
+    for (const entityId of this.l0Entities) {
+      this.simulateL0Action(entityId);
+    }
+
+    // 3. L1 NPC 批量行动 (简化模拟)
+    this.simulateL1Batch();
+
+    // 4. L2 区域统计更新
+    this.regionSim.update(this.time.season, 1.0);
+
+    // 5. 经济系统更新
+    this.economy.update();
+
+    // 6. 生命系统衰减
+    this.vital.update();
+
+    // 计算物价变动
+    const newPrices = this.economy.getPrices();
+    const priceChanges: Record<string, string> = {};
+    const priceNames: Record<string, string> = { food: '粮', herbs: '药', cloth: '布', material: '材', cargo: '货' };
+    for (const key of Object.keys(newPrices)) {
+      const old = oldPrices[key] || 1;
+      const diff = ((newPrices[key] - old) / old * 100);
+      if (Math.abs(diff) > 0.1) {
+        const sign = diff > 0 ? '+' : '';
+        priceChanges[priceNames[key] || key] = `${sign}${diff.toFixed(1)}%`;
+      }
+    }
+
+    return { npcActions: this.lastTickEvents, priceChanges };
+  }
+
+  /** L0 NPC 单个行动模拟（优先级规则决策） */
+  private simulateL0Action(entityId: number): void {
+    const vital = this.em.getComponent(entityId, 'Vital');
+    const wallet = this.em.getComponent(entityId, 'Wallet');
+    const identity = this.em.getComponent(entityId, 'Identity');
+    if (!vital || !identity) return;
+
+    const name = identity.name;
+    const hunger = vital.hunger;
+    const fatigue = vital.fatigue;
+
+    let action: string;
+    if (hunger < 30) {
+      action = 'eat';
+      vital.hunger = Math.min(100, hunger + 30);
+      if (wallet) wallet.copper -= 10;
+    } else if (fatigue > 80) {
+      action = 'rest';
+      vital.fatigue = Math.max(0, fatigue - 30);
+    } else {
+      const profActions: Record<string, string> = {
+        merchant: 'sell', farmer: 'farm', guard: 'patrol',
+        doctor: 'heal', hunter: 'hunt', rogue: 'steal',
+        商贩: 'sell', 农夫: 'farm', 捕快: 'patrol',
+        大夫: 'heal', 猎户: 'hunt', 小偷: 'steal',
+      };
+      action = profActions[identity.profession] || 'wander';
+      if (wallet && action !== 'wander') wallet.copper += Math.floor(Math.random() * 50) + 10;
+      vital.fatigue = Math.min(100, fatigue + 15);
+      vital.hunger = Math.max(0, hunger - 8);
+    }
+
+    // 记录叙事事件
+    const eventTemplates: Record<string, string[]> = {
+      eat: [`${name}在路边买了两个炊饼，蹲着吃起来。`, `${name}去茶馆吃了一碗热汤面。`],
+      rest: [`${name}找了个阴凉处歇了一会儿。`, `${name}打了个盹。`],
+      sell: [`${name}卖出了一批货物，笑得合不拢嘴。`, `${name}在铺子里招呼客人。`],
+      farm: [`${name}在田间忙碌了一个时辰。`, `${name}弯腰在田里除草。`],
+      patrol: [`${name}在街上巡逻，目光警惕。`, `${name}检查了几个摊位的执照。`],
+      heal: [`${name}给一个病人开了药方。`, `${name}在药铺里配药。`],
+      hunt: [`${name}扛着弓进了山林。`, `${name}在溪边设了陷阱。`],
+      steal: [`${name}在人群中挤来挤去，贼眼溜溜。`, `${name}贴着一个客商蹭过去。`],
+      wander: [`${name}在街上闲逛。`],
+    };
+    const templates = eventTemplates[action] || eventTemplates.wander;
+    this.logEvent('npc', 'npc_action', templates[Math.floor(Math.random() * templates.length)]);
+  }
+
+  /** L1 NPC 批量模拟 */
+  private simulateL1Batch(): void {
+    let actions = 0;
+    for (const entityId of this.l1Entities) {
+      const vital = this.em.getComponent(entityId, 'Vital');
+      if (!vital) continue;
+      vital.hunger = Math.max(0, vital.hunger - 5);
+      vital.fatigue = Math.min(100, vital.fatigue + 3);
+      actions++;
+    }
+    this.lastTickEvents = actions + this.l0Entities.length;
+
+    // 生成 L1 汇总事件
+    const npcCount = this.l1Entities.length;
+    if (npcCount > 0) {
+      const summaries = [
+        `城中有${Math.min(npcCount, Math.floor(npcCount * 0.3))}人在忙碌地干活。`,
+        `街上来来往往${Math.floor(npcCount * 0.1)}个行人。`,
+        `码头上${Math.floor(Math.random() * 30 + 10)}个搬运工在扛货。`,
+      ];
+      this.logEvent('npc', 'l1_summary', summaries[Math.floor(Math.random() * summaries.length)]);
+    }
+  }
+
+  /** 生成远方消息 */
+  private generateDistantNews(): string[] {
+    const count = Math.floor(Math.random() * 3) + 1;
+    const allNews = [
+      '听说杭州丝绸大涨，苏杭商人都赶着去进货了。',
+      '京东路的粮仓遭了水灾，粮价怕是要涨。',
+      '辽国使团不日到达汴京，市面都要管制。',
+      '西夏那边又闹起来了，边贸断了。',
+      '听说襄阳那边发现了金矿，好多人赶过去。',
+      '漕运的船在淮河搁浅了，布匹要断货。',
+      '陕西大旱，药材产地受了灾。',
+      '两浙路的茶商组团进京了，茶价要跌。',
+      '听说朝廷要开恩科，各地举子纷纷进京赶考。',
+      '黄河决口了，京东路的庄稼都毁了。',
+    ];
+    const shuffled = allNews.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }
+
   /** 执行玩家操作 → 完整 Tick，返回丰富场景描述 */
   executePlayerAction(playerId: number, actionId: string, params: any): TickResult {
     const timings: TickTimings = {
@@ -405,42 +546,17 @@ export class WorldEngine {
     const actionMessage = this.executeAction(playerId, actionId, params);
     timings.playerAction = performance.now() - t0;
 
-    // 2. L0 GOAP 更新
+    // 2. 回合模拟：全世界推进一回合
     t0 = performance.now();
-    this.updateL0();
+    const simResult = this.simulateTurn();
     timings.l0GOAP = performance.now() - t0;
 
-    // 3. L1 行为树更新
-    t0 = performance.now();
-    this.updateL1();
-    timings.l1BehaviorTree = performance.now() - t0;
-
-    // 记录 L0/L1 事件
-    this.generateTickEvents();
-
-    // 4. L2 统计更新
-    t0 = performance.now();
-    if (this.time.isNewDay) {
-      this.regionSim.update(this.time.season, 1.0);
-    }
-    timings.l2Statistics = performance.now() - t0;
-
-    // 5. 经济系统
-    t0 = performance.now();
-    this.economy.update();
-    timings.economy = performance.now() - t0;
-
-    // 6. 生命衰减
-    t0 = performance.now();
-    this.vital.update();
-    timings.vitalDecay = performance.now() - t0;
-
-    // 7. 感知计算
+    // 3. 感知计算
     t0 = performance.now();
     const percData = this.perception.getPerceptionData(playerId);
     timings.perception = performance.now() - t0;
 
-    // 8. 组装场景描述
+    // 4. 组装场景描述
     t0 = performance.now();
 
     const pos = this.em.getComponent(playerId, 'Position');
@@ -461,11 +577,15 @@ export class WorldEngine {
     const vital = this.em.getComponent(playerId, 'Vital');
     const wallet = this.em.getComponent(playerId, 'Wallet');
 
-    timings.assemble = performance.now() - t0;
+    // 远方消息
+    const distantNews = this.generateDistantNews();
 
-    // 时间推进
-    this.time.advance();
+    timings.assemble = performance.now() - t0;
     timings.total = performance.now() - startTotal;
+
+    // 事件计数
+    const recentEvents = this.getEvents(20);
+    const tickEvents = recentEvents.filter(e => e.tick === this.time.tick).length;
 
     return {
       success: true,
@@ -490,6 +610,14 @@ export class WorldEngine {
         mood: vital?.mood ?? 50,
         copper: wallet?.copper ?? 0,
       },
+      turnSummary: {
+        shichen: this.time.shichenName,
+        day: this.time.day,
+        events: tickEvents,
+        npcActions: simResult.npcActions,
+        priceChanges: simResult.priceChanges,
+      },
+      distantNews,
     };
   }
 

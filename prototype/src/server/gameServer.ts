@@ -276,6 +276,8 @@ export class GameServer {
                 worldState: result.worldState,
                 perception: result.perception,
                 playerState: result.playerState,
+                turnSummary: result.turnSummary,
+                distantNews: result.distantNews,
               },
               timings: result.timings,
             };
