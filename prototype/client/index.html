@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>市井录 · 技术验证基准测试</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans SC', sans-serif; background: #1a1a2e; color: #e0e0e0; }
+  .header { background: #16213e; padding: 20px; text-align: center; border-bottom: 2px solid #e94560; }
+  .header h1 { color: #e94560; font-size: 24px; }
+  .header p { color: #888; margin-top: 5px; }
+  .tabs { display: flex; background: #16213e; border-bottom: 1px solid #333; }
+  .tab { padding: 12px 24px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; }
+  .tab.active { color: #e94560; border-bottom-color: #e94560; }
+  .content { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Benchmark Report */
+  .bench-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .bench-table th { background: #0f3460; padding: 10px; text-align: left; font-size: 13px; color: #e94560; }
+  .bench-table td { padding: 8px 10px; border-bottom: 1px solid #2a2a4a; font-size: 13px; }
+  .bench-table tr:hover { background: #1f1f3f; }
+  .pass { color: #4ecca3; font-weight: bold; }
+  .fail { color: #e94560; font-weight: bold; }
+  .detail { color: #666; font-size: 11px; }
+  .summary { margin-top: 15px; padding: 15px; background: #16213e; border-radius: 8px; text-align: center; }
+  .summary h3 { color: #e94560; }
+  .loading { text-align: center; padding: 40px; color: #888; }
+  .spinner { display: inline-block; width: 30px; height: 30px; border: 3px solid #333; border-top-color: #e94560; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Demo */
+  .demo-box { background: #16213e; border-radius: 12px; padding: 24px; max-width: 600px; margin: 0 auto; }
+  .demo-title { color: #e94560; font-size: 18px; margin-bottom: 15px; text-align: center; }
+  .demo-status { background: #0f3460; border-radius: 8px; padding: 15px; margin-bottom: 15px; min-height: 80px; font-size: 14px; line-height: 1.6; }
+  .demo-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .btn { background: #e94560; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .btn:hover { background: #c73650; }
+  .btn:disabled { background: #555; cursor: not-allowed; }
+  .timings { margin-top: 10px; font-size: 11px; color: #666; }
+  .world-info { margin-top: 15px; font-size: 12px; color: #888; }
+  .world-info span { color: #4ecca3; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>市井录 · 市井生活模拟</h1>
+  <p>第零阶段技术验证原型</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('benchmark')">基准测试</div>
+  <div class="tab" onclick="switchTab('demo')">最小 Demo</div>
+</div>
+
+<div class="content">
+  <!-- 基准测试面板 -->
+  <div id="benchmark-panel" class="panel active">
+    <div id="bench-loading" class="loading">
+      <div class="spinner"></div>
+      <p style="margin-top:10px">正在运行基准测试...</p>
+    </div>
+    <div id="bench-result" style="display:none">
+      <table class="bench-table">
+        <thead>
+          <tr><th>#</th><th>验证项</th><th>结果</th><th>耗时</th><th>目标</th><th>详情</th></tr>
+        </thead>
+        <tbody id="bench-tbody"></tbody>
+      </table>
+      <div class="summary" id="bench-summary"></div>
+    </div>
+  </div>
+
+  <!-- Demo 面板 -->
+  <div id="demo-panel" class="panel">
+    <div class="demo-box">
+      <div class="demo-title">汴京街头</div>
+      <div class="demo-status" id="demo-status">正在连接...</div>
+      <div class="demo-actions">
+        <button class="btn" onclick="doAction('buy_food')">买炊饼</button>
+        <button class="btn" onclick="doAction('go_market')">去东市</button>
+        <button class="btn" onclick="doAction('chat')">与人闲聊</button>
+        <button class="btn" onclick="doAction('rest')">休息片刻</button>
+      </div>
+      <div class="timings" id="demo-timings"></div>
+      <div class="world-info" id="demo-world"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let ws = null;
+let seqId = 0;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(name + '-panel').classList.add('active');
+  if (name === 'demo' && !ws) connectWS();
+}
+
+// === 基准测试 ===
+async function runBenchmark() {
+  try {
+    const res = await fetch('/benchmark');
+    const report = await res.json();
+    renderBenchmark(report);
+  } catch (err) {
+    document.getElementById('bench-loading').innerHTML = '<p style="color:#e94560">基准测试失败: ' + err + '</p>';
+  }
+}
+
+function renderBenchmark(report) {
+  document.getElementById('bench-loading').style.display = 'none';
+  document.getElementById('bench-result').style.display = 'block';
+
+  const tbody = document.getElementById('bench-tbody');
+  tbody.innerHTML = '';
+  for (const r of report.results) {
+    const icon = r.passed ? '✅' : '❌';
+    const cls = r.passed ? 'pass' : 'fail';
+    tbody.innerHTML += `<tr>
+      <td>${icon} #${r.id}</td>
+      <td>${r.name}</td>
+      <td class="${cls}">${r.passed ? 'PASS' : 'FAIL'}</td>
+      <td>${r.actual.toFixed(2)} ms</td>
+      <td>${r.target}</td>
+      <td class="detail">${r.detail || ''}</td>
+    </tr>`;
+  }
+
+  const icon = report.summary.failed === 0 ? '✅' : '⚠️';
+  document.getElementById('bench-summary').innerHTML = `
+    <h3>${icon} 测试结果: ${report.summary.passed} / ${report.summary.total} 通过</h3>
+    <p style="margin-top:5px;color:#888">${report.timestamp}</p>
+  `;
+}
+
+// === WebSocket Demo ===
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
+
+  ws.onopen = () => {
+    document.getElementById('demo-status').textContent = '已连接，等待欢迎消息...';
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'actionResult') {
+      document.getElementById('demo-status').innerHTML = msg.data.message.replace(/\n/g, '<br>');
+      if (msg.timings) {
+        document.getElementById('demo-timings').textContent =
+          `总耗时: ${msg.timings.total.toFixed(2)}ms | L0: ${msg.timings.l0GOAP.toFixed(1)} | L1: ${msg.timings.l1BehaviorTree.toFixed(1)} | 感知: ${msg.timings.perception.toFixed(1)}`;
+      }
+      if (msg.data.worldState) {
+        const ws = msg.data.worldState;
+        document.getElementById('demo-world').innerHTML =
+          `时辰: <span>${ws.shichen}</span> | 第 <span>${ws.day}</span> 天 | 季节: <span>${ws.season}</span>`;
+      }
+    } else if (msg.type === 'error') {
+      document.getElementById('demo-status').textContent = '错误: ' + (msg.data?.message || '未知');
+    }
+  };
+
+  ws.onerror = (e) => {
+    document.getElementById('demo-status').textContent = '连接错误';
+  };
+}
+
+function doAction(actionId) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    document.getElementById('demo-status').textContent = '未连接到服务器';
+    return;
+  }
+  seqId++;
+  ws.send(JSON.stringify({ type: 'action', actionId, params: {}, seqId }));
+}
+
+// 启动
+runBenchmark();
+</script>
+</body>
+</html>

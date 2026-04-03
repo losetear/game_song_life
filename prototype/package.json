@@ -1,0 +1,22 @@
+{
+  "name": "song-life-prototype",
+  "version": "0.1.0",
+  "description": "市井录 - 第零阶段技术验证基准测试",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "benchmark": "ts-node src/index.ts --benchmark",
+    "server": "ts-node src/index.ts --server"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.13",
+    "@types/node": "^22.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.0"
+  }
+}
