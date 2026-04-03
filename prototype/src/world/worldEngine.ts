@@ -442,7 +442,7 @@ export class WorldEngine {
     return { npcActions: this.lastTickEvents, priceChanges };
   }
 
-  /** L0 NPC 单个行动模拟（优先级规则决策） */
+  /** L0 NPC 单个行动模拟（状态驱动决策） */
   private simulateL0Action(entityId: number): void {
     const vital = this.em.getComponent(entityId, 'Vital');
     const wallet = this.em.getComponent(entityId, 'Wallet');
@@ -452,39 +452,99 @@ export class WorldEngine {
     const name = identity.name;
     const hunger = vital.hunger;
     const fatigue = vital.fatigue;
+    const mood = vital.mood ?? 50;
+    const copper = wallet?.copper ?? 0;
 
     let action: string;
+
+    // 状态驱动决策：按优先级检查
     if (hunger < 30) {
+      // 饿了 → 吃饭
       action = 'eat';
       vital.hunger = Math.min(100, hunger + 30);
-      if (wallet) wallet.copper -= 10;
+      if (wallet) wallet.copper = Math.max(0, copper - 10);
     } else if (fatigue > 80) {
+      // 太累 → 休息
       action = 'rest';
       vital.fatigue = Math.max(0, fatigue - 30);
+    } else if (copper < 20 && Math.random() < 0.6) {
+      // 没钱 → 找活赚钱
+      const jobs = ['work_dock', 'work_teahouse', 'work_errand'];
+      action = jobs[Math.floor(Math.random() * jobs.length)];
+      if (wallet) wallet.copper += Math.floor(Math.random() * 20) + 15;
+      vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15); // +15~25
+      vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);       // -8~10
+    } else if (copper > 200 && Math.random() < 0.4) {
+      // 有钱 → 消费
+      const shops = ['consume_cloth', 'consume_food', 'consume_tea'];
+      action = shops[Math.floor(Math.random() * shops.length)];
+      if (wallet) wallet.copper -= Math.floor(Math.random() * 50) + 20;
+      vital.mood = Math.min(100, mood + Math.floor(Math.random() * 10) + 5);
+      vital.hunger = Math.min(100, hunger + 10);
+    } else if (mood < 30) {
+      // 心情差 → 社交/去茶馆
+      action = 'socialize';
+      vital.mood = Math.min(100, mood + Math.floor(Math.random() * 15) + 10);
+      if (wallet) wallet.copper = Math.max(0, copper - 5);
+      vital.hunger = Math.min(100, hunger + 5);
     } else {
-      const profActions: Record<string, string> = {
-        merchant: 'sell', farmer: 'farm', guard: 'patrol',
-        doctor: 'heal', hunter: 'hunt', rogue: 'steal',
-        商贩: 'sell', 农夫: 'farm', 捕快: 'patrol',
-        大夫: 'heal', 猎户: 'hunt', 小偷: 'steal',
+      // 按职业工作，但每次效果不同
+      const profActions: Record<string, string[]> = {
+        merchant: ['sell', 'buy_stock', 'bargain'],
+        farmer: ['farm', 'water', 'harvest'],
+        guard: ['patrol', 'inspect', 'guard_gate'],
+        doctor: ['heal', 'gather_herbs', 'prescribe'],
+        hunter: ['hunt', 'set_trap', 'skin_game'],
+        rogue: ['steal', 'gamble', 'scout'],
+        商贩: ['sell', 'buy_stock', 'bargain'],
+        农夫: ['farm', 'water', 'harvest'],
+        捕快: ['patrol', 'inspect', 'guard_gate'],
+        大夫: ['heal', 'gather_herbs', 'prescribe'],
+        猎户: ['hunt', 'set_trap', 'skin_game'],
+        小偷: ['steal', 'gamble', 'scout'],
       };
-      action = profActions[identity.profession] || 'wander';
-      if (wallet && action !== 'wander') wallet.copper += Math.floor(Math.random() * 50) + 10;
-      vital.fatigue = Math.min(100, fatigue + 15);
-      vital.hunger = Math.max(0, hunger - 8);
+      const options = profActions[identity.profession] || ['wander', 'stroll', 'chat'];
+      action = options[Math.floor(Math.random() * options.length)];
+      // 工作收入随机
+      if (wallet && action !== 'wander' && action !== 'stroll' && action !== 'chat') {
+        wallet.copper += Math.floor(Math.random() * 40) + 10;
+      }
+      vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15); // +15~25
+      vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);       // -8~10
     }
 
     // 记录叙事事件
     const eventTemplates: Record<string, string[]> = {
-      eat: [`${name}在路边买了两个炊饼，蹲着吃起来。`, `${name}去茶馆吃了一碗热汤面。`],
-      rest: [`${name}找了个阴凉处歇了一会儿。`, `${name}打了个盹。`],
+      eat: [`${name}在路边买了两个炊饼，蹲着吃起来。`, `${name}去茶馆吃了一碗热汤面。`, `${name}啃着冷馒头，就着咸菜。`],
+      rest: [`${name}找了个阴凉处歇了一会儿。`, `${name}打了个盹。`, `${name}靠在墙根眯了一小会儿。`],
+      work_dock: [`${name}去码头扛了几包货，赚了些辛苦钱。`, `${name}在码头帮人卸了一船货。`],
+      work_teahouse: [`${name}在茶楼帮忙跑堂。`, `${name}去茶楼帮工端茶倒水。`],
+      work_errand: [`${name}帮人跑腿送了封信。`, `${name}在集市帮人搬了一车货。`],
+      consume_cloth: [`${name}在布庄挑了匹好布，眉开眼笑。`, `${name}买了块新帕子，高兴得不得了。`],
+      consume_food: [`${name}在酒楼点了一桌子好菜。`, `${name}买了只烧鸡，美滋滋地啃着。`],
+      consume_tea: [`${name}在茶楼叫了一壶好茶，悠闲地品着。`, `${name}请朋友喝了壶碧螺春。`],
+      socialize: [`${name}去找朋友串门聊天。`, `${name}在茶馆里和人大声说笑。`, `${name}和邻家大婶聊了半天闲话。`],
       sell: [`${name}卖出了一批货物，笑得合不拢嘴。`, `${name}在铺子里招呼客人。`],
+      buy_stock: [`${name}去码头进了一批新货。`, `${name}和供货商讨价还价半天。`],
+      bargain: [`${name}和客商谈了一笔大买卖。`, `${name}在柜台后面拨算盘，精打细算。`],
       farm: [`${name}在田间忙碌了一个时辰。`, `${name}弯腰在田里除草。`],
+      water: [`${name}挑水浇了一亩菜地。`, `${name}在田埂上修水渠。`],
+      harvest: [`${name}收割了一筐庄稼。`, `${name}在田里忙着收麦子。`],
       patrol: [`${name}在街上巡逻，目光警惕。`, `${name}检查了几个摊位的执照。`],
+      inspect: [`${name}在城门口盘查过往行人。`, `${name}挨家挨户查火烛。`],
+      guard_gate: [`${name}在城门口站岗。`, `${name}守在府衙门口。`],
       heal: [`${name}给一个病人开了药方。`, `${name}在药铺里配药。`],
+      gather_herbs: [`${name}背着药篓上山采药去了。`, `${name}在城墙根找草药。`],
+      prescribe: [`${name}在灯下翻医书。`, `${name}给老主顾配了几丸补药。`],
       hunt: [`${name}扛着弓进了山林。`, `${name}在溪边设了陷阱。`],
+      set_trap: [`${name}在山路上布了几个套子。`, `${name}检查了昨天的陷阱。`],
+      skin_game: [`${name}在处理猎物的皮毛。`, `${name}把猎物拿到集市上卖。`],
       steal: [`${name}在人群中挤来挤去，贼眼溜溜。`, `${name}贴着一个客商蹭过去。`],
+      gamble: [`${name}和几个混混在后巷推牌九。`, `${name}在赌坊门前转悠。`],
+      scout: [`${name}在街上东张西望。`, `${name}在暗巷里窥探富户的院墙。`],
       wander: [`${name}在街上闲逛。`],
+      stroll: [`${name}沿着河边散步。`, `${name}在桥上看风景。`],
+      chat: [`${name}和街坊邻居拉家常。`, `${name}在路边和人下棋。`],
     };
     const templates = eventTemplates[action] || eventTemplates.wander;
     this.logEvent('npc', 'npc_action', templates[Math.floor(Math.random() * templates.length)]);
@@ -514,9 +574,8 @@ export class WorldEngine {
     }
   }
 
-  /** 生成远方消息 */
+  /** 生成远方消息（基于 tick+day 哈希，避免短时间重复） */
   private generateDistantNews(): string[] {
-    const count = Math.floor(Math.random() * 3) + 1;
     const allNews = [
       '听说杭州丝绸大涨，苏杭商人都赶着去进货了。',
       '京东路的粮仓遭了水灾，粮价怕是要涨。',
@@ -528,9 +587,25 @@ export class WorldEngine {
       '两浙路的茶商组团进京了，茶价要跌。',
       '听说朝廷要开恩科，各地举子纷纷进京赶考。',
       '黄河决口了，京东路的庄稼都毁了。',
+      '河北路的马贩子牵了三百匹好马来。',
+      '江南的丝绸船到了，布价要降了。',
+      '听说南方有个县令被革职了，贪了上万两。',
+      '京城的瓦子里来了新的杂技班子。',
+      '岳州楼的酒涨价了，一壶要五十文。',
+      '成都府的蜀锦今年特别好，太监都来采买了。',
     ];
-    const shuffled = allNews.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    // 用 tick+day 做简单哈希选消息，保证不同回合选到不同条目
+    const seed = this.time.tick * 7 + this.time.day * 31;
+    const count = (seed % 3) + 1; // 1~3 条
+    const result: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const idx = (seed + i * 13) % allNews.length;
+      const news = allNews[idx];
+      if (!result.includes(news)) {
+        result.push(news);
+      }
+    }
+    return result;
   }
 
   /** 执行玩家操作 → 完整 Tick，返回丰富场景描述 */

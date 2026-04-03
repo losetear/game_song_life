@@ -17,7 +17,8 @@ export class TimeSystem {
   get isDaytime(): boolean { return this.hour >= 7 && this.hour <= 19; }
 
   advance(): void {
-    this.tickCount++;
+    // 每次推进1个时辰（12个tick），玩家操作一次世界推进一整个时辰
+    this.tickCount += this.ticksPerShichen;
   }
 
   /** 每日检查 */
