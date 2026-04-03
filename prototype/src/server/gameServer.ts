@@ -83,7 +83,7 @@ export class GameServer {
         byType.mineral += 1000;
 
         // 按 LOD 统计
-        const l0Count = this.engine['l0Entities'].length;
+        const l0Count = this.engine.getL0Entities().length;
         const l1Count = this.engine['l1Entities'].length;
         const totalWithL2 = Object.values(byType).reduce((s, v) => s + v, 0);
         const l2Count = totalWithL2 - l0Count - l1Count;
@@ -94,6 +94,9 @@ export class GameServer {
         // 内存估算（粗略）
         const memMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 10) / 10;
         const uptimeSec = Math.round((Date.now() - this.engine.startTime) / 1000);
+
+        // 经济摘要
+        const economyData = this.engine.getEconomyOverview();
 
         res.json({
           totalEntities: totalWithL2,
@@ -109,6 +112,10 @@ export class GameServer {
           byGrid: gridStats,
           memoryMB: memMB,
           uptimeSec,
+          economySummary: {
+            prices: economyData.prices,
+            recentChanges: economyData.recentChanges.slice(-5),
+          },
         });
       } catch (err) {
         res.status(500).json({ error: String(err) });
@@ -124,6 +131,11 @@ export class GameServer {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
         const offset = parseInt(req.query.offset as string) || 0;
         const search = req.query.search as string | undefined;
+        // 状态筛选
+        const minHunger = req.query.minHunger !== undefined ? parseInt(req.query.minHunger as string) : undefined;
+        const maxHunger = req.query.maxHunger !== undefined ? parseInt(req.query.maxHunger as string) : undefined;
+        const minCopper = req.query.minCopper !== undefined ? parseInt(req.query.minCopper as string) : undefined;
+        const maxCopper = req.query.maxCopper !== undefined ? parseInt(req.query.maxCopper as string) : undefined;
 
         const em = this.engine.em;
         const allIds = em.allEntities();
@@ -146,6 +158,20 @@ export class GameServer {
           if (search) {
             const identity = em.getComponent(id, 'Identity');
             if (!identity || !identity.name.includes(search)) continue;
+          }
+
+          // 状态范围筛选
+          if (minHunger !== undefined || maxHunger !== undefined) {
+            const vital = em.getComponent(id, 'Vital');
+            if (!vital) continue;
+            if (minHunger !== undefined && vital.hunger < minHunger) continue;
+            if (maxHunger !== undefined && vital.hunger > maxHunger) continue;
+          }
+          if (minCopper !== undefined || maxCopper !== undefined) {
+            const wallet = em.getComponent(id, 'Wallet');
+            if (!wallet) continue;
+            if (minCopper !== undefined && wallet.copper < minCopper) continue;
+            if (maxCopper !== undefined && wallet.copper > maxCopper) continue;
           }
 
           filtered.push(id);
@@ -217,6 +243,115 @@ export class GameServer {
         const count = Math.min(parseInt(req.query.count as string) || 50, 500);
         const events = this.engine.getEvents(count);
         res.json({ total: events.length, events });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/events/:tick — 指定回合事件
+    this.app.get('/api/world/events/:tick', (req, res) => {
+      try {
+        const tick = parseInt(req.params.tick) || 0;
+        const events = this.engine.getEventsByTick(tick);
+        const time = this.engine.time;
+        res.json({
+          tick: tick || (events.length > 0 ? events[0].tick : 0),
+          shichen: time.shichenName,
+          day: time.day,
+          weather: this.engine.weather.weather,
+          events,
+        });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/economy — 经济全景
+    this.app.get('/api/world/economy', (_req, res) => {
+      try {
+        const data = this.engine.getEconomyOverview();
+        res.json(data);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/ecology — 生态全景
+    this.app.get('/api/world/ecology', (_req, res) => {
+      try {
+        const data = this.engine.getEcologyOverview();
+        res.json(data);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/weather/history — 天气历史
+    this.app.get('/api/world/weather/history', (_req, res) => {
+      try {
+        const weather = this.engine.weather;
+        res.json({
+          current: weather.weather,
+          history: weather.getHistoryDetail(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/propagation — 信息传播链
+    this.app.get('/api/world/propagation', (_req, res) => {
+      try {
+        const chains = this.engine.getPropagationChains();
+        res.json({ chains });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/npc/:id/history — NPC行为历史
+    this.app.get('/api/world/npc/:id/history', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const em = this.engine.em;
+
+        if (!em.isAlive(id)) {
+          res.status(404).json({ error: 'NPC not found' });
+          return;
+        }
+
+        const identity = em.getComponent(id, 'Identity');
+        const history = this.engine.getNPCHistory(id);
+
+        res.json({
+          npcId: id,
+          name: identity?.name || '未知',
+          history,
+        });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/npc/:id/relations — NPC关系图谱
+    this.app.get('/api/world/npc/:id/relations', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const em = this.engine.em;
+
+        if (!em.isAlive(id)) {
+          res.status(404).json({ error: 'NPC not found' });
+          return;
+        }
+
+        const identity = em.getComponent(id, 'Identity');
+        const relations = this.engine.getNPCRelations(id);
+
+        res.json({
+          npcId: id,
+          name: identity?.name || '未知',
+          relations,
+        });
       } catch (err) {
         res.status(500).json({ error: String(err) });
       }
@@ -317,6 +452,13 @@ export class GameServer {
       console.log(`   GET  /api/world/entities → 实体列表`);
       console.log(`   GET  /api/world/entity/:id → 实体详情`);
       console.log(`   GET  /api/world/events   → 事件日志`);
+      console.log(`   GET  /api/world/events/:tick → 指定回合事件`);
+      console.log(`   GET  /api/world/economy  → 经济全景`);
+      console.log(`   GET  /api/world/ecology  → 生态全景`);
+      console.log(`   GET  /api/world/weather/history → 天气历史`);
+      console.log(`   GET  /api/world/propagation → 传播链`);
+      console.log(`   GET  /api/world/npc/:id/history → NPC历史`);
+      console.log(`   GET  /api/world/npc/:id/relations → NPC关系`);
       console.log(`   WebSocket           → 游戏交互`);
     });
   }

@@ -28,6 +28,18 @@ export interface WorldEvent {
   source?: string;    // 来源分类
 }
 
+// === NPC 行为历史记录 ===
+export interface NPCHistoryEntry {
+  tick: number;
+  shichen: string;
+  action: string;
+  description: string;
+  result: string;
+  cause: string;
+  stateBefore: { hunger: number; fatigue: number; copper: number; mood: number };
+  stateAfter: { hunger: number; fatigue: number; copper: number; mood: number };
+}
+
 export interface TickTimings {
   total: number;
   playerAction: number;
@@ -289,6 +301,12 @@ export class WorldEngine {
   private readonly maxEvents = 500;
   readonly startTime: number = Date.now();
 
+  // NPC 行为历史记录（L0 NPC）
+  private npcHistory: Map<number, NPCHistoryEntry[]> = new Map();
+
+  // 天气事件传播链
+  private propagationChains: { message: string; source: string; spreadRadius: number; tick: number; cause: string; active: boolean }[] = [];
+
   constructor() {
     this.em = new EntityManager();
     this.worldMap = new WorldMap();
@@ -320,6 +338,104 @@ export class WorldEngine {
   /** 获取最近 N 条事件 */
   getEvents(count: number = 50): WorldEvent[] {
     return this.eventLog.slice(-count);
+  }
+
+  /** 获取指定回合事件 */
+  getEventsByTick(tick: number): WorldEvent[] {
+    if (tick === 0) {
+      const latestTick = this.eventLog.length > 0 ? this.eventLog[this.eventLog.length - 1].tick : 0;
+      return this.eventLog.filter(e => e.tick === latestTick);
+    }
+    return this.eventLog.filter(e => e.tick === tick);
+  }
+
+  /** 获取当前最新 tick */
+  getCurrentTick(): number {
+    return this.time.tick;
+  }
+
+  /** 获取 NPC 行为历史 */
+  getNPCHistory(npcId: number): NPCHistoryEntry[] {
+    return this.npcHistory.get(npcId) || [];
+  }
+
+  /** 获取 NPC 关系图谱 */
+  getNPCRelations(npcId: number): { targetId: number; targetName: string; score: number }[] {
+    const relations = this.em.getComponent(npcId, 'Relations');
+    if (!relations) return [];
+    const result: { targetId: number; targetName: string; score: number }[] = [];
+    for (const [targetId, score] of Object.entries(relations.relations || {})) {
+      const identity = this.em.getComponent(Number(targetId), 'Identity');
+      result.push({ targetId: Number(targetId), targetName: identity?.name || '未知', score: score as number });
+    }
+    return result;
+  }
+
+  /** 获取所有 L0 NPC 列表 */
+  getL0Entities(): number[] {
+    return [...this.l0Entities];
+  }
+
+  /** 获取传播链 */
+  getPropagationChains(): { message: string; source: string; spreadRadius: number; tick: number; cause: string; active: boolean }[] {
+    return [...this.propagationChains];
+  }
+
+  /** 获取经济全景数据 */
+  getEconomyOverview(): {
+    prices: Record<string, number>;
+    supplyDemand: Record<string, { supply: number; demand: number }>;
+    priceHistory: Record<string, number[]>;
+    recentChanges: { item: string; change: string; reason: string }[];
+  } {
+    const supplyDemand: Record<string, { supply: number; demand: number }> = {};
+    const supply = this.economy.getSupply();
+    const demand = this.economy.getDemand();
+    for (const key of Object.keys(supply)) {
+      supplyDemand[key] = { supply: supply[key], demand: demand[key] };
+    }
+    return {
+      prices: this.economy.getPrices(),
+      supplyDemand,
+      priceHistory: this.economy.getPriceHistory(),
+      recentChanges: this.economy.getRecentChanges(),
+    };
+  }
+
+  /** 获取生态全景数据 */
+  getEcologyOverview(): {
+    regions: Record<string, { production?: number; normal?: number; status: string; trend: string; animals?: number; capacity?: number; fishCatch?: number; tradeVolume?: number }>;
+  } {
+    const regions: Record<string, any> = {};
+    for (const r of this.regionSim.getAllRegions()) {
+      switch (r.regionType) {
+        case 'farmland':
+          regions[r.regionId] = {
+            production: r.yieldAmount,
+            normal: r.area * r.baseYield,
+            status: r.yieldAmount < r.area * r.baseYield * 0.5 ? '欠收' : r.yieldAmount > r.area * r.baseYield * 1.2 ? '丰收' : '正常',
+            trend: r.yieldAmount > r.area * r.baseYield * 0.8 ? '↑' : r.yieldAmount < r.area * r.baseYield * 0.5 ? '↓' : '→',
+          };
+          break;
+        case 'mountain':
+          regions[r.regionId] = {
+            animals: r.wildAnimalCount,
+            capacity: r.maxAnimal,
+            status: r.wildAnimalCount < r.maxAnimal * 0.3 ? '稀少' : r.wildAnimalCount > r.maxAnimal * 0.7 ? '丰富' : '正常',
+            trend: r.wildAnimalCount > r.maxAnimal * 0.5 ? '↑' : r.wildAnimalCount < r.maxAnimal * 0.3 ? '↓' : '→',
+          };
+          break;
+        case 'river':
+          regions[r.regionId] = {
+            fishCatch: r.fishAmount,
+            tradeVolume: r.fisherCount * 15,
+            status: r.fishAmount < r.fishBase * 0.5 ? '偏低' : r.fishAmount > r.fishBase * 1.3 ? '丰收' : '正常',
+            trend: r.fishAmount > r.fishBase * 0.8 ? '↑' : r.fishAmount < r.fishBase * 0.5 ? '↓' : '→',
+          };
+          break;
+      }
+    }
+    return { regions };
   }
 
   /** 注册 L0 实体 */
@@ -530,7 +646,7 @@ export class WorldEngine {
     // 2. 天气推进（保存前一回合天气）
     this.previousWeather = this.weather.weather;
     this.weather.advance(this.time.season);
-    this.weather.advance(this.time.season);
+    this.weather.advance(this.time.season, this.time.tick, this.time.shichenName);
 
     // 3. L0 NPC 行动 (优先级规则, 10个核心NPC)
     for (const entityId of this.l0Entities) {
@@ -578,13 +694,47 @@ export class WorldEngine {
     // 计算物价变动
     const priceChanges: Record<string, string> = {};
     const priceNames: Record<string, string> = { food: '粮', herbs: '药', cloth: '布', material: '材', cargo: '货' };
+    const priceReasons: Record<string, string> = {
+      '粮': this.weather.farmYieldMod < 0.8 ? '天气不佳，农田减产' : this.weather.farmYieldMod > 1.1 ? '风调雨顺，粮食丰收' : '市场供需变动',
+      '药': this.weather.isRaining ? '雨天药材运输不便' : '市场供需变动',
+      '布': '商路运输变动',
+      '材': '矿山开采量变动',
+      '货': this.weather.isHeavyRain ? '暴雨导致货运中断' : '码头来货量变动',
+    };
     for (const key of Object.keys(newPrices)) {
       const old = oldPrices[key] || 1;
       const diff = ((newPrices[key] - old) / old * 100);
       if (Math.abs(diff) > 0.1) {
         const sign = diff > 0 ? '+' : '';
-        priceChanges[priceNames[key] || key] = `${sign}${diff.toFixed(1)}%`;
+        const changeStr = `${sign}${diff.toFixed(1)}%`;
+        const name = priceNames[key] || key;
+        priceChanges[name] = changeStr;
+        this.economy.recordChange(name, changeStr, priceReasons[name] || '市场波动');
       }
+    }
+
+    // 记录传播链
+    for (const ce of causalEvents) {
+      if (ce.spreadRadius >= 1) {
+        this.propagationChains.push({
+          message: ce.message,
+          source: ce.sourceLocation || ce.source,
+          spreadRadius: ce.spreadRadius,
+          tick: this.time.tick,
+          cause: ce.cause,
+          active: true,
+        });
+      }
+    }
+    // 超过5回合的传播链标记为非活跃
+    for (const chain of this.propagationChains) {
+      if (this.time.tick - chain.tick > 5) {
+        chain.active = false;
+      }
+    }
+    // 保留最近30条
+    if (this.propagationChains.length > 30) {
+      this.propagationChains = this.propagationChains.slice(-30);
     }
 
     return { npcActions: this.lastTickEvents, priceChanges, causalEvents };
@@ -603,22 +753,29 @@ export class WorldEngine {
     const mood = vital.mood ?? 50;
     const copper = wallet?.copper ?? 0;
 
+    // 记录状态快照（决策前）
+    const stateBefore = { hunger, fatigue, copper, mood };
+
     let action: string;
+    let actionCause = '';
 
     // 状态驱动决策：按优先级检查
     if (hunger < 30) {
       // 饿了 → 吃饭
       action = 'eat';
+      actionCause = `饥饿(${hunger})`;
       vital.hunger = Math.min(100, hunger + 30);
       if (wallet) wallet.copper = Math.max(0, copper - 10);
     } else if (fatigue > 80) {
       // 太累 → 休息
       action = 'rest';
+      actionCause = `疲劳(${fatigue})`;
       vital.fatigue = Math.max(0, fatigue - 30);
     } else if (copper < 20 && Math.random() < 0.6) {
       // 没钱 → 找活赚钱
       const jobs = ['work_dock', 'work_teahouse', 'work_errand'];
       action = jobs[Math.floor(Math.random() * jobs.length)];
+      actionCause = `铜钱(${copper})`;
       if (wallet) wallet.copper += Math.floor(Math.random() * 20) + 15;
       vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15); // +15~25
       vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);       // -8~10
@@ -626,12 +783,14 @@ export class WorldEngine {
       // 有钱 → 消费
       const shops = ['consume_cloth', 'consume_food', 'consume_tea'];
       action = shops[Math.floor(Math.random() * shops.length)];
+      actionCause = `富裕(${copper})`;
       if (wallet) wallet.copper -= Math.floor(Math.random() * 50) + 20;
       vital.mood = Math.min(100, mood + Math.floor(Math.random() * 10) + 5);
       vital.hunger = Math.min(100, hunger + 10);
     } else if (mood < 30) {
       // 心情差 → 社交/去茶馆
       action = 'socialize';
+      actionCause = `心情(${mood})`;
       vital.mood = Math.min(100, mood + Math.floor(Math.random() * 15) + 10);
       if (wallet) wallet.copper = Math.max(0, copper - 5);
       vital.hunger = Math.min(100, hunger + 5);
@@ -653,6 +812,7 @@ export class WorldEngine {
       };
       const options = profActions[identity.profession] || ['wander', 'stroll', 'chat'];
       action = options[Math.floor(Math.random() * options.length)];
+      actionCause = `职业:${identity.profession}`;
       // 工作收入随机
       if (wallet && action !== 'wander' && action !== 'stroll' && action !== 'chat') {
         wallet.copper += Math.floor(Math.random() * 40) + 10;
@@ -695,7 +855,32 @@ export class WorldEngine {
       chat: [`${name}和街坊邻居拉家常。`, `${name}在路边和人下棋。`],
     };
     const templates = eventTemplates[action] || eventTemplates.wander;
-    this.logEvent('npc', 'npc_action', templates[Math.floor(Math.random() * templates.length)]);
+    const description = templates[Math.floor(Math.random() * templates.length)];
+    this.logEvent('npc', 'npc_action', description);
+
+    // 记录NPC行为历史
+    const stateAfter = {
+      hunger: vital.hunger,
+      fatigue: vital.fatigue,
+      copper: wallet?.copper ?? copper,
+      mood: vital.mood ?? mood,
+    };
+    const historyEntry: NPCHistoryEntry = {
+      tick: this.time.tick,
+      shichen: this.time.shichenName,
+      action,
+      description,
+      result: '成功',
+      cause: actionCause,
+      stateBefore,
+      stateAfter,
+    };
+    if (!this.npcHistory.has(entityId)) {
+      this.npcHistory.set(entityId, []);
+    }
+    const hist = this.npcHistory.get(entityId)!;
+    hist.push(historyEntry);
+    if (hist.length > 50) hist.shift();
   }
 
   /** L1 NPC 批量模拟 */

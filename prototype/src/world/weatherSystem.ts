@@ -5,9 +5,16 @@ export type WeatherType = '晴' | '多云' | '小雨' | '暴雨' | '大暴雨' |
 export interface WeatherState {
   current: WeatherType;
   history: WeatherType[];   // 最近 10 回合
+  historyDetail: WeatherHistoryEntry[]; // 最近30回合详细历史
   consecutiveRain: number;  // 连续暴雨/大暴雨回合数
   consecutiveSun: number;   // 连续晴天回合数
   floodRisk: boolean;       // 洪涝风险
+}
+
+export interface WeatherHistoryEntry {
+  tick: number;
+  weather: WeatherType;
+  shichen: string;
 }
 
 // 季节 → 天气概率权重
@@ -37,6 +44,7 @@ export class WeatherSystem {
     this.state = {
       current: '晴',
       history: [],
+      historyDetail: [],
       consecutiveRain: 0,
       consecutiveSun: 0,
       floodRisk: false,
@@ -44,7 +52,7 @@ export class WeatherSystem {
   }
 
   /** 每回合推进天气 */
-  advance(season: string): void {
+  advance(season: string, tick?: number, shichen?: string): void {
     // 1. 计算每种天气的权重
     const baseWeights = SEASON_WEIGHTS[season] || SEASON_WEIGHTS['spring'];
     const transitionBonus = TRANSITION_BONUS[this.state.current] || {};
@@ -62,6 +70,13 @@ export class WeatherSystem {
     this.state.history.push(newWeather);
     if (this.state.history.length > 10) {
       this.state.history.shift();
+    }
+    // 记录详细历史
+    if (tick !== undefined && shichen !== undefined) {
+      this.state.historyDetail.push({ tick, weather: newWeather, shichen });
+      if (this.state.historyDetail.length > 30) {
+        this.state.historyDetail.shift();
+      }
     }
 
     // 4. 更新连续计数
@@ -122,7 +137,11 @@ export class WeatherSystem {
   }
 
   getState(): WeatherState {
-    return { ...this.state, history: [...this.state.history] };
+    return { ...this.state, history: [...this.state.history], historyDetail: [...this.state.historyDetail] };
+  }
+
+  getHistoryDetail(): WeatherHistoryEntry[] {
+    return [...this.state.historyDetail];
   }
 
   private weightedPick(weights: Record<WeatherType, number>): WeatherType {

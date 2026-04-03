@@ -29,6 +29,16 @@ export class EconomySystem {
   private supply: Record<string, number> = {
     food: 100, herbs: 30, cloth: 50, material: 40, cargo: 60,
   };
+  /** 最近30回合的价格历史 */
+  private priceHistory: Record<string, number[]> = {
+    food: [BASE_PRICES.food],
+    herbs: [BASE_PRICES.herbs],
+    cloth: [BASE_PRICES.cloth],
+    material: [BASE_PRICES.material],
+    cargo: [BASE_PRICES.cargo],
+  };
+  /** 最近的价格变动记录 */
+  private recentChanges: { item: string; change: string; reason: string }[] = [];
 
   /** 基于供需和天气更新价格 */
   update(weather?: WeatherSystem, regions?: RegionStats[]): void {
@@ -75,6 +85,15 @@ export class EconomySystem {
       const newPrice = Math.max(oldPrice - maxChange, Math.min(oldPrice + maxChange, targetPrice));
       this.prices[item as keyof MarketPrices] = Math.round(newPrice * 100) / 100;
     }
+
+    // 4. 记录价格历史
+    for (const item of Object.keys(this.prices)) {
+      if (!this.priceHistory[item]) this.priceHistory[item] = [];
+      this.priceHistory[item].push(this.prices[item as keyof MarketPrices]);
+      if (this.priceHistory[item].length > 30) {
+        this.priceHistory[item].shift();
+      }
+    }
   }
 
   getPrice(item: keyof MarketPrices): number {
@@ -107,5 +126,25 @@ export class EconomySystem {
 
   getDemand(): Record<string, number> {
     return { ...this.demand };
+  }
+
+  getPriceHistory(): Record<string, number[]> {
+    const result: Record<string, number[]> = {};
+    for (const key of Object.keys(this.priceHistory)) {
+      result[key] = [...this.priceHistory[key]];
+    }
+    return result;
+  }
+
+  getRecentChanges(): { item: string; change: string; reason: string }[] {
+    return [...this.recentChanges];
+  }
+
+  /** 记录价格变动（由 worldEngine 在计算价格变动后调用） */
+  recordChange(item: string, change: string, reason: string): void {
+    this.recentChanges.push({ item, change, reason });
+    if (this.recentChanges.length > 20) {
+      this.recentChanges.shift();
+    }
   }
 }
