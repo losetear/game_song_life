@@ -395,6 +395,62 @@ body::before {
   color: rgba(245, 230, 200, 0.7);
 }
 
+.scene-weather {
+  font-size: 12px;
+  color: rgba(245, 230, 200, 0.85);
+  padding: 3px 10px;
+  background: rgba(245, 230, 200, 0.1);
+  border-radius: 12px;
+  margin-top: 4px;
+  display: inline-block;
+}
+.scene-weather .weather-icon {
+  margin-right: 4px;
+}
+
+.weather-banner {
+  padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(184, 134, 11, 0.08), rgba(184, 134, 11, 0.03));
+  border-bottom: 1px solid rgba(184, 134, 11, 0.15);
+  font-size: 13px;
+  color: var(--gold);
+  display: none;
+}
+.weather-banner.visible { display: block; }
+.weather-banner .weather-icon { margin-right: 6px; }
+
+/* 因果标记 */
+.cause-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: rgba(184, 134, 11, 0.12);
+  color: var(--gold);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.cause-tag.weather { background: rgba(58, 79, 122, 0.12); color: var(--indigo); }
+.cause-tag.economy { background: rgba(184, 134, 11, 0.12); color: var(--gold); }
+.cause-tag.ecology { background: rgba(46, 139, 87, 0.12); color: var(--jade); }
+.cause-tag.npc { background: rgba(58, 79, 122, 0.12); color: var(--indigo); }
+.cause-tag.player { background: rgba(46, 139, 87, 0.12); color: var(--jade); }
+
+.ts-cause {
+  font-size: 10px;
+  color: rgba(44, 24, 16, 0.45);
+  margin-left: 4px;
+}
+.ts-news-item {
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(44, 24, 16, 0.06);
+}
+.ts-news-source {
+  font-size: 10px;
+  color: var(--indigo);
+  margin-left: 4px;
+}
+
 .scene-body {
   padding: 16px;
   min-height: 120px;
@@ -971,6 +1027,8 @@ body::before {
 .event-tag.economy { background: rgba(184, 134, 11, 0.12); color: var(--gold); }
 .event-tag.state { background: rgba(194, 58, 46, 0.1); color: var(--vermillion); }
 .event-tag.move { background: rgba(139, 105, 20, 0.1); color: #8b6914; }
+.event-tag.weather { background: rgba(58, 79, 122, 0.12); color: var(--indigo); }
+.event-tag.ecology { background: rgba(46, 139, 87, 0.12); color: var(--jade); }
 
 /* 自动刷新指示器 */
 .refresh-indicator {
@@ -1059,8 +1117,15 @@ body::before {
     </div>
     <div class="scene-card">
       <div class="scene-header">
-        <div class="scene-location" id="scene-location">汴京 · 中心大街</div>
+        <div>
+          <div class="scene-location" id="scene-location">汴京 · 中心大街</div>
+          <div class="scene-weather" id="scene-weather"><span class="weather-icon">☀️</span>天朗气清</div>
+        </div>
         <div class="scene-time" id="scene-time">午时 · 第 1 天 · 夏</div>
+      </div>
+      <div class="weather-banner" id="weather-banner">
+        <span class="weather-icon">☀️</span>
+        <span id="weather-banner-text">天朗气清</span>
       </div>
       <div class="scene-body">
         <div class="scene-text" id="scene-text">
@@ -1115,6 +1180,12 @@ body::before {
           <div class="overview-item">
             <div class="overview-value" id="monitor-season">—</div>
             <div class="overview-label">季节</div>
+          </div>
+        </div>
+        <div class="overview-row" style="margin-top:6px">
+          <div class="overview-item" style="flex:1">
+            <div class="overview-value" id="monitor-weather">—</div>
+            <div class="overview-label">天气</div>
           </div>
         </div>
         <div class="overview-row">
@@ -1238,6 +1309,13 @@ let playerState = {
   location: '中心大街', gridId: 'center_street',
   day: 1, shichen: '午', season: '夏'
 };
+
+const WEATHER_ICONS = {
+  '晴': '☀️', '多云': '⛅', '小雨': '🌦️', '暴雨': '⛈️', '大暴雨': '🌊', '雪': '❄️'
+};
+
+function getWeatherIcon(w) { return WEATHER_ICONS[w] || '🌤️'; }
+
 let benchData = null;
 
 // ============================================================
@@ -1703,6 +1781,13 @@ function renderTurnSummary(summary, distantNews) {
   el.style.display = 'block';
 
   let html = `<div class="ts-row"><span class="ts-label">时间</span><span class="ts-value">第${summary.day}天 · ${summary.shichen}时</span></div>`;
+
+  // 天气显示
+  if (summary.weather) {
+    const icon = getWeatherIcon(summary.weather);
+    html += `<div class="ts-row"><span class="ts-label">天气</span><span class="ts-value">${icon} ${summary.weatherDesc || summary.weather}</span></div>`;
+  }
+
   html += `<div class="ts-row"><span class="ts-label">本回合</span><span class="ts-value">${summary.npcActions}个NPC行动，${summary.events}个事件</span></div>`;
 
   const prices = Object.entries(summary.priceChanges);
@@ -1711,7 +1796,16 @@ function renderTurnSummary(summary, distantNews) {
   }
 
   if (distantNews && distantNews.length > 0) {
-    html += `<div class="ts-news">${distantNews.map(n => `<div>📰 ${n}</div>`).join('')}</div>`;
+    html += `<div class="ts-news">`;
+    for (const n of distantNews) {
+      if (typeof n === 'string') {
+        html += `<div class="ts-news-item">📰 ${n}</div>`;
+      } else {
+        html += `<div class="ts-news-item">📰 ${n.message}<span class="cause-tag ${n.source === '远方' ? 'economy' : n.source}">${n.source}</span></div>`;
+        if (n.cause) html += `<div class="ts-cause">← ${n.cause}</div>`;
+      }
+    }
+    html += `</div>`;
   }
 
   body.innerHTML = html;
@@ -1838,6 +1932,20 @@ function updateWorldState(ws) {
   if (ws.season) playerState.season = { spring:'春', summer:'夏', autumn:'秋', winter:'冬' }[ws.season] || ws.season;
 
   document.getElementById('scene-time').textContent = `${playerState.shichen}时 · 第 ${playerState.day} 天 · ${playerState.season}`;
+
+  // 更新天气显示
+  if (ws.weather) {
+    const icon = getWeatherIcon(ws.weather);
+    const weatherEl = document.getElementById('scene-weather');
+    weatherEl.innerHTML = `<span class="weather-icon">${icon}</span>${ws.weatherDesc || ws.weather}`;
+
+    const banner = document.getElementById('weather-banner');
+    const bannerText = document.getElementById('weather-banner-text');
+    banner.querySelector('.weather-icon').textContent = icon;
+    bannerText.textContent = ws.weatherDesc || ws.weather;
+    banner.className = 'weather-banner visible';
+  }
+
   renderStatus();
 }
 
@@ -2074,6 +2182,11 @@ function renderWorldStats(data) {
   document.getElementById('monitor-day').textContent = data.day;
   document.getElementById('monitor-shichen').textContent = data.shichen;
   document.getElementById('monitor-season').textContent = SEASON_MAP[data.season] || data.season;
+  // 天气显示
+  const weatherEl = document.getElementById('monitor-weather');
+  if (data.weather) {
+    weatherEl.textContent = `${getWeatherIcon(data.weather)} ${data.weather}`;
+  }
   document.getElementById('monitor-ecs').textContent = data.ecsEntities.toLocaleString();
   document.getElementById('monitor-mem').textContent = data.memoryMB;
   document.getElementById('monitor-uptime').textContent = formatUptime(data.uptimeSec);
@@ -2237,18 +2350,19 @@ function renderWorldEvents(events) {
   if (events.length === lastEventCount) return;
   lastEventCount = events.length;
 
-  const typeLabels = { npc: 'NPC', player: '玩家', economy: '经济', state: '状态', move: '移动' };
+  const typeLabels = { npc: 'NPC', player: '玩家', economy: '经济', state: '状态', move: '移动', weather: '天气', ecology: '生态' };
 
   el.innerHTML = events.reverse().map(evt => {
     const time = new Date(evt.time);
     const timeStr = time.getHours().toString().padStart(2, '0') + ':' +
                     time.getMinutes().toString().padStart(2, '0') + ':' +
                     time.getSeconds().toString().padStart(2, '0');
+    const causeHtml = evt.cause ? `<span class="cause-tag ${evt.source || evt.type}">${evt.cause}</span>` : '';
     return `
       <div class="event-item">
         <span class="event-time">T${evt.tick} ${timeStr}</span>
         <span class="event-tag ${evt.type}">${typeLabels[evt.type] || evt.type}</span>
-        ${evt.message}
+        ${evt.message}${causeHtml}
       </div>
     `;
   }).join('');

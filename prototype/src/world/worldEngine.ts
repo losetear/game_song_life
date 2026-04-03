@@ -106,6 +106,23 @@ function pickNPC(): string {
   return NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)];
 }
 
+const CHATTER_TEMPLATES = [
+  '有人在小声议论着粮价的涨跌。',
+  '远处传来小贩的吆喝声："炊饼——热乎的炊饼——"',
+  '街角几个老人正在下棋，围观的人比下棋的多。',
+  '一个卖花的姑娘挑着担子走过，花香飘了一街。',
+  '城墙根下有个算命先生在摇头晃脑。',
+  '两个小贩在为摊位的事争吵。',
+  '一群孩子追逐嬉闹，从你身边跑过。',
+  '有个书生在墙上题诗，引来几个人围观。',
+  '一支驼队缓缓从街头走过，驼铃声叮叮当当。',
+  '一个耍猴人敲着锣，猴子翻着跟头。',
+];
+
+function pickChatter(): string {
+  return CHATTER_TEMPLATES[Math.floor(Math.random() * CHATTER_TEMPLATES.length)];
+}
+
 function seasonDesc(season: string): string {
   switch (season) {
     case 'spring': return '春风拂面，柳絮纷飞';
@@ -267,7 +284,7 @@ export class WorldEngine {
 
   // 世界事件环形缓冲区
   private eventLog: WorldEvent[] = [];
-  private readonly maxEvents = 100;
+  private readonly maxEvents = 500;
   readonly startTime: number = Date.now();
 
   constructor() {
@@ -335,9 +352,9 @@ export class WorldEngine {
       this.logEvent('npc', identity.profession, action());
     }
 
-    // 随机生成 L1 NPC 行为事件
+    // 随机生成 L1 NPC 行为事件（采样，避免过多日志）
     for (const entityId of this.l1Entities) {
-      if (Math.random() > 0.95) continue;
+      if (Math.random() > 0.99) continue;
       const identity = this.em.getComponent(entityId, 'Identity');
       const pos = this.em.getComponent(entityId, 'Position');
       if (!identity) continue;
@@ -386,7 +403,7 @@ export class WorldEngine {
   }
 
   /** 获取当前场景上下文 */
-  private getSceneContext(playerId: number): SceneContext {
+  private getSceneContext(playerId: number, causalEvents: CausalEvent[] = []): SceneContext {
     const vital = this.em.getComponent(playerId, 'Vital');
     const wallet = this.em.getComponent(playerId, 'Wallet');
     return {
@@ -397,36 +414,67 @@ export class WorldEngine {
       fatigue: vital?.fatigue ?? 50,
       copper: wallet?.copper ?? 0,
       prices: this.economy.getPrices(),
+      weather: this.weather.weather,
+      weatherDesc: this.weather.getDescription(),
+      causalEvents,
     };
   }
 
   /** 回合模拟：全世界推进一回合 */
-  private simulateTurn(): { npcActions: number; priceChanges: Record<string, string> } {
+  private simulateTurn(): { npcActions: number; priceChanges: Record<string, string>; causalEvents: CausalEvent[] } {
     // 保存当前物价
     const oldPrices = this.economy.getPrices();
 
     // 1. 时间推进
     this.time.advance();
 
-    // 2. L0 NPC 行动 (优先级规则, 10个核心NPC)
+    // 2. 天气推进
+    this.weather.advance(this.time.season);
+
+    // 3. L0 NPC 行动 (优先级规则, 10个核心NPC)
     for (const entityId of this.l0Entities) {
       this.simulateL0Action(entityId);
     }
 
-    // 3. L1 NPC 批量行动 (简化模拟)
+    // 4. L1 NPC 批量行动 (简化模拟)
     this.simulateL1Batch();
 
-    // 4. L2 区域统计更新
-    this.regionSim.update(this.time.season, 1.0);
+    // 5. L2 区域统计更新
+    this.regionSim.update(this.time.season, this.weather.farmYieldMod);
 
-    // 5. 经济系统更新
-    this.economy.update();
+    // 6. 经济系统更新（传入天气和区域统计）
+    this.economy.update(this.weather, this.regionSim.getAllRegions());
 
-    // 6. 生命系统衰减
+    // 7. 生命系统衰减
     this.vital.update();
 
-    // 计算物价变动
+    // 8. 因果事件引擎
     const newPrices = this.economy.getPrices();
+    const causalEvents = this.eventEngine.generateEvents({
+      tick: this.time.tick,
+      weather: this.weather,
+      economy: this.economy,
+      oldPrices,
+      newPrices,
+      regions: this.regionSim.getAllRegions(),
+      em: this.em,
+      l0Entities: this.l0Entities,
+    });
+    // 将因果事件写入事件日志
+    for (const ce of causalEvents) {
+      this.logEvent(ce.source === 'weather' ? 'weather' : ce.source === 'economy' ? 'economy' : ce.source === 'ecology' ? 'ecology' : 'npc',
+        ce.source, ce.message);
+      // 填充 cause 字段到最近一条事件
+      if (this.eventLog.length > 0) {
+        this.eventLog[this.eventLog.length - 1].cause = ce.cause;
+        this.eventLog[this.eventLog.length - 1].source = ce.source;
+      }
+    }
+
+    // 9. 随机事件（旧逻辑）
+    this.generateTickEvents();
+
+    // 计算物价变动
     const priceChanges: Record<string, string> = {};
     const priceNames: Record<string, string> = { food: '粮', herbs: '药', cloth: '布', material: '材', cargo: '货' };
     for (const key of Object.keys(newPrices)) {
@@ -438,7 +486,7 @@ export class WorldEngine {
       }
     }
 
-    return { npcActions: this.lastTickEvents, priceChanges };
+    return { npcActions: this.lastTickEvents, priceChanges, causalEvents };
   }
 
   /** L0 NPC 单个行动模拟（状态驱动决策） */
@@ -574,33 +622,33 @@ export class WorldEngine {
   }
 
   /** 生成远方消息（基于 tick+day 哈希，避免短时间重复） */
-  private generateDistantNews(): string[] {
-    const allNews = [
-      '听说杭州丝绸大涨，苏杭商人都赶着去进货了。',
-      '京东路的粮仓遭了水灾，粮价怕是要涨。',
-      '辽国使团不日到达汴京，市面都要管制。',
-      '西夏那边又闹起来了，边贸断了。',
-      '听说襄阳那边发现了金矿，好多人赶过去。',
-      '漕运的船在淮河搁浅了，布匹要断货。',
-      '陕西大旱，药材产地受了灾。',
-      '两浙路的茶商组团进京了，茶价要跌。',
-      '听说朝廷要开恩科，各地举子纷纷进京赶考。',
-      '黄河决口了，京东路的庄稼都毁了。',
-      '河北路的马贩子牵了三百匹好马来。',
-      '江南的丝绸船到了，布价要降了。',
-      '听说南方有个县令被革职了，贪了上万两。',
-      '京城的瓦子里来了新的杂技班子。',
-      '岳州楼的酒涨价了，一壶要五十文。',
-      '成都府的蜀锦今年特别好，太监都来采买了。',
+  private generateDistantNews(): { message: string; cause: string; source: string }[] {
+    const allNews: { message: string; cause: string; source: string }[] = [
+      { message: '听说杭州丝绸大涨，苏杭商人都赶着去进货了。', cause: '经济: 杭州丝绸供不应求', source: '远方' },
+      { message: '京东路的粮仓遭了水灾，粮价怕是要涨。', cause: '生态: 京东路水灾', source: '京东路' },
+      { message: '辽国使团不日到达汴京，市面都要管制。', cause: '政治: 辽国使团进京', source: '边关' },
+      { message: '西夏那边又闹起来了，边贸断了。', cause: '政治: 西夏冲突', source: '边关' },
+      { message: '听说襄阳那边发现了金矿，好多人赶过去。', cause: '经济: 襄阳金矿发现', source: '襄阳' },
+      { message: '漕运的船在淮河搁浅了，布匹要断货。', cause: '物流: 淮河漕运中断', source: '淮河' },
+      { message: '陕西大旱，药材产地受了灾。', cause: '生态: 陕西大旱', source: '陕西' },
+      { message: '两浙路的茶商组团进京了，茶价要跌。', cause: '经济: 茶叶供应增加', source: '两浙路' },
+      { message: '听说朝廷要开恩科，各地举子纷纷进京赶考。', cause: '政治: 恩科开考', source: '京城' },
+      { message: '黄河决口了，京东路的庄稼都毁了。', cause: '生态: 黄河决口', source: '黄河' },
+      { message: '河北路的马贩子牵了三百匹好马来。', cause: '经济: 马匹供应增加', source: '河北路' },
+      { message: '江南的丝绸船到了，布价要降了。', cause: '经济: 丝绸到货', source: '汴河码头' },
+      { message: '听说南方有个县令被革职了，贪了上万两。', cause: '政治: 县令革职', source: '南方' },
+      { message: '京城的瓦子里来了新的杂技班子。', cause: '文化: 新杂技班子', source: '京城' },
+      { message: '岳州楼的酒涨价了，一壶要五十文。', cause: '经济: 酒价上涨', source: '岳州' },
+      { message: '成都府的蜀锦今年特别好，太监都来采买了。', cause: '经济: 蜀锦丰收', source: '成都府' },
     ];
     // 用 tick+day 做简单哈希选消息，保证不同回合选到不同条目
     const seed = this.time.tick * 7 + this.time.day * 31;
     const count = (seed % 3) + 1; // 1~3 条
-    const result: string[] = [];
+    const result: { message: string; cause: string; source: string }[] = [];
     for (let i = 0; i < count; i++) {
       const idx = (seed + i * 13) % allNews.length;
       const news = allNews[idx];
-      if (!result.includes(news)) {
+      if (!result.some(r => r.message === news.message)) {
         result.push(news);
       }
     }
@@ -636,22 +684,28 @@ export class WorldEngine {
     const pos = this.em.getComponent(playerId, 'Position');
     const gridId = pos?.gridId || 'center_street';
     const template = this.getSceneTemplate(gridId);
-    const sceneCtx = this.getSceneContext(playerId);
+    const sceneCtx = this.getSceneContext(playerId, simResult.causalEvents);
 
     const sceneDescription = template.getDescription(sceneCtx);
     const options = template.getOptions(sceneCtx);
     const sceneLocation = template.locationName;
 
-    // 生成 NPC 消息
+    // 生成 NPC 消息（含因果事件）
     const npcMessages: string[] = [];
-    if (Math.random() > 0.3) {
+    // 将因果事件中 spreadRadius=0 的事件作为近处消息
+    for (const ce of simResult.causalEvents) {
+      if (ce.spreadRadius <= 1) {
+        npcMessages.push(ce.message);
+      }
+    }
+    if (npcMessages.length === 0 && Math.random() > 0.3) {
       npcMessages.push(pickChatter());
     }
 
     const vital = this.em.getComponent(playerId, 'Vital');
     const wallet = this.em.getComponent(playerId, 'Wallet');
 
-    // 远方消息
+    // 远方消息（结构化，含因果标记）
     const distantNews = this.generateDistantNews();
 
     timings.assemble = performance.now() - t0;
@@ -675,6 +729,8 @@ export class WorldEngine {
         shichen: this.time.shichenName,
         day: this.time.day,
         season: this.time.season,
+        weather: this.weather.weather,
+        weatherDesc: this.weather.getDescription(),
         prices: this.economy.getPrices(),
       },
       playerState: {
@@ -690,6 +746,8 @@ export class WorldEngine {
         events: tickEvents,
         npcActions: simResult.npcActions,
         priceChanges: simResult.priceChanges,
+        weather: this.weather.weather,
+        weatherDesc: this.weather.getDescription(),
       },
       distantNews,
     };

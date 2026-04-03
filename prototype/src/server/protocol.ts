@@ -30,6 +30,8 @@ export interface ServerMessage {
       shichen: string;
       day: number;
       season: string;
+      weather: string;
+      weatherDesc: string;
       prices: Record<string, number>;
     };
     perception?: any;
@@ -46,8 +48,10 @@ export interface ServerMessage {
       events: number;
       npcActions: number;
       priceChanges: Record<string, string>;
+      weather: string;
+      weatherDesc: string;
     };
-    distantNews?: string[];
+    distantNews?: { message: string; cause: string; source: string }[];
   };
   timings?: {
     total: number;

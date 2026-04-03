@@ -102,6 +102,8 @@ export class GameServer {
           day: time.day,
           shichen: time.shichenName,
           season: time.season,
+          weather: this.engine.weather.weather,
+          weatherDesc: this.engine.weather.getDescription(),
           byType,
           byLOD: { L0: l0Count, L1: l1Count, L2: l2Count },
           byGrid: gridStats,
@@ -212,7 +214,7 @@ export class GameServer {
     // GET /api/world/events — 世界事件日志
     this.app.get('/api/world/events', (req, res) => {
       try {
-        const count = Math.min(parseInt(req.query.count as string) || 50, 100);
+        const count = Math.min(parseInt(req.query.count as string) || 50, 500);
         const events = this.engine.getEvents(count);
         res.json({ total: events.length, events });
       } catch (err) {
@@ -245,6 +247,8 @@ export class GameServer {
             shichen: this.engine.time.shichenName,
             day: this.engine.time.day,
             season: this.engine.time.season,
+            weather: this.engine.weather.weather,
+            weatherDesc: this.engine.weather.getDescription(),
             prices: this.engine.economy.getPrices(),
           },
           playerState: {
