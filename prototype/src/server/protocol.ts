@@ -52,6 +52,7 @@ export interface ServerMessage {
       weatherDesc: string;
     };
     distantNews?: { message: string; cause: string; source: string }[];
+    briefing?: TurnBriefing;
   };
   timings?: {
     total: number;
@@ -64,6 +65,44 @@ export interface ServerMessage {
     playerAction: number;
     assemble: number;
   };
+}
+
+// === 回合简报 ===
+export interface TurnBriefing {
+  weather: {
+    current: string;
+    description: string;
+    changed: boolean;
+    previous?: string;
+  };
+  time: {
+    shichen: string;
+    day: number;
+  };
+  worldEvents: {
+    total: number;
+    categories: {
+      weather: string[];
+      npc_action: string[];
+      economy: string[];
+      ecology: string[];
+      politics: string[];
+    };
+  };
+  nearby: {
+    npcActions: string[];
+    environment: string;
+  };
+  distantNews: {
+    message: string;
+    cause: string;
+    source: string;
+  }[];
+  priceChanges: {
+    item: string;
+    change: string;
+    reason: string;
+  }[];
 }
 
 export interface BenchmarkReport {

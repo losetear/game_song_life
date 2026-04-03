@@ -282,6 +282,7 @@ export class GameServer {
                 playerState: result.playerState,
                 turnSummary: result.turnSummary,
                 distantNews: result.distantNews,
+                briefing: result.briefing,
               },
               timings: result.timings,
             };

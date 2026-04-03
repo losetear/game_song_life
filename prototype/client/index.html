@@ -501,6 +501,153 @@ body::before {
   line-height: 1.6;
 }
 
+/* ===== 回合简报 ===== */
+.briefing {
+  margin: 0 16px 12px;
+  border: 1px solid rgba(44, 24, 16, 0.1);
+  border-radius: var(--radius);
+  background: var(--paper-light);
+  overflow: hidden;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.briefing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(184, 134, 11, 0.08), rgba(58, 79, 122, 0.06));
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.briefing-header:hover { background: linear-gradient(135deg, rgba(184, 134, 11, 0.12), rgba(58, 79, 122, 0.1)); }
+.briefing-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.1em;
+}
+.briefing-toggle {
+  font-size: 12px;
+  color: rgba(44, 24, 16, 0.4);
+  transition: transform 0.3s ease;
+}
+.briefing-toggle.collapsed { transform: rotate(-90deg); }
+.briefing-body {
+  padding: 12px 14px;
+  max-height: 800px;
+  overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.3s ease;
+}
+.briefing-body.collapsed {
+  max-height: 0;
+  padding: 0 14px;
+}
+
+.briefing-weather-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(58, 79, 122, 0.06), transparent);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.briefing-weather-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.briefing-weather-desc {
+  color: rgba(44, 24, 16, 0.6);
+  font-size: 12px;
+}
+.briefing-weather-changed {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: rgba(58, 79, 122, 0.1);
+  color: var(--indigo);
+  animation: briefingPulse 2s ease-in-out;
+}
+@keyframes briefingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.briefing-section {
+  margin-bottom: 10px;
+}
+.briefing-section:last-child { margin-bottom: 0; }
+.briefing-section-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+  padding-left: 8px;
+  border-left: 3px solid var(--gold);
+}
+.briefing-section-title.weather-section { border-left-color: var(--indigo); }
+.briefing-section-title.npc-section { border-left-color: var(--jade); }
+.briefing-section-title.economy-section { border-left-color: var(--gold); }
+.briefing-section-title.ecology-section { border-left-color: #6b8e23; }
+.briefing-section-title.politics-section { border-left-color: var(--vermillion); }
+.briefing-section-title.nearby-section { border-left-color: var(--jade); }
+.briefing-section-title.news-section { border-left-color: var(--indigo); }
+
+.briefing-item {
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(44, 24, 16, 0.75);
+  padding: 2px 0 2px 12px;
+  position: relative;
+}
+.briefing-item::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: rgba(44, 24, 16, 0.3);
+}
+.briefing-price {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 3px 0 3px 12px;
+}
+.briefing-price-item { font-weight: 700; color: var(--ink); }
+.briefing-price-change.up { color: var(--vermillion); font-weight: 700; }
+.briefing-price-change.down { color: var(--jade); font-weight: 700; }
+.briefing-price-reason {
+  font-size: 10px;
+  color: rgba(44, 24, 16, 0.45);
+}
+.briefing-news-item {
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(44, 24, 16, 0.75);
+  padding: 3px 0;
+  border-bottom: 1px dashed rgba(44, 24, 16, 0.05);
+}
+.briefing-news-item:last-child { border-bottom: none; }
+.briefing-news-source {
+  font-size: 10px;
+  color: var(--indigo);
+  margin-left: 4px;
+}
+.briefing-empty {
+  font-size: 11px;
+  color: rgba(44, 24, 16, 0.35);
+  padding: 2px 0 2px 12px;
+  font-style: italic;
+}
+
 /* 状态栏 */
 .status-bar {
   display: flex;
@@ -1134,6 +1281,13 @@ body::before {
           远处飘来炊饼的香味，你的肚子咕噜一声。<br><br>
           <span style="color:rgba(44,24,16,0.4);font-size:13px">—— 你站在中心大街上，该做点什么呢？</span>
         </div>
+      </div>
+      <div class="briefing" id="briefing" style="display:none">
+        <div class="briefing-header" onclick="toggleBriefing()">
+          <span class="briefing-title">【回合简报】</span>
+          <span class="briefing-toggle" id="briefing-toggle">▼</span>
+        </div>
+        <div class="briefing-body" id="briefing-body"></div>
       </div>
       <div class="turn-summary" id="turn-summary" style="display:none">
         <div class="turn-summary-header">本回合</div>
@@ -1772,6 +1926,9 @@ function handleServerResponse(msg) {
   if (data.turnSummary) {
     renderTurnSummary(data.turnSummary, data.distantNews);
   }
+  if (data.briefing) {
+    renderBriefing(data.briefing);
+  }
 }
 
 function renderTurnSummary(summary, distantNews) {
@@ -1806,6 +1963,113 @@ function renderTurnSummary(summary, distantNews) {
       }
     }
     html += `</div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+// ===== 回合简报 =====
+let briefingCollapsed = false;
+
+function toggleBriefing() {
+  briefingCollapsed = !briefingCollapsed;
+  const body = document.getElementById('briefing-body');
+  const toggle = document.getElementById('briefing-toggle');
+  body.classList.toggle('collapsed', briefingCollapsed);
+  toggle.classList.toggle('collapsed', briefingCollapsed);
+  toggle.textContent = briefingCollapsed ? '▶' : '▼';
+}
+
+function renderBriefing(briefing) {
+  const el = document.getElementById('briefing');
+  const body = document.getElementById('briefing-body');
+  if (!briefing) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+
+  const weatherIcon = getWeatherIcon(briefing.weather.current);
+  let html = '';
+
+  // 天气栏
+  html += `<div class="briefing-weather-bar">`;
+  html += `<div class="briefing-weather-current">${weatherIcon} ${briefing.weather.current}</div>`;
+  html += `<div class="briefing-weather-desc">${briefing.weather.description}`;
+  if (briefing.weather.changed) {
+    html += ` <span class="briefing-weather-changed">天气变化：${briefing.weather.previous || ''} → ${briefing.weather.current}</span>`;
+  }
+  html += `</div></div>`;
+
+  // 天气事件
+  const weatherEvents = briefing.worldEvents.categories.weather;
+  if (weatherEvents.length > 0) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title weather-section">☁ 天气</div>`;
+    weatherEvents.forEach(e => { html += `<div class="briefing-item">${e}</div>`; });
+    html += `</div>`;
+  }
+
+  // NPC行为
+  const npcActions = briefing.worldEvents.categories.npc_action;
+  if (npcActions.length > 0) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title npc-section">👥 人物动态</div>`;
+    npcActions.slice(0, 5).forEach(e => { html += `<div class="briefing-item">${e}</div>`; });
+    html += `</div>`;
+  }
+
+  // 市场动向
+  if (briefing.priceChanges.length > 0) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title economy-section">💰 市场动向</div>`;
+    briefing.priceChanges.forEach(pc => {
+      const isUp = pc.change.startsWith('+');
+      html += `<div class="briefing-price">`;
+      html += `<span class="briefing-price-item">${pc.item}</span>`;
+      html += `<span class="briefing-price-change ${isUp ? 'up' : 'down'}">${pc.change}</span>`;
+      html += `<span class="briefing-price-reason">（${pc.reason}）</span>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 经济事件
+  const economyEvents = briefing.worldEvents.categories.economy;
+  if (economyEvents.length > 0) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title economy-section">📊 经济变动</div>`;
+    economyEvents.forEach(e => { html += `<div class="briefing-item">${e}</div>`; });
+    html += `</div>`;
+  }
+
+  // 生态变化
+  const ecologyEvents = briefing.worldEvents.categories.ecology;
+  if (ecologyEvents.length > 0) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title ecology-section">🌿 生态变化</div>`;
+    ecologyEvents.forEach(e => { html += `<div class="briefing-item">${e}</div>`; });
+    html += `</div>`;
+  }
+
+  // 远方消息
+  if (briefing.distantNews.length > 0) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title news-section">📢 远方消息</div>`;
+    briefing.distantNews.forEach(n => {
+      html += `<div class="briefing-news-item">📰 ${n.message}<span class="briefing-news-source">${n.source}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 身边事
+  if (briefing.nearby.npcActions.length > 0 || briefing.nearby.environment) {
+    html += `<div class="briefing-section">`;
+    html += `<div class="briefing-section-title nearby-section">👁 身边事</div>`;
+    briefing.nearby.npcActions.forEach(a => { html += `<div class="briefing-item">${a}</div>`; });
+    html += `</div>`;
+  }
+
+  // 如果什么都没有
+  if (!html) {
+    html = `<div class="briefing-empty">本回合风平浪静，无事发生。</div>`;
   }
 
   body.innerHTML = html;

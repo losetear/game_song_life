@@ -15,7 +15,7 @@ import { EconomySystem } from './economySystem';
 import { PerceptionSystem } from './perceptionSystem';
 import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
-import { SceneOption } from '../server/protocol';
+import { SceneOption, TurnBriefing } from '../server/protocol';
 
 // === 世界事件日志（含因果链） ===
 export interface WorldEvent {
@@ -75,6 +75,7 @@ export interface TickResult {
     weatherDesc: string;
   };
   distantNews: { message: string; cause: string; source: string }[];
+  briefing: TurnBriefing;
 }
 
 // ============================================================
@@ -281,6 +282,7 @@ export class WorldEngine {
   private l0Entities: number[] = [];  // GOAP NPC
   private l1Entities: number[] = [];  // 行为树 NPC
   private lastTickEvents = 0;
+  private previousWeather: string = '晴';
 
   // 世界事件环形缓冲区
   private eventLog: WorldEvent[] = [];
@@ -397,6 +399,103 @@ export class WorldEngine {
     return names[gridId || ''] || gridId || '某处';
   }
 
+  /** 生成本回合简报 */
+  private generateBriefing(playerGridId: string, priceChanges: Record<string, string>, distantNews: { message: string; cause: string; source: string }[]): TurnBriefing {
+    // 1. 天气
+    const weatherChanged = this.previousWeather !== this.weather.weather;
+    const weather = {
+      current: this.weather.weather,
+      description: this.weather.getDescription(),
+      changed: weatherChanged,
+      previous: weatherChanged ? this.previousWeather : undefined,
+    };
+
+    // 2. 收集本回合事件，按类别分组
+    const tickEvents = this.eventLog.filter(e => e.tick === this.time.tick);
+    const worldEvents = {
+      total: tickEvents.length,
+      categories: {
+        weather: tickEvents.filter(e => e.type === 'weather').map(e => e.message),
+        npc_action: tickEvents.filter(e => e.category === 'npc_action').map(e => e.message),
+        economy: tickEvents.filter(e => e.type === 'economy').map(e => e.message),
+        ecology: tickEvents.filter(e => e.type === 'ecology').map(e => e.message),
+        politics: [] as string[],
+      },
+    };
+
+    // 3. 同Grid内NPC行为
+    const nearbyNpcActions = this.getNearbyNpcActions(playerGridId);
+
+    // 4. 环境描述
+    const environment = this.generateEnvironmentDesc(playerGridId);
+
+    // 5. 价格变动（含原因）
+    const priceChangeList = this.getPriceChangesWithReason(priceChanges);
+
+    return {
+      weather,
+      time: { shichen: this.time.shichenName, day: this.time.day },
+      worldEvents,
+      nearby: { npcActions: nearbyNpcActions, environment },
+      distantNews,
+      priceChanges: priceChangeList,
+    };
+  }
+
+  /** 获取同Grid内NPC行为 */
+  private getNearbyNpcActions(playerGridId: string): string[] {
+    const actions: string[] = [];
+    for (const entityId of this.l0Entities) {
+      const pos = this.em.getComponent(entityId, 'Position');
+      if (pos?.gridId !== playerGridId) continue;
+      const identity = this.em.getComponent(entityId, 'Identity');
+      if (!identity) continue;
+      // 取本回合该NPC的事件
+      const npcEvents = this.eventLog.filter(e =>
+        e.tick === this.time.tick && e.category === 'npc_action' && e.message.includes(identity.name)
+      );
+      for (const evt of npcEvents) {
+        actions.push(evt.message);
+      }
+    }
+    // 补充：如果同Grid没有NPC事件，随机生成一些身边事
+    if (actions.length === 0) {
+      const nearbyTemplates = [
+        '一个挑夫扛着大包匆匆走过。',
+        '一个小贩推着车吆喝着。',
+        '一条野狗在街角嗅着什么。',
+        '远处传来孩子的嬉笑声。',
+        '一个老妇人慢慢走过，手里提着菜篮。',
+      ];
+      actions.push(nearbyTemplates[Math.floor(Math.random() * nearbyTemplates.length)]);
+    }
+    return actions.slice(0, 5);
+  }
+
+  /** 生成环境描述（天气+时间+位置组合） */
+  private generateEnvironmentDesc(gridId: string): string {
+    const timeDesc = timeAtmosphere(this.time.shichenName);
+    const weatherDesc = this.weather.getDescription();
+    const location = this.gridDisplayName(gridId);
+    return `${timeDesc}，${weatherDesc}。你身处${location}。`;
+  }
+
+  /** 价格变动含原因 */
+  private getPriceChangesWithReason(priceChanges: Record<string, string>): { item: string; change: string; reason: string }[] {
+    const reasons: Record<string, string> = {
+      '粮': this.weather.farmYieldMod < 0.8 ? '天气不佳，农田减产' : this.weather.farmYieldMod > 1.1 ? '风调雨顺，粮食丰收' : '市场供需变动',
+      '药': this.weather.isRaining ? '雨天药材运输不便' : '市场供需变动',
+      '布': '商路运输变动',
+      '材': '矿山开采量变动',
+      '货': this.weather.isHeavyRain ? '暴雨导致货运中断' : '码头来货量变动',
+    };
+    return Object.entries(priceChanges).map(([item, change]) => ({
+      item,
+      change,
+      reason: reasons[item] || '市场波动',
+    }));
+  }
+
   /** 获取场景模板 */
   getSceneTemplate(gridId: string): SceneTemplate {
     return SCENE_TEMPLATES[gridId] || SCENE_TEMPLATES['center_street'];
@@ -428,7 +527,9 @@ export class WorldEngine {
     // 1. 时间推进
     this.time.advance();
 
-    // 2. 天气推进
+    // 2. 天气推进（保存前一回合天气）
+    this.previousWeather = this.weather.weather;
+    this.weather.advance(this.time.season);
     this.weather.advance(this.time.season);
 
     // 3. L0 NPC 行动 (优先级规则, 10个核心NPC)
@@ -708,6 +809,9 @@ export class WorldEngine {
     // 远方消息（结构化，含因果标记）
     const distantNews = this.generateDistantNews();
 
+    // 生成回合简报
+    const briefing = this.generateBriefing(gridId, simResult.priceChanges, distantNews);
+
     timings.assemble = performance.now() - t0;
     timings.total = performance.now() - startTotal;
 
@@ -750,6 +854,7 @@ export class WorldEngine {
         weatherDesc: this.weather.getDescription(),
       },
       distantNews,
+      briefing,
     };
   }
 
