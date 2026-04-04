@@ -68,6 +68,11 @@ export interface BuildingComponent {
   openHours: string; // e.g. "辰-酉"
 }
 
+export interface ActionPointsComponent {
+  current: number;   // 当前行动点
+  max: number;       // 每回合上限
+}
+
 export interface InteractableComponent {
   actions: string[];
   conditions: Record<string, any>;
@@ -87,6 +92,7 @@ export type ComponentTypeMap = {
   Produce: ProduceComponent;
   Durability: DurabilityComponent;
   Building: BuildingComponent;
+  ActionPoints: ActionPointsComponent;
   Interactable: InteractableComponent;
 };
 

@@ -16,6 +16,7 @@ import { PerceptionSystem } from './perceptionSystem';
 import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
+import { VitalComponent, WalletComponent, PositionComponent } from '../ecs/types';
 
 // === 世界事件日志（含因果链） ===
 export interface WorldEvent {
@@ -76,6 +77,8 @@ export interface TickResult {
     health: number;
     mood: number;
     copper: number;
+    ap: number;
+    apMax: number;
   };
   turnSummary: {
     shichen: string;
@@ -635,6 +638,308 @@ export class WorldEngine {
     };
   }
 
+  // ============================================================
+  // 行动点系统
+  // ============================================================
+
+  private readonly AP_PER_TURN = 5;
+
+  /** 获取玩家当前 AP */
+  getPlayerAP(playerId: number): { current: number; max: number } {
+    const ap = this.em.getComponent(playerId, 'ActionPoints');
+    return { current: ap?.current ?? this.AP_PER_TURN, max: ap?.max ?? this.AP_PER_TURN };
+  }
+
+  /** 消耗玩家行动点，返回是否足够 */
+  private consumeAP(playerId: number, cost: number): boolean {
+    const ap = this.em.getComponent(playerId, 'ActionPoints');
+    if (!ap || ap.current < cost) return false;
+    ap.current -= cost;
+    return true;
+  }
+
+  /** 重置玩家 AP 为上限 */
+  private resetAP(playerId: number): void {
+    let ap = this.em.getComponent(playerId, 'ActionPoints');
+    if (!ap) {
+      this.em.addComponent(playerId, 'ActionPoints', { current: this.AP_PER_TURN, max: this.AP_PER_TURN });
+    } else {
+      ap.current = ap.max;
+    }
+  }
+
+  // ============================================================
+  // 周围对象交互系统
+  // ============================================================
+
+  /** 获取玩家当前位置附近所有实体 */
+  getNearbyEntities(playerId: number): any[] {
+    const pos = this.em.getComponent(playerId, 'Position');
+    if (!pos) return [];
+    const gridId = pos.gridId;
+    const entityIds = this.worldMap.getEntitiesInGrid(gridId);
+
+    const result: any[] = [];
+    for (const id of entityIds) {
+      if (id === playerId) continue; // 跳过玩家自己
+      const type = this.em.getType(id);
+      if (!type) continue;
+
+      const identity = this.em.getComponent(id, 'Identity');
+      const vital = this.em.getComponent(id, 'Vital');
+      const wallet = this.em.getComponent(id, 'Wallet');
+      const building = this.em.getComponent(id, 'Building');
+
+      const entity: any = {
+        id,
+        type,
+        name: identity?.name || this.getTypeDisplayName(id, type),
+        icon: this.getTypeIcon(id, type),
+        interactable: true,
+      };
+
+      // NPC 特有信息
+      if (type === 'npc') {
+        entity.profession = identity?.profession || '';
+        entity.briefDesc = `${identity?.profession || '路人'}，${this.getAgeDesc(identity?.age)}`;
+        entity.vital = vital ? { hunger: vital.hunger, fatigue: vital.fatigue, health: vital.health, mood: vital.mood } : undefined;
+        entity.personality = identity?.personality || [];
+        entity.wallet = wallet ? { copper: wallet.copper } : undefined;
+      }
+      // 建筑特有信息
+      else if (type === 'building') {
+        entity.buildingType = building?.type || 'house';
+        entity.openHours = building?.openHours || '';
+      }
+
+      result.push(entity);
+    }
+    return result;
+  }
+
+  /** 根据实体类型和属性动态计算可用行为 */
+  calculateEntityActions(playerId: number, targetId: number): { targetId: number; targetName: string; actions: any[] } {
+    const targetType = this.em.getType(targetId);
+    const targetIdentity = this.em.getComponent(targetId, 'Identity');
+    const targetName = targetIdentity?.name || this.getTypeDisplayName(targetId, targetType);
+
+    const playerWallet = this.em.getComponent(playerId, 'Wallet');
+    const playerVital = this.em.getComponent(playerId, 'Vital');
+    const playerInventory = this.em.getComponent(playerId, 'Inventory');
+    const playerAP = this.getPlayerAP(playerId);
+
+    const copper = playerWallet?.copper ?? 0;
+    const fatigue = playerVital?.fatigue ?? 100;
+    const hasItems = playerInventory && playerInventory.items.length > 0;
+    const hasFood = playerInventory && playerInventory.items.some(i => i.itemType === 'food');
+    const ap = playerAP.current;
+
+    const targetPos = this.em.getComponent(targetId, 'Position');
+    const playerPos = this.em.getComponent(playerId, 'Position');
+    const sameGrid = targetPos?.gridId === playerPos?.gridId;
+
+    // 获取目标grid的人数
+    const targetGridId = targetPos?.gridId || '';
+    const nearbyCount = this.worldMap.getEntitiesInGrid(targetGridId).length;
+
+    const actions: any[] = [];
+
+    switch (targetType) {
+      case 'npc': {
+        const memory = this.em.getComponent(targetId, 'Memory');
+        const impression = memory?.impressions?.[playerId] ?? 0;
+
+        actions.push({
+          id: 'talk_to', name: '攀谈', icon: '💬', apCost: 1,
+          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
+          effects: '增加好感度，可能获得信息',
+        });
+        actions.push({
+          id: 'trade', name: '交易', icon: '💰', apCost: 2,
+          conditions: { met: ap >= 2 && copper > 0, reason: ap < 2 ? '行动点不足' : copper <= 0 ? '没有铜钱' : '' },
+          effects: '买卖物品',
+        });
+        actions.push({
+          id: 'steal', name: '偷窃', icon: '🤏', apCost: 2,
+          conditions: { met: ap >= 2 && nearbyCount < 5, reason: ap < 2 ? '行动点不足' : nearbyCount >= 5 ? '周围人太多' : '' },
+          effects: '偷取铜钱，失败会被抓',
+        });
+        actions.push({
+          id: 'ask_advice', name: '请教', icon: '📖', apCost: 1,
+          conditions: { met: ap >= 1 && impression > 0, reason: ap < 1 ? '行动点不足' : impression <= 0 ? '好感度不够' : '' },
+          effects: '学习技能或获取情报',
+        });
+        actions.push({
+          id: 'provoke', name: '挑衅', icon: '👊', apCost: 2,
+          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
+          effects: '引发冲突',
+        });
+        actions.push({
+          id: 'gift', name: '赠礼', icon: '🎁', apCost: 1,
+          conditions: { met: ap >= 1 && hasItems, reason: ap < 1 ? '行动点不足' : !hasItems ? '背包没有物品' : '' },
+          effects: '增加好感度',
+        });
+        break;
+      }
+      case 'building': {
+        const building = this.em.getComponent(targetId, 'Building');
+        const bType = building?.type || 'house';
+        actions.push({
+          id: 'enter_building', name: '进入', icon: '🚪', apCost: 0,
+          conditions: { met: true, reason: '' },
+          effects: '进入建筑内部',
+        });
+        actions.push({
+          id: 'buy_from_shop', name: '购买', icon: '💰', apCost: 1,
+          conditions: { met: ap >= 1 && copper > 0, reason: ap < 1 ? '行动点不足' : copper <= 0 ? '没有铜钱' : '' },
+          effects: '购买商品',
+        });
+        actions.push({
+          id: 'ask_around', name: '打听', icon: '👂', apCost: 1,
+          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
+          effects: '获取附近消息',
+        });
+        break;
+      }
+      case 'animal': {
+        actions.push({
+          id: 'observe', name: '观察', icon: '👁', apCost: 0,
+          conditions: { met: true, reason: '' },
+          effects: '观察动物的习性',
+        });
+        actions.push({
+          id: 'hunt', name: '捕猎', icon: '🏹', apCost: 2,
+          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
+          effects: '尝试捕获或猎杀',
+        });
+        actions.push({
+          id: 'feed', name: '喂食', icon: '🌾', apCost: 1,
+          conditions: { met: ap >= 1 && hasFood, reason: ap < 1 ? '行动点不足' : !hasFood ? '没有食物' : '' },
+          effects: '增加动物好感',
+        });
+        actions.push({
+          id: 'tame', name: '驯服', icon: '🤲', apCost: 3,
+          conditions: { met: ap >= 3, reason: ap < 3 ? '行动点不足' : '' },
+          effects: '尝试驯化（需多次尝试）',
+        });
+        break;
+      }
+      case 'plant': {
+        actions.push({
+          id: 'gather', name: '采摘', icon: '✋', apCost: 1,
+          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
+          effects: '采摘植物产品',
+        });
+        actions.push({
+          id: 'chop', name: '砍伐', icon: '🪓', apCost: 2,
+          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
+          effects: '获取木材',
+        });
+        actions.push({
+          id: 'water', name: '浇水', icon: '💧', apCost: 1,
+          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
+          effects: '促进植物生长',
+        });
+        break;
+      }
+      case 'mineral': {
+        actions.push({
+          id: 'collect', name: '采集', icon: '⛏', apCost: 2,
+          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
+          effects: '收集矿石碎片',
+        });
+        actions.push({
+          id: 'mine', name: '开采', icon: '🔨', apCost: 3,
+          conditions: { met: ap >= 3, reason: ap < 3 ? '行动点不足' : '' },
+          effects: '深度开采',
+        });
+        break;
+      }
+      case 'item': {
+        actions.push({
+          id: 'pickup', name: '拾取', icon: '✋', apCost: 1,
+          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
+          effects: '拾起物品放入背包',
+        });
+        actions.push({
+          id: 'inspect', name: '检查', icon: '🔍', apCost: 0,
+          conditions: { met: true, reason: '' },
+          effects: '仔细查看物品',
+        });
+        actions.push({
+          id: 'use_item', name: '使用', icon: '👆', apCost: 1,
+          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
+          effects: '使用该物品',
+        });
+        break;
+      }
+    }
+
+    return { targetId, targetName, actions };
+  }
+
+  /** 获取类型显示图标 */
+  private getTypeIcon(id: number, type: string | undefined): string {
+    switch (type) {
+      case 'npc': return '👤';
+      case 'animal': return '🐾';
+      case 'building': {
+        const b = this.em.getComponent(id, 'Building');
+        return b?.type === 'shop' ? '🏪' : b?.type === 'teahouse' ? '🍵' : '🏠';
+      }
+      case 'plant': return '🌿';
+      case 'mineral': return '🪨';
+      case 'item': return '📦';
+      default: return '❓';
+    }
+  }
+
+  /** 获取类型显示名 */
+  private getTypeDisplayName(id: number, type: string | undefined): string {
+    switch (type) {
+      case 'npc': return '路人';
+      case 'animal': {
+        // 尝试从 AI 组件获取更多信息来推断动物类型
+        const vital = this.em.getComponent(id, 'Vital');
+        const pos = this.em.getComponent(id, 'Position');
+        const isWild = pos?.areaId === 'mountain' || pos?.areaId === 'river';
+        const names = isWild
+          ? ['野鹿', '灰兔', '赤狐', '野猪', '灰狼', '飞鸟']
+          : ['母鸡', '小猪', '老牛'];
+        return names[Math.floor(id) % names.length];
+      }
+      case 'building': {
+        const b = this.em.getComponent(id, 'Building');
+        return b?.type === 'shop' ? '店铺' : '房屋';
+      }
+      case 'plant': {
+        const pos = this.em.getComponent(id, 'Position');
+        const areaPlants: Record<string, string[]> = {
+          farmland: ['稻苗', '麦穗', '菜秧'],
+          mountain: ['松树', '竹子', '药草', '野花'],
+          river: ['芦苇', '水草'],
+        };
+        const pool = areaPlants[pos?.areaId || ''] || ['野草', '灌木'];
+        return pool[id % pool.length];
+      }
+      case 'mineral': {
+        const mineralNames = ['铁矿石', '铜矿石', '石块', '燧石'];
+        return mineralNames[id % mineralNames.length];
+      }
+      case 'item': return '物品';
+      default: return '未知';
+    }
+  }
+
+  /** 年龄描述 */
+  private getAgeDesc(age?: number): string {
+    if (!age) return '年龄不详';
+    if (age < 20) return '年少';
+    if (age < 35) return '青年';
+    if (age < 50) return '中年';
+    return '年长';
+  }
+
   /** 回合模拟：全世界推进一回合 */
   private simulateTurn(): { npcActions: number; priceChanges: Record<string, string>; causalEvents: CausalEvent[] } {
     // 保存当前物价
@@ -949,6 +1254,45 @@ export class WorldEngine {
     };
     const startTotal = performance.now();
 
+    // 确保 AP 组件存在
+    this.resetAP(playerId);
+
+    // 检查 AP（移动类和特殊行动消耗不同 AP）
+    const apCost = this.getActionAPCost(actionId);
+    if (!this.consumeAP(playerId, apCost)) {
+      // AP 不足，返回错误但仍然构建场景
+      const pos = this.em.getComponent(playerId, 'Position');
+      const gridId = pos?.gridId || 'center_street';
+      const template = this.getSceneTemplate(gridId);
+      const sceneCtx = this.getSceneContext(playerId);
+      const vital = this.em.getComponent(playerId, 'Vital');
+      const wallet = this.em.getComponent(playerId, 'Wallet');
+      const apData = this.getPlayerAP(playerId);
+      return {
+        success: false,
+        message: '行动点不足，请结束回合。',
+        sceneDescription: template.getDescription(sceneCtx),
+        sceneLocation: template.locationName,
+        options: template.getOptions(sceneCtx),
+        npcMessages: [],
+        timings: { total: 0, playerAction: 0, l0GOAP: 0, l1BehaviorTree: 0, l2Statistics: 0, economy: 0, perception: 0, vitalDecay: 0, assemble: 0 },
+        perception: this.perception.getPerceptionData(playerId),
+        worldState: {
+          tick: this.time.tick, shichen: this.time.shichenName, day: this.time.day,
+          season: this.time.season, weather: this.weather.weather,
+          weatherDesc: this.weather.getDescription(), prices: this.economy.getPrices(),
+        },
+        playerState: {
+          hunger: vital?.hunger ?? 50, fatigue: vital?.fatigue ?? 50,
+          health: vital?.health ?? 80, mood: vital?.mood ?? 50,
+          copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max,
+        },
+        turnSummary: { shichen: this.time.shichenName, day: this.time.day, events: 0, npcActions: 0, priceChanges: {}, weather: this.weather.weather, weatherDesc: this.weather.getDescription() },
+        distantNews: [],
+        briefing: this.generateBriefing(gridId, {}, []),
+      };
+    }
+
     // 1. 执行玩家操作
     let t0 = performance.now();
     const actionMessage = this.executeAction(playerId, actionId, params);
@@ -990,6 +1334,7 @@ export class WorldEngine {
 
     const vital = this.em.getComponent(playerId, 'Vital');
     const wallet = this.em.getComponent(playerId, 'Wallet');
+    const apData = this.getPlayerAP(playerId);
 
     // 远方消息（结构化，含因果标记）
     const distantNews = this.generateDistantNews();
@@ -1028,6 +1373,8 @@ export class WorldEngine {
         health: vital?.health ?? 80,
         mood: vital?.mood ?? 50,
         copper: wallet?.copper ?? 0,
+        ap: apData.current,
+        apMax: apData.max,
       },
       turnSummary: {
         shichen: this.time.shichenName,
@@ -1045,6 +1392,7 @@ export class WorldEngine {
 
   /** 获取初始场景（玩家刚连接时） */
   getInitialScene(playerId: number): { description: string; location: string; options: SceneOption[] } {
+    this.resetAP(playerId);
     const pos = this.em.getComponent(playerId, 'Position');
     const gridId = pos?.gridId || 'center_street';
     const template = this.getSceneTemplate(gridId);
@@ -1054,6 +1402,90 @@ export class WorldEngine {
       location: template.locationName,
       options: template.getOptions(ctx),
     };
+  }
+
+  /** 结束回合（不执行玩家行动，推进世界） */
+  endTurn(playerId: number): TickResult {
+    // 重置 AP
+    this.resetAP(playerId);
+
+    // 推进世界
+    const simResult = this.simulateTurn();
+
+    const pos = this.em.getComponent(playerId, 'Position');
+    const gridId = pos?.gridId || 'center_street';
+    const template = this.getSceneTemplate(gridId);
+    const sceneCtx = this.getSceneContext(playerId, simResult.causalEvents);
+
+    const sceneDescription = template.getDescription(sceneCtx);
+    const options = template.getOptions(sceneCtx);
+
+    const npcMessages: string[] = [];
+    for (const ce of simResult.causalEvents) {
+      if (ce.spreadRadius <= 1) npcMessages.push(ce.message);
+    }
+    if (npcMessages.length === 0 && Math.random() > 0.3) {
+      npcMessages.push(pickChatter());
+    }
+
+    const vital = this.em.getComponent(playerId, 'Vital');
+    const wallet = this.em.getComponent(playerId, 'Wallet');
+    const apData = this.getPlayerAP(playerId);
+    const distantNews = this.generateDistantNews();
+    const briefing = this.generateBriefing(gridId, simResult.priceChanges, distantNews);
+    const recentEvents = this.getEvents(20);
+    const tickEvents = recentEvents.filter(e => e.tick === this.time.tick).length;
+
+    return {
+      success: true,
+      message: '你结束了本回合，世界继续运转。',
+      sceneDescription,
+      sceneLocation: template.locationName,
+      options,
+      npcMessages,
+      timings: { total: 0, playerAction: 0, l0GOAP: 0, l1BehaviorTree: 0, l2Statistics: 0, economy: 0, perception: 0, vitalDecay: 0, assemble: 0 },
+      perception: this.perception.getPerceptionData(playerId),
+      worldState: {
+        tick: this.time.tick, shichen: this.time.shichenName, day: this.time.day,
+        season: this.time.season, weather: this.weather.weather,
+        weatherDesc: this.weather.getDescription(), prices: this.economy.getPrices(),
+      },
+      playerState: {
+        hunger: vital?.hunger ?? 50, fatigue: vital?.fatigue ?? 50,
+        health: vital?.health ?? 80, mood: vital?.mood ?? 50,
+        copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max,
+      },
+      turnSummary: {
+        shichen: this.time.shichenName, day: this.time.day,
+        events: tickEvents, npcActions: simResult.npcActions,
+        priceChanges: simResult.priceChanges,
+        weather: this.weather.weather, weatherDesc: this.weather.getDescription(),
+      },
+      distantNews,
+      briefing,
+    };
+  }
+
+  /** 获取行动的 AP 消耗 */
+  private getActionAPCost(actionId: string): number {
+    // 移动类行动消耗 0 AP
+    const freeActions = ['go_center', 'go_east_market', 'go_tea_house', 'go_dock', 'go_residential',
+      'enter_cloth_shop', 'enter_pharmacy', 'leave_cloth_shop', 'leave_pharmacy', 'leave_home'];
+    if (freeActions.includes(actionId)) return 0;
+
+    // 交互类行动（来自实体行为系统）
+    const apCosts: Record<string, number> = {
+      talk_to: 1, trade: 2, steal: 2, ask_advice: 1, provoke: 2, gift: 1,
+      enter_building: 0, buy_from_shop: 1, ask_around: 1,
+      observe: 0, hunt: 2, feed: 1, tame: 3,
+      gather: 1, chop: 2, water: 1,
+      collect: 2, mine: 3,
+      pickup: 1, inspect: 0, use_item: 1,
+    };
+    if (apCosts[actionId] !== undefined) return apCosts[actionId];
+
+    // 默认消耗 1 AP
+    return 1;
   }
 
   /** 执行简单行动 */
@@ -1210,6 +1642,191 @@ export class WorldEngine {
       case 'leave_home': {
         if (pos) { this.worldMap.moveEntity(playerId, 'center_street'); pos.gridId = 'center_street'; pos.areaId = 'city'; }
         return '你锁好门，走上街去。';
+      }
+
+      default:
+        // 尝试处理基于实体的交互行动
+        return this.executeEntityAction(playerId, actionId, params, vital, wallet, pos);
+    }
+  }
+
+  /** 执行基于实体的交互行动 */
+  private executeEntityAction(playerId: number, actionId: string, params: any, vital: VitalComponent | undefined, wallet: WalletComponent | undefined, pos: PositionComponent | undefined): string {
+    const targetId = params?.targetId ? Number(params.targetId) : 0;
+    if (!targetId || !this.em.isAlive(targetId)) {
+      return `执行了 ${actionId}`;
+    }
+
+    const targetType = this.em.getType(targetId);
+    const targetIdentity = this.em.getComponent(targetId, 'Identity');
+    const targetName = targetIdentity?.name || this.getTypeDisplayName(targetId, targetType);
+
+    switch (actionId) {
+      // NPC 交互
+      case 'talk_to': {
+        if (vital) vital.mood = Math.min(100, vital.mood + 5);
+        const memory = this.em.getComponent(targetId, 'Memory');
+        if (memory) {
+          memory.impressions[playerId] = (memory.impressions[playerId] || 0) + 5;
+        }
+        this.logEvent('player', '社交', `你和${targetName}攀谈了几句`);
+        return `你和${targetName}聊了几句。${targetName}点了点头，似乎对你印象不错。`;
+      }
+      case 'trade': {
+        const cost = 10 + Math.floor(Math.random() * 20);
+        if (!wallet || wallet.copper < cost) return '铜钱不够交易。';
+        wallet.copper -= cost;
+        if (vital) vital.mood = Math.min(100, vital.mood + 3);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) {
+          const itemTypes = ['food', 'cloth', 'herbs', 'material'];
+          const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+          inventory.items.push({ itemType, amount: 1 });
+        }
+        this.logEvent('player', '交易', `你和${targetName}完成了一笔交易`);
+        return `你和${targetName}讨价还价一番，花${cost}文买了一些东西。`;
+      }
+      case 'steal': {
+        const success = Math.random() > 0.4;
+        if (success) {
+          const amount = 5 + Math.floor(Math.random() * 20);
+          const targetWallet = this.em.getComponent(targetId, 'Wallet');
+          if (targetWallet && targetWallet.copper >= amount) {
+            targetWallet.copper -= amount;
+            if (wallet) wallet.copper += amount;
+            this.logEvent('player', '偷窃', `你从${targetName}那里偷了${amount}文`);
+            return `你趁${targetName}不注意，摸走了${amount}文铜钱。心里砰砰直跳。`;
+          }
+        }
+        if (vital) { vital.mood = Math.max(0, vital.mood - 10); vital.health = Math.max(0, vital.health - 5); }
+        this.logEvent('player', '偷窃', `你偷窃${targetName}被发现了`);
+        return `你的手刚伸出去就被${targetName}发现了！${targetName}怒目而视，周围的人都看过来了。`;
+      }
+      case 'ask_advice': {
+        if (vital) vital.mood = Math.min(100, vital.mood + 8);
+        return `${targetName}想了想说："最近城里不太平，买东西要趁早。听说布价还要涨。"`;
+      }
+      case 'provoke': {
+        if (vital) { vital.mood = Math.max(0, vital.mood - 5); vital.health = Math.max(0, vital.health - 10); }
+        return `你故意挑衅${targetName}。对方脸色一沉，推了你一把。旁边的人赶紧把你们拉开。`;
+      }
+      case 'gift': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory && inventory.items.length > 0) {
+          const item = inventory.items.pop();
+          const memory = this.em.getComponent(targetId, 'Memory');
+          if (memory) {
+            memory.impressions[playerId] = (memory.impressions[playerId] || 0) + 15;
+          }
+          this.logEvent('player', '赠礼', `你送给${targetName}一件${item?.itemType || '物品'}`);
+          return `你把一件${item?.itemType || '物品'}送给了${targetName}。${targetName}感激地说："多谢多谢，你是个好人。"`;
+        }
+        return '你翻遍背包，没找到什么可以送的。';
+      }
+
+      // 建筑交互
+      case 'enter_building': {
+        const targetPos = this.em.getComponent(targetId, 'Position');
+        if (pos && targetPos) {
+          this.worldMap.moveEntity(playerId, targetPos.gridId);
+          pos.gridId = targetPos.gridId;
+          pos.areaId = targetPos.areaId;
+        }
+        return `你走进了${targetName}。`;
+      }
+      case 'buy_from_shop': {
+        const cost = 8 + Math.floor(Math.random() * 15);
+        if (!wallet || wallet.copper < cost) return '铜钱不够。';
+        wallet.copper -= cost;
+        if (vital) vital.mood = Math.min(100, vital.mood + 3);
+        return `你花了${cost}文买了些东西。`;
+      }
+      case 'ask_around': {
+        if (vital) vital.mood = Math.min(100, vital.mood + 2);
+        return pickChatter();
+      }
+
+      // 动物交互
+      case 'observe': {
+        return `你仔细观察了一下${targetName}。它似乎没有注意到你。`;
+      }
+      case 'hunt': {
+        const success = Math.random() > 0.5;
+        if (success) {
+          if (vital) { vital.hunger = Math.min(100, vital.hunger + 20); vital.fatigue = Math.max(0, vital.fatigue - 15); }
+          return `你费了一番功夫，成功捕获了${targetName}。`;
+        }
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 10);
+        return `你追了半天，${targetName}太灵活了，跑掉了。`;
+      }
+      case 'feed': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) {
+          const foodIdx = inventory.items.findIndex(i => i.itemType === 'food');
+          if (foodIdx >= 0) {
+            inventory.items.splice(foodIdx, 1);
+            return `你拿出一块食物喂给${targetName}。它嗅了嗅，吃了下去，看起来对你亲近了些。`;
+          }
+        }
+        return '你没有食物可以喂。';
+      }
+      case 'tame': {
+        const success = Math.random() > 0.7;
+        if (success) return `${targetName}似乎接受了你，温顺地靠近了些。驯服取得了一些进展。`;
+        return `${targetName}还是对你有些警惕，跑开了几步。你需要更多耐心。`;
+      }
+
+      // 植物交互
+      case 'gather': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 5);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) inventory.items.push({ itemType: 'herbs', amount: 1 });
+        return `你采摘了一些${targetName}的产品。`;
+      }
+      case 'chop': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 15);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) inventory.items.push({ itemType: 'material', amount: 1 });
+        return `你砍伐了${targetName}，获得了一些木材。`;
+      }
+      case 'water': {
+        return `你给${targetName}浇了些水，它看起来更加精神了。`;
+      }
+
+      // 矿物交互
+      case 'collect': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 10);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) inventory.items.push({ itemType: 'material', amount: 1 });
+        return `你采集了一些${targetName}的碎片。`;
+      }
+      case 'mine': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 20);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) inventory.items.push({ itemType: 'material', amount: 2 });
+        return `你努力开采${targetName}，获得了一些矿石。`;
+      }
+
+      // 物品交互
+      case 'pickup': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) {
+          inventory.items.push({ itemType: 'misc', amount: 1 });
+          // 移除物品实体
+          this.worldMap.removeEntity(targetId);
+          this.em.destroy(targetId);
+        }
+        return `你捡起了${targetName}。`;
+      }
+      case 'inspect': {
+        return `你仔细检查了一下${targetName}。看起来是个普通的东西，但保存得还算完好。`;
+      }
+      case 'use_item': {
+        if (vital) {
+          vital.mood = Math.min(100, vital.mood + 3);
+          vital.health = Math.min(100, vital.health + 5);
+        }
+        return `你使用了${targetName}。感觉好了些。`;
       }
 
       default:

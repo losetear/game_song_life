@@ -735,6 +735,227 @@ body::before {
   color: var(--gold);
   flex-shrink: 0;
 }
+.option-ap {
+  font-size: 11px;
+  color: var(--indigo);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+/* 行动点显示 */
+.ap-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(58, 79, 122, 0.08);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--indigo);
+}
+.ap-display .ap-icon { font-size: 15px; }
+
+/* 结束回合按钮 */
+.end-turn-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 14px;
+  margin-top: 8px;
+  background: linear-gradient(135deg, var(--vermillion), #d4564a);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.1em;
+  transition: var(--transition);
+}
+.end-turn-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.end-turn-btn:active { transform: scale(0.98); }
+.end-turn-btn.blinking {
+  animation: endTurnBlink 1.2s ease-in-out infinite;
+}
+@keyframes endTurnBlink {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(194, 58, 46, 0); }
+  50% { box-shadow: 0 0 16px 4px rgba(194, 58, 46, 0.5); }
+}
+
+/* 周围对象区域 */
+.nearby-section {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(44, 24, 16, 0.06);
+}
+.nearby-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  color: var(--gold);
+  margin-bottom: 8px;
+  letter-spacing: 0.1em;
+}
+.nearby-grid {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.nearby-grid::-webkit-scrollbar { height: 3px; }
+.nearby-grid::-webkit-scrollbar-thumb { background: rgba(44,24,16,0.15); border-radius: 2px; }
+
+.nearby-entity {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--paper-light);
+  border: 1.5px solid rgba(44, 24, 16, 0.08);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  min-width: 64px;
+  max-width: 80px;
+}
+.nearby-entity:hover {
+  border-color: var(--gold);
+  background: rgba(184, 134, 11, 0.06);
+}
+.nearby-entity:active { transform: scale(0.95); }
+.nearby-entity.selected {
+  border-color: var(--gold);
+  background: rgba(184, 134, 11, 0.12);
+  box-shadow: 0 2px 8px rgba(184, 134, 11, 0.2);
+}
+.nearby-entity .entity-icon { font-size: 24px; }
+.nearby-entity .entity-name {
+  font-size: 11px;
+  color: rgba(44, 24, 16, 0.7);
+  text-align: center;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 实体详情卡片 */
+.entity-detail-card {
+  display: none;
+  margin-top: 10px;
+  padding: 14px;
+  background: var(--paper-light);
+  border: 1.5px solid rgba(184, 134, 11, 0.2);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px rgba(44, 24, 16, 0.08);
+}
+.entity-detail-card.visible { display: block; }
+.entity-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.entity-detail-header .detail-icon { font-size: 28px; }
+.entity-detail-header .detail-info { flex: 1; }
+.entity-detail-header .detail-name {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.entity-detail-header .detail-desc {
+  font-size: 12px;
+  color: rgba(44, 24, 16, 0.5);
+  margin-top: 2px;
+}
+.entity-detail-header .detail-close {
+  width: 28px; height: 28px;
+  border: none;
+  background: rgba(44, 24, 16, 0.06);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  color: rgba(44, 24, 16, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.entity-detail-header .detail-close:hover { background: rgba(44, 24, 16, 0.12); }
+
+/* 实体属性栏 */
+.entity-stats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.entity-stat {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: rgba(44, 24, 16, 0.6);
+  padding: 2px 6px;
+  background: rgba(44, 24, 16, 0.03);
+  border-radius: 8px;
+}
+.entity-stat .stat-icon { font-size: 12px; }
+
+/* 行为列表 */
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1.5px solid rgba(44, 24, 16, 0.1);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  transition: var(--transition);
+  text-align: left;
+}
+.action-btn:hover { border-color: var(--gold); background: rgba(184,134,11,0.04); }
+.action-btn:active { transform: scale(0.98); }
+.action-btn.available { border-left: 3px solid var(--gold); }
+.action-btn.unavailable {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-left: 3px solid rgba(44,24,16,0.1);
+}
+.action-btn.unavailable:hover { border-color: rgba(44,24,16,0.1); background: var(--paper); }
+.action-btn .action-icon { font-size: 16px; flex-shrink: 0; }
+.action-btn .action-info { flex: 1; }
+.action-btn .action-name { font-weight: 600; }
+.action-btn .action-effect {
+  font-size: 11px;
+  color: rgba(44,24,16,0.45);
+  margin-top: 1px;
+}
+.action-btn .action-reason {
+  font-size: 10px;
+  color: var(--vermillion);
+  margin-top: 2px;
+}
+.action-btn .action-ap-cost {
+  font-size: 11px;
+  color: var(--indigo);
+  flex-shrink: 0;
+}
 
 /* 日志区域 */
 .log-area {
@@ -1730,10 +1951,32 @@ body::before {
         <div class="status-item"><span class="status-icon">❤️</span>健康 <span class="status-value high" id="sv-health">100</span></div>
         <div class="status-item"><span class="status-icon">😊</span>心情 <span class="status-value mid" id="sv-mood">70</span></div>
         <div class="status-item"><span class="status-icon">🪙</span>铜钱 <span class="status-value" id="sv-copper">100</span></div>
+        <div class="ap-display"><span class="ap-icon">⚡</span><span id="sv-ap">5</span>/<span id="sv-ap-max">5</span></div>
+      </div>
+      <div class="nearby-section">
+        <div class="nearby-title">【 周围对象 】</div>
+        <div class="nearby-grid" id="nearby-grid">
+          <!-- Dynamic nearby entities -->
+        </div>
+      </div>
+      <div class="entity-detail-card" id="entity-detail-card">
+        <div class="entity-detail-header">
+          <div class="detail-icon" id="detail-icon"></div>
+          <div class="detail-info">
+            <div class="detail-name" id="detail-name"></div>
+            <div class="detail-desc" id="detail-desc"></div>
+          </div>
+          <button class="detail-close" onclick="closeEntityDetail()">✕</button>
+        </div>
+        <div class="entity-stats" id="detail-stats"></div>
+        <div class="action-list" id="action-list"></div>
       </div>
       <div class="options-area" id="options-area">
         <!-- Dynamic options -->
       </div>
+      <button class="end-turn-btn" id="end-turn-btn" onclick="doEndTurn()">
+        ⏳ 结束回合
+      </button>
     </div>
     <div class="log-area" id="log-area"></div>
   </div>
@@ -2008,6 +2251,7 @@ let seqId = 0;
 let connStatus = 'offline'; // 'offline' | 'connecting' | 'connected'
 let playerState = {
   hunger: 80, fatigue: 80, health: 100, mood: 70, copper: 100,
+  ap: 5, apMax: 5,
   location: '中心大街', gridId: 'center_street',
   day: 1, shichen: '午', season: '夏'
 };
@@ -2641,6 +2885,7 @@ function handleWelcome(msg) {
     updateWorldState(data.worldState);
   }
   addLog('✅ 已连接服务器，欢迎来到汴京！');
+  loadNearbyEntities();
 }
 
 function renderServerOptions(options) {
@@ -2767,7 +3012,10 @@ function updatePlayerState(changes) {
   if (changes.health !== undefined) playerState.health = clamp(changes.health);
   if (changes.mood !== undefined) playerState.mood = clamp(changes.mood);
   if (changes.copper !== undefined) playerState.copper = Math.max(0, changes.copper);
+  if (changes.ap !== undefined) playerState.ap = changes.ap;
+  if (changes.apMax !== undefined) playerState.apMax = changes.apMax;
   renderStatus();
+  loadNearbyEntities();
 }
 
 function clamp(v) { return Math.max(0, Math.min(100, v)); }
@@ -2783,8 +3031,187 @@ function renderStatus() {
   sv('sv-health', playerState.health);
   sv('sv-mood', playerState.mood);
   document.getElementById('sv-copper').textContent = playerState.copper;
+
+  // AP display
+  document.getElementById('sv-ap').textContent = playerState.ap;
+  document.getElementById('sv-ap-max').textContent = playerState.apMax;
+
+  // End turn button blinking when AP is 0
+  const endTurnBtn = document.getElementById('end-turn-btn');
+  if (endTurnBtn) {
+    endTurnBtn.classList.toggle('blinking', playerState.ap <= 0);
+  }
 }
 
+// ============================================================
+// 周围对象交互系统
+// ============================================================
+let nearbyEntities = [];
+let selectedEntityId = null;
+
+function loadNearbyEntities() {
+  fetch('/api/world/nearby')
+    .then(r => r.json())
+    .then(data => {
+      nearbyEntities = data.entities || [];
+      renderNearbyEntities();
+    })
+    .catch(() => {});
+}
+
+function renderNearbyEntities() {
+  const grid = document.getElementById('nearby-grid');
+  if (!grid) return;
+  if (nearbyEntities.length === 0) {
+    grid.innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);padding:8px;">周围没有其他人或物</div>';
+    return;
+  }
+  grid.innerHTML = nearbyEntities.map(e => `
+    <div class="nearby-entity ${selectedEntityId === e.id ? 'selected' : ''}" onclick="selectEntity(${e.id})">
+      <div class="entity-icon">${e.icon}</div>
+      <div class="entity-name">${e.name}</div>
+    </div>
+  `).join('');
+}
+
+function selectEntity(entityId) {
+  selectedEntityId = entityId;
+  renderNearbyEntities();
+  loadEntityActions(entityId);
+}
+
+function closeEntityDetail() {
+  selectedEntityId = null;
+  const card = document.getElementById('entity-detail-card');
+  card.classList.remove('visible');
+  renderNearbyEntities();
+}
+
+function loadEntityActions(entityId) {
+  const entity = nearbyEntities.find(e => e.id === entityId);
+  if (!entity) return;
+
+  // Show detail card
+  const card = document.getElementById('entity-detail-card');
+  document.getElementById('detail-icon').textContent = entity.icon;
+  document.getElementById('detail-name').textContent = entity.name;
+
+  // Build description
+  let desc = '';
+  if (entity.profession) desc += entity.profession;
+  if (entity.briefDesc) desc = entity.briefDesc;
+  if (entity.buildingType) desc = entity.buildingType === 'shop' ? '店铺' : '建筑';
+  document.getElementById('detail-desc').textContent = desc;
+
+  // Build stats
+  const statsEl = document.getElementById('detail-stats');
+  let statsHtml = '';
+  if (entity.vital) {
+    if (entity.vital.hunger !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">🍖</span>${Math.round(entity.vital.hunger)}</div>`;
+    if (entity.vital.health !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">❤️</span>${Math.round(entity.vital.health)}</div>`;
+    if (entity.vital.mood !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">😊</span>${Math.round(entity.vital.mood)}</div>`;
+  }
+  if (entity.wallet) statsHtml += `<div class="entity-stat"><span class="stat-icon">🪙</span>${entity.wallet.copper}文</div>`;
+  if (entity.personality && entity.personality.length > 0) {
+    entity.personality.forEach(p => { statsHtml += `<div class="entity-stat">${p}</div>`; });
+  }
+  if (entity.openHours) statsHtml += `<div class="entity-stat">营业: ${entity.openHours}</div>`;
+  statsEl.innerHTML = statsHtml;
+
+  card.classList.add('visible');
+
+  // Fetch actions
+  fetch(`/api/world/entity/${entityId}/actions`)
+    .then(r => r.json())
+    .then(data => renderEntityActions(data))
+    .catch(() => {
+      document.getElementById('action-list').innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);">无法获取行为列表</div>';
+    });
+}
+
+function renderEntityActions(data) {
+  const list = document.getElementById('action-list');
+  if (!data.actions || data.actions.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);">没有可用行为</div>';
+    return;
+  }
+  list.innerHTML = data.actions.map(a => {
+    const canDo = a.conditions.met;
+    return `
+      <button class="action-btn ${canDo ? 'available' : 'unavailable'}" onclick="${canDo ? `doEntityAction('${a.id}', ${data.targetId})` : ''}" ${canDo ? '' : 'disabled'}>
+        <div class="action-icon">${a.icon}</div>
+        <div class="action-info">
+          <div class="action-name">${a.name}</div>
+          ${canDo ? `<div class="action-effect">${a.effects || ''}</div>` : ''}
+          ${!canDo ? `<div class="action-reason">${a.conditions.reason}</div>` : ''}
+        </div>
+        ${a.apCost > 0 ? `<div class="action-ap-cost">⚡${a.apCost}</div>` : ''}
+      </button>
+    `;
+  }).join('');
+}
+
+function doEntityAction(actionId, targetId) {
+  if (connStatus === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
+    seqId++;
+    ws.send(JSON.stringify({ type: 'action', actionId, params: { targetId }, seqId }));
+    addLog(`→ ${actionId} (目标: ${targetId})`);
+    return;
+  }
+  // Fallback: REST API
+  fetch('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actionId, params: { targetId } })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.sceneDescription) updateSceneText(data.sceneDescription);
+    else if (data.message) updateSceneText(data.message);
+    if (data.playerState) updatePlayerState(data.playerState);
+    if (data.worldState) updateWorldState(data.worldState);
+    if (data.options) renderServerOptions(data.options);
+    addLog(`← ${data.message}`);
+  })
+  .catch(err => addLog(`操作失败: ${err}`));
+}
+
+function doEndTurn() {
+  if (connStatus === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
+    // Use REST for end-turn since WS doesn't have end-turn message type
+    fetch('/api/end-turn', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        handleEndTurnResult(data);
+      })
+      .catch(err => addLog(`结束回合失败: ${err}`));
+    return;
+  }
+  // Fallback
+  fetch('/api/end-turn', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      handleEndTurnResult(data);
+    })
+    .catch(err => addLog(`结束回合失败: ${err}`));
+}
+
+function handleEndTurnResult(data) {
+  if (data.sceneDescription) updateSceneText(data.sceneDescription);
+  else if (data.message) updateSceneText(data.message);
+  if (data.playerState) updatePlayerState(data.playerState);
+  if (data.worldState) updateWorldState(data.worldState);
+  if (data.options) renderServerOptions(data.options);
+  if (data.npcMessages && data.npcMessages.length > 0) {
+    data.npcMessages.forEach(m => addLog(`💬 ${m}`));
+  }
+  if (data.briefing) renderBriefing(data.briefing);
+  if (data.turnSummary) renderTurnSummary(data.turnSummary, data.distantNews);
+  closeEntityDetail();
+  addLog('⏳ 回合结束，世界继续运转');
+}
+
+// ===== Original renderOptions =====
 function renderOptions() {
   const area = document.getElementById('options-area');
   const scene = SCENES[playerState.gridId] || SCENES['center_street'];
@@ -4012,6 +4439,8 @@ document.addEventListener('DOMContentLoaded', () => {
   runBenchmark();
   renderOptions();
   renderEntityBreakdown();
+  renderStatus();
+  loadNearbyEntities();
 });
 </script>
 </body>

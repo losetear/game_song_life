@@ -41,6 +41,8 @@ export interface ServerMessage {
       health: number;
       mood: number;
       copper: number;
+      ap?: number;
+      apMax?: number;
     };
     turnSummary?: {
       shichen: string;

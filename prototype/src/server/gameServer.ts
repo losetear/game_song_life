@@ -356,6 +356,44 @@ export class GameServer {
         res.status(500).json({ error: String(err) });
       }
     });
+
+    // GET /api/world/nearby — 获取玩家当前位置周围实体
+    this.app.get('/api/world/nearby', (_req, res) => {
+      try {
+        if (this.playerId === 0) this.ensurePlayer();
+        const entities = this.engine.getNearbyEntities(this.playerId);
+        res.json({ entities });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/entity/:id/actions — 获取实体可用行为
+    this.app.get('/api/world/entity/:id/actions', (req, res) => {
+      try {
+        if (this.playerId === 0) this.ensurePlayer();
+        const targetId = parseInt(req.params.id);
+        if (!this.engine.em.isAlive(targetId)) {
+          res.status(404).json({ error: 'Entity not found' });
+          return;
+        }
+        const result = this.engine.calculateEntityActions(this.playerId, targetId);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // POST /api/end-turn — 结束当前回合
+    this.app.post('/api/end-turn', (_req, res) => {
+      try {
+        if (this.playerId === 0) this.ensurePlayer();
+        const result = this.engine.endTurn(this.playerId);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
   }
 
   private setupWebSocket(): void {
@@ -367,6 +405,7 @@ export class GameServer {
       const initialScene = this.engine.getInitialScene(this.playerId);
       const vital = this.engine.em.getComponent(this.playerId, 'Vital');
       const wallet = this.engine.em.getComponent(this.playerId, 'Wallet');
+      const apData = this.engine.getPlayerAP(this.playerId);
 
       const welcomeMsg: ServerMessage = {
         type: 'welcome',
@@ -392,6 +431,8 @@ export class GameServer {
             health: vital?.health ?? 100,
             mood: vital?.mood ?? 70,
             copper: wallet?.copper ?? 100,
+            ap: apData.current,
+            apMax: apData.max,
           },
         },
       };
@@ -439,6 +480,7 @@ export class GameServer {
     this.engine.em.addComponent(this.playerId, 'Wallet', { copper: 100 });
     this.engine.em.addComponent(this.playerId, 'Inventory', { items: [] });
     this.engine.em.addComponent(this.playerId, 'Identity', { name: '你', profession: 'wanderer', age: 25, personality: [] });
+    this.engine.em.addComponent(this.playerId, 'ActionPoints', { current: 5, max: 5 });
     this.engine.worldMap.addEntity(this.playerId, 'center_street');
   }
 
@@ -459,6 +501,9 @@ export class GameServer {
       console.log(`   GET  /api/world/propagation → 传播链`);
       console.log(`   GET  /api/world/npc/:id/history → NPC历史`);
       console.log(`   GET  /api/world/npc/:id/relations → NPC关系`);
+      console.log(`   GET  /api/world/nearby       → 周围实体`);
+      console.log(`   GET  /api/world/entity/:id/actions → 实体行为`);
+      console.log(`   POST /api/end-turn           → 结束回合`);
       console.log(`   WebSocket           → 游戏交互`);
     });
   }
