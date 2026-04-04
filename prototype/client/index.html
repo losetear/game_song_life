@@ -4219,6 +4219,9 @@ async function loadTickEvents() {
     }
 
     const typeConfig = {
+      international: { icon: '🌏', label: '国际', color: '#2c5f8a' },
+      national: { icon: '🏯', label: '国家', color: '#8b0000' },
+      regional: { icon: '🏘️', label: '地区', color: '#4a7c4f' },
       weather: { icon: '🌤️', label: '天气', color: '#4a90d9' },
       economy: { icon: '💰', label: '经济', color: '#d4a017' },
       ecology: { icon: '🌿', label: '生态', color: '#5b8c5a' },
@@ -4231,7 +4234,7 @@ async function loadTickEvents() {
     };
 
     // 按类型分组，优先级排序
-    const typeOrder = ['weather', 'economy', 'ecology', 'player', 'npc', 'propagation', 'state', 'move', 'other'];
+    const typeOrder = ['international', 'national', 'regional', 'weather', 'economy', 'ecology', 'player', 'npc', 'propagation', 'state', 'move', 'other'];
     const groups = {};
     const importantEvents = []; // 非NPC日常事件
     
