@@ -5104,8 +5104,7 @@ async function loadFactionDetail(id) {
     // 关系数据
     const relationsHtml = detail.relations && Object.keys(detail.relations).length > 0
       ? Object.entries(detail.relations).slice(0, 5).map(([rid, score]) => {
-          const rf = fetch('/api/world/factions').then(() => null).catch(() => null); // no-op, just show score
-          const s = score as number;
+          const s = Number(score);
           const sc = s > 30 ? 'var(--jade)' : s < -30 ? 'var(--vermillion)' : 'var(--gold)';
           return `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:3px;font-size:11px;border:1px solid rgba(44,24,16,0.1);">ID#${rid} <span style="color:${sc};">${s > 0 ? '+' : ''}${s}</span></span>`;
         }).join('')
