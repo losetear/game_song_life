@@ -117,6 +117,16 @@ export class GameServer {
             prices: economyData.prices,
             recentChanges: economyData.recentChanges.slice(-5),
           },
+          factions: Array.from(this.engine.getFactions().entries()).map(([id, f]) => ({
+            id,
+            name: f.name,
+            type: f.type,
+            influence: f.influence,
+            treasury: f.treasury,
+            mood: f.mood,
+            memberCount: f.members.length,
+            territory: f.territory,
+          })),
         });
       } catch (err) {
         res.status(500).json({ error: String(err) });

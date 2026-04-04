@@ -6,7 +6,7 @@
 import { WorldEngine } from './world/worldEngine';
 import { GameServer } from './server/gameServer';
 import { runAllBenchmarks, printReport } from './benchmark/runner';
-import { generateEntities } from './data/entities';
+import { generateEntities, generateFactions } from './data/entities';
 import { PropagationEngine } from './propagation/propagationEngine';
 import { BenchmarkReport } from './server/protocol';
 
@@ -36,6 +36,10 @@ const gen = generateEntities(engine.em, engine.worldMap);
 engine.registerL0(gen.l0Ids);
 engine.registerL1(gen.l1Ids);
 engine.regionSim.update('summer', 1.0);
+
+// 生成 12 个组织实体
+const factionGen = generateFactions(engine.em, gen.l0Ids, gen.l1Ids);
+engine.registerFactions(factionGen.factions);
 
 // 构建关系网
 const propEngine = new PropagationEngine();

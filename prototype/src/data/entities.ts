@@ -8,6 +8,138 @@ import { getAnimalType } from './animalTemplates';
 import { getPlantType } from './plantTemplates';
 import { CITY_GRIDS, FARM_GRIDS, MOUNTAIN_GRIDS, RIVER_GRIDS, ALL_GRID_IDS } from './areaDefs';
 import { BUILDING_TEMPLATES, BUILDING_TYPE_LIST, SPECIAL_BUILDING_TYPES, getBuildingName, getBuildingDescription, getBuildingRooms, getBuildingOpenHours } from './buildingTemplates';
+import { FactionComponent } from '../ecs/types';
+
+// === 12 个预设组织 ===
+const FACTION_DEFS = [
+  { name: '开封府', type: 'government' as const, influence: 90, treasury: 50000, territory: ['center_street','east_market','dock','residential_north','residential_south'] },
+  { name: '枢密院', type: 'government' as const, influence: 95, treasury: 80000, territory: ['government'] },
+  { name: '户部', type: 'government' as const, influence: 85, treasury: 100000, territory: ['government'] },
+  { name: '市舶司', type: 'government' as const, influence: 70, treasury: 30000, territory: ['dock','upstream','downstream'] },
+  { name: '东市商会', type: 'merchant' as const, influence: 60, treasury: 20000, territory: ['east_market'] },
+  { name: '布业行会', type: 'merchant' as const, influence: 45, treasury: 15000, territory: ['east_market','cloth_shop'] },
+  { name: '药材行会', type: 'merchant' as const, influence: 40, treasury: 12000, territory: ['east_market'] },
+  { name: '大相国寺', type: 'religion' as const, influence: 75, treasury: 25000, territory: ['temple'] },
+  { name: '码头帮', type: 'underground' as const, influence: 35, treasury: 8000, territory: ['dock'] },
+  { name: '丐帮分舵', type: 'underground' as const, influence: 20, treasury: 2000, territory: ['center_street'] },
+  { name: '太学', type: 'scholar' as const, influence: 55, treasury: 10000, territory: ['government'] },
+  { name: '禁军', type: 'military' as const, influence: 80, treasury: 40000, territory: ['center_street','government'] },
+];
+
+// L0 NPC 职业映射: index 0→merchant, 1→farmer, 2→guard, 3→doctor, 4→hunter, 5→rogue, 6→merchant, 7→farmer, 8→guard, 9→doctor
+// 组织与 L0 NPC 职业匹配
+const FACTION_LEADER_PROFESSIONS: Record<string, string> = {
+  '开封府': 'guard',       // NPC 2 or 8
+  '枢密院': 'guard',       // NPC 2 or 8
+  '户部': 'merchant',      // NPC 0 or 6
+  '市舶司': 'merchant',    // NPC 0 or 6
+  '东市商会': 'merchant',   // NPC 0 or 6
+  '布业行会': 'merchant',   // NPC 0 or 6
+  '药材行会': 'doctor',     // NPC 3 or 9
+  '大相国寺': 'doctor',     // NPC 3 or 9
+  '码头帮': 'rogue',        // NPC 5
+  '丐帮分舵': 'rogue',      // NPC 5
+  '太学': 'farmer',         // NPC 1 or 7 (closest to scholar)
+  '禁军': 'hunter',         // NPC 4 (closest to military)
+};
+
+export interface FactionGenerationResult {
+  factions: { id: number; faction: FactionComponent }[];
+}
+
+export function generateFactions(
+  em: EntityManager,
+  l0Ids: number[],
+  l1Ids: number[],
+): FactionGenerationResult {
+  const factions: { id: number; faction: FactionComponent }[] = [];
+
+  // 建立 L0 NPC 职业索引
+  const l0ByProf: Record<string, number[]> = {};
+  for (const id of l0Ids) {
+    const identity = em.getComponent(id, 'Identity');
+    if (!identity) continue;
+    if (!l0ByProf[identity.profession]) l0ByProf[identity.profession] = [];
+    l0ByProf[identity.profession].push(id);
+  }
+
+  // 建立 L1 NPC 职业索引（用于分配 members）
+  const l1ByProf: Record<string, number[]> = {};
+  for (const id of l1Ids) {
+    const type = em.getType(id);
+    if (type !== 'npc') continue;
+    const identity = em.getComponent(id, 'Identity');
+    if (!identity) continue;
+    if (!l1ByProf[identity.profession]) l1ByProf[identity.profession] = [];
+    l1ByProf[identity.profession].push(id);
+  }
+
+  // 分配 L0 leader 的使用记录
+  const usedL0 = new Set<number>();
+
+  for (const def of FACTION_DEFS) {
+    const id = em.create(EntityType.FACTION);
+
+    // 找匹配职业的 L0 NPC 作 leader
+    const prof = FACTION_LEADER_PROFESSIONS[def.name] || 'merchant';
+    const candidates = l0ByProf[prof] || [];
+    let leaderId = 0;
+    for (const c of candidates) {
+      if (!usedL0.has(c)) {
+        leaderId = c;
+        usedL0.add(c);
+        break;
+      }
+    }
+    if (leaderId === 0 && candidates.length > 0) {
+      leaderId = candidates[0]; // fallback: reuse
+    }
+
+    // 分配 3-5 个 L1 NPC 作 members
+    const memberCandidates = l1ByProf[prof] || l1Ids.filter(mid => em.getType(mid) === 'npc');
+    const memberCount = 3 + Math.floor(Math.random() * 3); // 3-5
+    const members: number[] = [];
+    const shuffled = [...memberCandidates].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(memberCount, shuffled.length); i++) {
+      members.push(shuffled[i]);
+    }
+
+    const faction: FactionComponent = {
+      name: def.name,
+      type: def.type,
+      influence: def.influence,
+      treasury: def.treasury,
+      members,
+      leaderId,
+      territory: def.territory,
+      relations: {},
+      mood: 50 + Math.floor(Math.random() * 30), // 50-80
+    };
+
+    em.addComponent(id, 'Faction', faction);
+    factions.push({ id, faction });
+  }
+
+  // 初始化组织间关系
+  for (let i = 0; i < factions.length; i++) {
+    for (let j = i + 1; j < factions.length; j++) {
+      const fi = factions[i].faction;
+      const fj = factions[j].faction;
+
+      // 同类型组织基础好感高
+      let base = 0;
+      if (fi.type === fj.type) base = 20 + Math.floor(Math.random() * 30);
+      else if (fi.type === 'underground' && fj.type === 'government') base = -(30 + Math.floor(Math.random() * 40));
+      else if (fi.type === 'government' && fj.type === 'underground') base = -(30 + Math.floor(Math.random() * 40));
+      else base = -10 + Math.floor(Math.random() * 30);
+
+      fi.relations[factions[j].id] = base;
+      fj.relations[factions[i].id] = base;
+    }
+  }
+
+  return { factions };
+}
 
 export interface EntityGenerationResult {
   totalCount: number;

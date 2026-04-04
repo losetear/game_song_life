@@ -78,6 +78,18 @@ export interface InteractableComponent {
   conditions: Record<string, any>;
 }
 
+export interface FactionComponent {
+  name: string;
+  type: 'government' | 'military' | 'merchant' | 'religion' | 'underground' | 'scholar';
+  influence: number;      // 0-100
+  treasury: number;       // 文
+  members: number[];      // NPC ID列表
+  leaderId: number;       // 首领NPC ID
+  territory: string[];    // 控制的gridId
+  relations: Record<number, number>; // 与其他组织的关系 (-100~100)
+  mood: number;           // 组织士气 0-100
+}
+
 // 组件名 → 类型映射
 export type ComponentTypeMap = {
   Position: PositionComponent;
@@ -94,6 +106,7 @@ export type ComponentTypeMap = {
   Building: BuildingComponent;
   ActionPoints: ActionPointsComponent;
   Interactable: InteractableComponent;
+  Faction: FactionComponent;
 };
 
 export type ComponentName = keyof ComponentTypeMap;
@@ -107,4 +120,5 @@ export enum EntityType {
   MINERAL = 'mineral',
   BUILDING = 'building',
   ITEM = 'item',
+  FACTION = 'faction',
 }

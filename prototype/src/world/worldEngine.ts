@@ -20,6 +20,7 @@ import { VitalComponent, WalletComponent, PositionComponent } from '../ecs/types
 import { InteractionContext } from '../server/protocol';
 import { getEmergentActions, executeEmergentAction } from './emergenceRules';
 import { MAP_CONNECTIONS, GRID_NAMES, GRID_ICONS } from './mapData';
+import { FactionComponent } from '../ecs/types';
 
 // === 重大事件 ===
 export interface MajorEvent {
@@ -327,6 +328,7 @@ export class WorldEngine {
 
   private l0Entities: number[] = [];  // GOAP NPC
   private l1Entities: number[] = [];  // 行为树 NPC
+  private factions: Map<number, FactionComponent> = new Map();
   private lastTickEvents = 0;
   private previousWeather: string = '晴';
 
@@ -482,110 +484,448 @@ export class WorldEngine {
     this.l1Entities.push(...ids);
   }
 
-  /** 在 Tick 中生成事件 */
+  /** 注册组织实体 */
+  registerFactions(factions: { id: number; faction: FactionComponent }[]): void {
+    for (const f of factions) this.factions.set(f.id, f.faction);
+  }
+
+  /** 获取所有组织 */
+  getFactions(): Map<number, FactionComponent> {
+    return this.factions;
+  }
+
+  /** 按名称查找组织 */
+  getFactionByName(name: string): FactionComponent | undefined {
+    for (const f of this.factions.values()) {
+      if (f.name === name) return f;
+    }
+    return undefined;
+  }
+
+  /** 在 Tick 中生成事件 — 基于实体状态涌现 */
   private generateTickEvents(): void {
+    const worldState = this.buildWorldState();
+    const rules = this.getEventRules();
+    const generated: Set<string> = new Set();
+
+    for (const rule of rules) {
+      try {
+        if (rule.condition(worldState)) {
+          const event = rule.generate(worldState);
+          const key = `${event.type}:${event.message}`;
+          if (!generated.has(key)) {
+            this.logEvent(event.type, event.category, event.message);
+            generated.add(key);
+          }
+        }
+      } catch { continue; }
+    }
+
+    this.ensureMinimumEvents(worldState);
+  }
+
+  /** 构建世界状态快照 */
+  private buildWorldState() {
     const day = this.time.day;
     const season = this.time.season;
     const weather = this.weather.weather;
+    const prevWeather = this.previousWeather;
+
+    const factionList: FactionComponent[] = [];
+    for (const f of this.factions.values()) factionList.push(f);
+    const factionByName = (name: string) => factionList.find(f => f.name === name);
+
+    const prices = this.economy.getPrices();
+    const basePrices: Record<string, number> = { food: 10, herbs: 15, cloth: 20, material: 8, cargo: 12 };
+
+    const ecology = this.regionSim.getAllRegions();
+
+    let totalMood = 0, totalHunger = 0, npcCount = 0;
+    for (const id of this.l0Entities) {
+      const vital = this.em.getComponent(id, 'Vital');
+      if (vital) {
+        totalMood += vital.mood;
+        totalHunger += vital.hunger;
+        npcCount++;
+      }
+    }
+    const avgMood = npcCount > 0 ? totalMood / npcCount : 50;
+    const avgHunger = npcCount > 0 ? totalHunger / npcCount : 50;
+
+    return {
+      tick: this.time.tick,
+      day,
+      season,
+      weather: { weather, prevWeather, description: this.weather.getDescription() },
+      factions: factionList,
+      factionByName,
+      economy: { prices, basePrices },
+      ecology,
+      npcSummary: { totalActions: this.l0Entities.length, avgMood, avgHunger },
+    };
+  }
+
+  /** 涌现事件规则列表 */
+  private getEventRules() {
+    type WS = ReturnType<typeof this.buildWorldState>;
+    type ET = WorldEvent['type'];
+
+    const priceNames: Record<string, string> = { food: '粮', herbs: '药', cloth: '布', material: '材', cargo: '货' };
+
+    interface EventRule {
+      id: string;
+      type: ET;
+      category: string;
+      condition: (ws: WS) => boolean;
+      generate: (ws: WS) => { type: ET; category: string; message: string };
+      priority: number;
+    }
+
+    const mk = (
+      id: string, type: ET, category: string,
+      condition: (ws: WS) => boolean,
+      generate: (ws: WS) => { type: ET; category: string; message: string },
+      priority = 0,
+    ): EventRule => ({ id, type, category, condition, generate, priority });
+
+    return [
+      // ═══ 国际事件 ═══
+      mk('intl_silk_road', 'international', '国际',
+        (ws) => {
+          const sp = ws.factionByName('市舶司');
+          return !!(sp && sp.influence > 60 && ws.season !== 'winter');
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: `海上丝绸之路传来消息：泉州港到岸${Math.random() > 0.5 ? '三艘' : '五艘'}番船，货物堆积如山` }),
+      ),
+      mk('intl_trade_route', 'international', '国际',
+        (ws) => {
+          const mt = ws.factionByName('码头帮');
+          return ws.season === 'autumn' && !!mt && mt.influence > 30;
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: `丝绸之路商队抵达汴京，带来${Math.random() > 0.5 ? '香料' : '琉璃器'}，东市商贩争相收购` }),
+      ),
+      mk('intl_tributary', 'international', '国际',
+        (ws) => {
+          const temple = ws.factionByName('大相国寺');
+          return ws.day % 30 === 0 && !!temple && temple.influence > 50;
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: `高丽国遣使来朝，进贡${Math.random() > 0.5 ? '高丽参' : '白瓷器'}百箱` }),
+      ),
+      mk('intl_border', 'international', '国际',
+        (ws) => {
+          const army = ws.factionByName('禁军');
+          return !!army && army.treasury < 20000;
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: '边境军饷不足，消息传来引发朝野议论' }),
+      ),
+      mk('intl_border_conflict', 'international', '国际',
+        (ws) => {
+          const army = ws.factionByName('禁军');
+          const sm = ws.factionByName('枢密院');
+          return (!!army && army.mood < 30) || (!!sm && sm.influence > 90);
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: `西夏边境传来消息：${Math.random() > 0.5 ? '边境小规模摩擦，商旅暂缓' : '两国互市恢复正常'}` }),
+      ),
+      mk('intl_peace_treaty', 'international', '国际',
+        (ws) => {
+          const sm = ws.factionByName('枢密院');
+          const army = ws.factionByName('禁军');
+          return !!sm && !!army && sm.mood > 70 && army.mood > 60;
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: '枢密院与禁军联合上奏：边境安定，请允通商' }),
+      ),
+      mk('intl_famine_relief', 'international', '国际',
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          const farmYield = ws.weather.weather === '暴雨' || ws.season === 'winter';
+          return !!hb && hb.treasury > 50000 && farmYield;
+        },
+        () => ({ type: 'international' as ET, category: '国际',
+          message: '朝廷拨银赈济受灾州县，户部调度粮草北上' }),
+      ),
+      // 国际 fallback
+      mk('intl_fallback', 'international', '国际',
+        () => true,
+        (ws) => {
+          const fallbacks = [
+            `辽国使团抵达汴京，带来上等貂皮${Math.random() > 0.5 ? '与人参' : ''}作为贡品`,
+            `大理国进献良马${Math.floor(Math.random() * 200) + 100}匹，充入御马监`,
+            '金国使者请求增加互市口岸，朝堂上争论不休',
+            '吐蕃商队经川蜀入京，带来药材和毛毡',
+            `天竺僧人游历至汴京，在相国寺开坛讲经${Math.random() > 0.5 ? '，听者如云' : ''}`,
+            `占城国进贡占城稻种${Math.floor(Math.random() * 50) + 30}石，交司农寺试种`,
+            '日本商船在明州靠岸，带来折扇和铜器，换走丝绸和茶叶',
+            ws.season === 'winter' ? '北方大雪，辽国边境封锁，商旅断绝' : '南方驿站传报：安南国遣使入贡',
+          ];
+          return { type: 'international' as ET, category: '国际', message: fallbacks[Math.floor(Math.random() * fallbacks.length)] };
+        },
+      ),
+
+      // ═══ 国家事件 ═══
+      mk('nat_tax', 'national', '国家',
+        (ws) => ws.day % 15 === 0,
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          const trend = hb && hb.treasury > 80000 ? '丰盈' : '吃紧';
+          return { type: 'national' as ET, category: '国家',
+            message: `户部奏报：国库${trend}，${Math.random() > 0.5 ? '减免今年秋税两成' : '加强税收征管'}` };
+        },
+      ),
+      mk('nat_exam', 'national', '国家',
+        (ws) => {
+          const tx = ws.factionByName('太学');
+          return ws.day % 60 === 30 && !!tx && tx.influence > 40;
+        },
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `科举消息：${Math.random() > 0.5 ? '今年恩科定于八月举行' : '太学扩招，各地学子纷纷入京'}` }),
+      ),
+      mk('nat_military', 'national', '国家',
+        (ws) => {
+          const army = ws.factionByName('禁军');
+          return !!army && (army.mood < 40 || army.influence > 85);
+        },
+        (ws) => ({ type: 'national' as ET, category: '国家',
+          message: `禁军${ws.factionByName('禁军')!.mood < 40 ? '士气低落，将士怨声载道' : '换防，京城各门甲士增派一倍'}` }),
+      ),
+      mk('nat_justice', 'national', '国家',
+        (ws) => {
+          const kf = ws.factionByName('开封府');
+          return !!kf && kf.influence > 60 && Math.random() > 0.3;
+        },
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `开封府尹巡视城内治安，${Math.random() > 0.5 ? '查处三家违规商铺' : '嘉奖巡城甲士'}` }),
+      ),
+      mk('nat_food_reserve', 'national', '国家',
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          return !!hb && hb.treasury > 80000;
+        },
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `户部清查各地粮仓：${Math.random() > 0.5 ? '江南粮仓充裕' : '河北数州粮仓亏空，紧急调拨'}` }),
+      ),
+      mk('nat_imperial_decree', 'national', '国家',
+        (ws) => ws.day % 7 === 0,
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `朝廷颁布新令：${Math.random() > 0.5 ? '减免今年秋税两成' : '加强市舶司管理，严查走私'}` }),
+      ),
+      mk('nat_astrology', 'national', '国家',
+        () => Math.random() > 0.8,
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `司天监上奏：${Math.random() > 0.5 ? '星象示吉，今年丰收可期' : '近日天象有异，宜斋戒祈福'}` }),
+      ),
+      mk('nat_infrastructure', 'national', '国家',
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          return !!hb && hb.treasury > 60000 && Math.random() > 0.5;
+        },
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `工部征调民夫修缮黄河堤坝，预计${Math.floor(Math.random() * 3) + 2}月完工` }),
+      ),
+      mk('nat_anticorruption', 'national', '国家',
+        (ws) => {
+          const kf = ws.factionByName('开封府');
+          return !!kf && kf.mood < 30;
+        },
+        () => ({ type: 'national' as ET, category: '国家',
+          message: `御史台弹劾${Math.random() > 0.5 ? '两江转运使贪墨' : '某知州纵容豪强'}` }),
+      ),
+      mk('nat_fallback', 'national', '国家',
+        () => true,
+        (ws) => {
+          const msgs = [
+            `枢密院奏报：${Math.random() > 0.5 ? '西北边军增兵三千' : '水军在长江操练完毕'}`,
+            `翰林院编修完成《${Math.random() > 0.5 ? '太平寰宇记' : '册府元龟'}》新卷`,
+            `三司使奏报：本年度税收${Math.random() > 0.5 ? '较去年增长一成' : '与去年持平'}`,
+            ws.season === 'winter' ? '朝廷拨银赈济北方受灾州县' : '太医局配发暑药，分送京城各坊',
+          ];
+          return { type: 'national' as ET, category: '国家', message: msgs[Math.floor(Math.random() * msgs.length)] };
+        },
+      ),
+
+      // ═══ 地区事件 ═══
+      mk('reg_market', 'regional', '地区',
+        (ws) => {
+          const ds = ws.factionByName('东市商会');
+          return !!ds && ds.influence > 50;
+        },
+        () => ({ type: 'regional' as ET, category: '地区',
+          message: `东市今日${Math.random() > 0.5 ? '人声鼎沸，商贩云集' : '略显冷清，传闻有官差巡查'}` }),
+      ),
+      mk('reg_dock', 'regional', '地区',
+        (ws) => {
+          const mt = ws.factionByName('码头帮');
+          const sp = ws.factionByName('市舶司');
+          return !!mt && mt.members.length >= 3 && !!sp && sp.influence > 30;
+        },
+        () => ({ type: 'regional' as ET, category: '地区',
+          message: `汴河码头${Math.random() > 0.5 ? '到岸粮船数十艘，卸货忙碌' : '今日无大船到港'}` }),
+      ),
+      mk('reg_temple', 'regional', '地区',
+        (ws) => {
+          const temple = ws.factionByName('大相国寺');
+          return !!temple && temple.influence > 50 && ws.day % 7 === 0;
+        },
+        () => ({ type: 'regional' as ET, category: '地区',
+          message: `大相国寺庙会${Math.random() > 0.5 ? '热闹非凡，百戏杂耍齐上' : '僧人做法事，信众络绎不绝'}` }),
+      ),
+      mk('reg_crime', 'regional', '地区',
+        (ws) => {
+          const gb = ws.factionByName('丐帮分舵');
+          const mt = ws.factionByName('码头帮');
+          return (!!gb && gb.influence > 30) || (!!mt && mt.mood < 20);
+        },
+        () => ({ type: 'regional' as ET, category: '地区',
+          message: `南坊住宅区${Math.random() > 0.5 ? '有邻里因宅基纠纷报官' : '街头出现扒手，巡城甲士已接到报官'}` }),
+      ),
+      mk('reg_residential', 'regional', '地区',
+        (ws) => ws.npcSummary.avgMood < 40,
+        () => ({ type: 'regional' as ET, category: '地区',
+          message: `坊间百姓情绪低落，${Math.random() > 0.5 ? '茶余饭后多抱怨物价' : '街面行人面带愁容'}` }),
+      ),
+      mk('reg_construction', 'regional', '地区',
+        () => Math.random() > 0.6,
+        () => ({ type: 'regional' as ET, category: '地区',
+          message: `府衙门前${Math.random() > 0.5 ? '告状者排成长队' : '张贴了新的告示'}` }),
+      ),
+      mk('reg_fallback', 'regional', '地区',
+        () => true,
+        (ws) => {
+          const msgs = [
+            `北坊住户${Math.random() > 0.5 ? '自发组织巡夜，防范盗贼' : '传来婴儿啼哭声——又有新生命降临'}`,
+            `城西酒肆${Math.random() > 0.5 ? '有文人雅集，吟诗作赋' : '醉汉闹事被巡城甲士带走'}`,
+            ws.weather.weather === '暴雨' ? '暴雨致城南低洼处积水盈尺，居民纷纷转移' : '天气晴好，城中百姓纷纷外出',
+            `浅山猎户${Math.random() > 0.5 ? '猎到一头野猪，运到东市售卖' : '发现山中来了不常见的鹿群'}`,
+          ];
+          return { type: 'regional' as ET, category: '地区', message: msgs[Math.floor(Math.random() * msgs.length)] };
+        },
+      ),
+
+      // ═══ 经济事件 ═══
+      mk('eco_price_surge', 'economy', '物价',
+        (ws) => {
+          for (const [k, p] of Object.entries(ws.economy.prices)) {
+            const base = ws.economy.basePrices[k] || 10;
+            if (p > base * 1.3) return true;
+          }
+          return false;
+        },
+        (ws) => {
+          let surging = '';
+          for (const [k, p] of Object.entries(ws.economy.prices)) {
+            const base = ws.economy.basePrices[k] || 10;
+            if (p > base * 1.3) { surging = priceNames[k] || k; break; }
+          }
+          return { type: 'economy' as ET, category: '物价',
+            message: `${surging}价暴涨！东市传来消息，有人囤货居奇，百姓叫苦不迭` };
+        },
+      ),
+      mk('eco_price_drop', 'economy', '物价',
+        (ws) => {
+          for (const [k, p] of Object.entries(ws.economy.prices)) {
+            const base = ws.economy.basePrices[k] || 10;
+            if (p < base * 0.7) return true;
+          }
+          return false;
+        },
+        (ws) => {
+          let dropping = '';
+          for (const [k, p] of Object.entries(ws.economy.prices)) {
+            const base = ws.economy.basePrices[k] || 10;
+            if (p < base * 0.7) { dropping = priceNames[k] || k; break; }
+          }
+          return { type: 'economy' as ET, category: '物价',
+            message: `${dropping}价暴跌至历史低位，商户议论纷纷` };
+        },
+      ),
+      mk('eco_smuggling', 'economy', '物价',
+        (ws) => {
+          const mt = ws.factionByName('码头帮');
+          const sp = ws.factionByName('市舶司');
+          return !!mt && !!sp && mt.influence > 40 && sp.influence < 50;
+        },
+        () => ({ type: 'economy' as ET, category: '物价',
+          message: '码头一带出现来路不明的货物，市舶司尚未察觉' }),
+      ),
+
+      // ═══ 天气事件 ═══
+      mk('weather_main', 'weather', '天气',
+        () => true,
+        (ws) => {
+          const weatherMessages: Record<string, string[]> = {
+            '晴': ['万里无云，阳光普照汴京', '晴空如洗，街面上行人如织'],
+            '多云': ['天色阴晴不定，云层时聚时散', '薄云遮日，微风拂面'],
+            '小雨': ['淅淅沥沥的小雨下了一整天，路面泥泞', '细雨如丝，行人撑伞匆匆而过'],
+            '大雨': ['倾盆大雨如注，汴河水涨', '暴雨倾盆，东市商户纷纷收摊避雨'],
+            '暴雨': ['暴雨如注，城中多处积水！府衙紧急征调民夫疏通沟渠', '雷鸣电闪，暴雨不歇，低洼处百姓纷纷转移'],
+            '雪': ['瑞雪纷飞，银装素裹，孩童在街头堆雪人', '大雪封路，汴河部分河段结冰，船只停航'],
+            '大风': ['狂风呼啸，街头招牌被吹落，行人紧贴墙根行走', '朔风凛冽，卷起漫天沙尘'],
+          };
+          const wMsgs = weatherMessages[ws.weather.weather] || weatherMessages['晴'];
+          return { type: 'weather' as ET, category: '天气', message: wMsgs[Math.floor(Math.random() * wMsgs.length)] };
+        },
+      ),
+
+      // ═══ 生态事件 ═══
+      mk('eco_harvest', 'ecology', '生态',
+        () => true,
+        (ws) => {
+          const msgs = [
+            ws.season === 'spring' ? '春耕时节，东郊农人忙着播种，秧苗翠绿' : '田间庄稼长势' + (Math.random() > 0.5 ? '喜人' : '一般'),
+            `山林中${Math.random() > 0.5 ? '鸟鸣阵阵，野兔出没' : '猎户发现了新的兽径'}`,
+            `汴河水质${Math.random() > 0.5 ? '清澈，鱼群活跃' : '因近日降雨略显浑浊'}`,
+            ws.season === 'autumn' ? '秋收在即，田野一片金黄，农人喜笑颜开' : `浅山草木${Math.random() > 0.5 ? '葱茏' : '稀疏'}`,
+            ws.weather.weather === '暴雨' ? '暴雨冲刷农田，部分低洼田地受灾' : `灌渠水势${Math.random() > 0.5 ? '平稳，农人引水灌田' : '稍有上涨，里正提醒注意防汛'}`,
+          ];
+          return { type: 'ecology' as ET, category: '生态', message: msgs[Math.floor(Math.random() * msgs.length)] };
+        },
+      ),
+    ].sort((a, b) => b.priority - a.priority);
+  }
+
+  /** 保证每天至少有各层级事件 */
+  private ensureMinimumEvents(worldState: ReturnType<typeof this.buildWorldState>): void {
+    const tick = this.time.tick;
+    const tickEvents = this.eventLog.filter(e => e.tick === tick);
+    const types = new Set(tickEvents.map(e => e.type));
     const gd = (g?: string) => this.gridDisplayName(g);
 
-    // ═══ 国际事件（大宋与周边国家）每天必生 1 条 ═══
-    const intlEvents = [
-      () => `辽国使团抵达汴京，带来上等貂皮${Math.random() > 0.5 ? '与人参' : ''}作为贡品`,
-      () => `西夏边境传来消息：${Math.random() > 0.5 ? '两国互市恢复正常' : '边境小规模摩擦，商旅暂缓'}`,
-      () => `大食商人经丝绸之路运来${Math.random() > 0.5 ? '香料' : '琉璃器'}，东市商贩争相收购`,
-      () => `高丽国遣使来朝，进贡${Math.random() > 0.5 ? '高丽参' : '白瓷器'}百箱`,
-      () => `海上丝绸之路传来消息：泉州港到岸${Math.random() > 0.5 ? '三艘' : '五艘'}番船，货物堆积如山`,
-      () => `大理国进献良马${Math.floor(Math.random() * 200) + 100}匹，充入御马监`,
-      () => `金国使者请求增加互市口岸，朝堂上争论不休`,
-      () => `日本商船在明州靠岸，带来折扇和铜器，换走丝绸和茶叶`,
-      () => `吐蕃商队经川蜀入京，带来药材和毛毡`,
-      () => `占城国进贡占城稻种${Math.floor(Math.random() * 50) + 30}石，交司农寺试种`,
-      () => season === '冬' ? '北方大雪，辽国边境封锁，商旅断绝' : '南方驿站传报：安南国遣使入贡',
-      () => `天竺僧人游历至汴京，在相国寺开坛讲经${Math.random() > 0.5 ? '，听者如云' : ''}`,
-    ];
-    this.logEvent('international', '国际', intlEvents[Math.floor(Math.random() * intlEvents.length)]());
-
-    // ═══ 国家事件（朝堂/政策/科举/军事）每天必生 1-2 条 ═══
-    const nationalEvents = [
-      () => `朝廷颁布新令：${Math.random() > 0.5 ? '减免今年秋税两成' : '加强市舶司管理，严查走私'}`,
-      () => `开封府尹巡视城内治安，${Math.random() > 0.5 ? '查处三家违规商铺' : '嘉奖巡城甲士'}`,
-      () => `枢密院奏报：${Math.random() > 0.5 ? '西北边军增兵三千' : '水军在长江操练完毕'}`,
-      () => `科举消息：${Math.random() > 0.5 ? '今年恩科定于八月举行' : '太学扩招，各地学子纷纷入京'}`,
-      () => `户部清查各地粮仓：${Math.random() > 0.5 ? '江南粮仓充裕' : '河北数州粮仓亏空，紧急调拨'}`,
-      () => `司天监上奏：${Math.random() > 0.5 ? '星象示吉，今年丰收可期' : '近日天象有异，宜斋戒祈福'}`,
-      () => `工部征调民夫修缮黄河堤坝，预计${Math.floor(Math.random() * 3) + 2}月完工`,
-      () => `三司使奏报：本年度税收${Math.random() > 0.5 ? '较去年增长一成' : '与去年持平'}`,
-      () => `御史台弹劾${Math.random() > 0.5 ? '两江转运使贪墨' : '某知州纵容豪强'}`,
-      () => `禁军换防，京城各门甲士${Math.random() > 0.5 ? '增派一倍' : '如常轮值'}`,
-      () => season === '冬' ? '朝廷拨银赈济北方受灾州县' : '太医局配发暑药，分送京城各坊',
-      () => `翰林院编修完成《${Math.random() > 0.5 ? '太平寰宇记' : '册府元龟'}》新卷`,
-    ];
-    this.logEvent('national', '国家', nationalEvents[Math.floor(Math.random() * nationalEvents.length)]());
-    if (Math.random() > 0.4) {
-      this.logEvent('national', '国家', nationalEvents[Math.floor(Math.random() * nationalEvents.length)]());
+    if (!types.has('international')) {
+      const msgs = ['辽国使团抵达汴京，带来上等貂皮作为贡品', '金国使者请求增加互市口岸，朝堂上争论不休', '吐蕃商队经川蜀入京，带来药材和毛毡'];
+      this.logEvent('international', '国际', msgs[Math.floor(Math.random() * msgs.length)]);
+    }
+    if (!types.has('national')) {
+      const msgs = ['朝廷颁布新令：加强市舶司管理，严查走私', '枢密院奏报：西北边军增兵三千', '三司使奏报：本年度税收与去年持平'];
+      this.logEvent('national', '国家', msgs[Math.floor(Math.random() * msgs.length)]);
+    }
+    if (!types.has('regional')) {
+      const msgs = ['东市今日人声鼎沸，商贩云集', '府衙门前张贴了新的告示', '城西酒肆有文人雅集，吟诗作赋'];
+      this.logEvent('regional', '地区', msgs[Math.floor(Math.random() * msgs.length)]);
+    }
+    if (!types.has('economy')) {
+      const prices = worldState.economy.prices;
+      const goods = Object.keys(prices);
+      if (goods.length > 0) {
+        const good = goods[Math.floor(Math.random() * goods.length)];
+        const price = prices[good];
+        this.logEvent('economy', '物价', `${good}现价${price.toFixed(1)}文，市场供需平稳`);
+      }
+    }
+    if (!types.has('weather')) {
+      this.logEvent('weather', '天气', worldState.weather.description);
+    }
+    if (!types.has('ecology')) {
+      const msgs = ['各处水渠通畅，灌溉正常', '山林中鸟鸣阵阵，野兔出没', `汴河水质${Math.random() > 0.5 ? '清澈' : '略显浑浊'}`];
+      this.logEvent('ecology', '生态', msgs[Math.floor(Math.random() * msgs.length)]);
     }
 
-    // ═══ 地区事件（汴京城内各区域）每天必生 1-2 条 ═══
-    const regionEvents = [
-      () => `东市今日${Math.random() > 0.5 ? '人声鼎沸，商贩云集' : '略显冷清，传闻有官差巡查'}`,
-      () => `汴河码头${Math.random() > 0.5 ? '到岸粮船数十艘，卸货忙碌' : '今日无大船到港'}`,
-      () => `大相国寺庙会${Math.random() > 0.5 ? '热闹非凡，百戏杂耍齐上' : '僧人做法事，信众络绎不绝'}`,
-      () => `南坊住宅区${Math.random() > 0.5 ? '有邻里因宅基纠纷报官' : '新建了几间瓦房'}`,
-      () => `北坊住户${Math.random() > 0.5 ? '自发组织巡夜，防范盗贼' : '传来婴儿啼哭声——又有新生命降临'}`,
-      () => `府衙门前${Math.random() > 0.5 ? '告状者排成长队' : '张贴了新的告示'}`,
-      () => `城西酒肆${Math.random() > 0.5 ? '有文人雅集，吟诗作赋' : '醉汉闹事被巡城甲士带走'}`,
-      () => weather === '暴雨' ? '暴雨致城南低洼处积水盈尺，居民纷纷转移' : '天气晴好，城中百姓纷纷外出',
-      () => `浅山猎户${Math.random() > 0.5 ? '猎到一头野猪，运到东市售卖' : '发现山中来了不常见的鹿群'}`,
-      () => `灌渠水势${Math.random() > 0.5 ? '平稳，农人引水灌田' : '稍有上涨，里正提醒注意防汛'}`,
-    ];
-    this.logEvent('regional', '地区', regionEvents[Math.floor(Math.random() * regionEvents.length)]());
-    if (Math.random() > 0.5) {
-      this.logEvent('regional', '地区', regionEvents[Math.floor(Math.random() * regionEvents.length)]());
-    }
-
-    // ═══ 经济事件（每天必生 1 条） ═══
-    const prices = this.economy.getPrices();
-    const goods = Object.keys(prices);
-    if (goods.length > 0) {
-      const good = goods[Math.floor(Math.random() * goods.length)];
-      const price = prices[good];
-      const basePrices: Record<string, number> = { food: 10, herbs: 15, cloth: 20, material: 8, cargo: 12 };
-      const base = basePrices[good] || 10;
-      const change = ((price - base) / base * 100).toFixed(0);
-      const dir = parseFloat(change) > 0 ? '涨' : '跌';
-      const econMessages = [
-        `${good}价${dir}了${Math.abs(parseFloat(change))}%，现价${price.toFixed(1)}文。${Math.random() > 0.5 ? '商户议论纷纷' : '百姓叫苦不迭'}`,
-        `东市传来消息：${good}价${dir}至${price.toFixed(1)}文。${Math.random() > 0.5 ? '牙人认为是季节因素' : '有人囤货居奇'}`,
-      ];
-      this.logEvent('economy', '物价', econMessages[Math.floor(Math.random() * econMessages.length)]);
-    }
-
-    // ═══ 天气事件（每天必生 1 条） ═══
-    const weatherMessages: Record<string, string[]> = {
-      '晴': ['万里无云，阳光普照汴京', '晴空如洗，街面上行人如织'],
-      '多云': ['天色阴晴不定，云层时聚时散', '薄云遮日，微风拂面'],
-      '小雨': ['淅淅沥沥的小雨下了一整天，路面泥泞', '细雨如丝，行人撑伞匆匆而过'],
-      '大雨': ['倾盆大雨如注，汴河水涨', '暴雨倾盆，东市商户纷纷收摊避雨'],
-      '暴雨': ['暴雨如注，城中多处积水！府衙紧急征调民夫疏通沟渠', '雷鸣电闪，暴雨不歇，低洼处百姓纷纷转移'],
-      '雪': ['瑞雪纷飞，银装素裹，孩童在街头堆雪人', '大雪封路，汴河部分河段结冰，船只停航'],
-      '大风': ['狂风呼啸，街头招牌被吹落，行人紧贴墙根行走', '朔风凛冽，卷起漫天沙尘'],
-    };
-    const wMsgs = weatherMessages[weather] || weatherMessages['晴'];
-    this.logEvent('weather', '天气', wMsgs[Math.floor(Math.random() * wMsgs.length)]);
-
-    // ═══ 生态事件（每天必生 1 条） ═══
-    const ecoEvents = [
-      season === '春' ? '春耕时节，东郊农人忙着播种，秧苗翠绿' : '田间庄稼长势' + (Math.random() > 0.5 ? '喜人' : '一般'),
-      `山林中${Math.random() > 0.5 ? '鸟鸣阵阵，野兔出没' : '猎户发现了新的兽径'}`,
-      `汴河水质${Math.random() > 0.5 ? '清澈，鱼群活跃' : '因近日降雨略显浑浊'}`,
-      season === '秋' ? '秋收在即，田野一片金黄，农人喜笑颜开' : `浅山草木${Math.random() > 0.5 ? '葱茏' : '稀疏'}`,
-      weather === '暴雨' ? '暴雨冲刷农田，部分低洼田地受灾' : '各处水渠通畅，灌溉正常',
-    ];
-    this.logEvent('ecology', '生态', ecoEvents[Math.floor(Math.random() * ecoEvents.length)]);
-
-    // ═══ L0 NPC 事件（采样，最多 5 条） ═══
-    let l0Count = 0;
+    // L0 NPC 事件（采样，最多 5 条）
+    let l0Count = tickEvents.filter(e => e.type === 'npc').length;
     for (const entityId of this.l0Entities) {
       if (l0Count >= 5) break;
       if (Math.random() > 0.5) continue;
@@ -594,18 +934,17 @@ export class WorldEngine {
       const vital = this.em.getComponent(entityId, 'Vital');
       const pos = this.em.getComponent(entityId, 'Position');
       if (!identity) continue;
-
       const actions = [
-        () => `${identity.name}在${gd(pos?.gridId)}${identity.profession === '商贩' ? '叫卖货物' : '忙着手头的活'}`,
-        () => `${identity.name}${vital && vital.hunger < 40 ? '饿着肚子去买了炊饼' : '歇了歇脚'}`,
-        () => `${identity.name}${wallet && wallet.copper > 100 ? '数了数钱袋，面露喜色' : '摸了摸空口袋，叹了口气'}`,
-        () => `${identity.name}和邻人闲聊了几句`,
+        `${identity.name}在${gd(pos?.gridId)}${identity.profession === 'merchant' ? '叫卖货物' : '忙着手头的活'}`,
+        `${identity.name}${vital && vital.hunger < 40 ? '饿着肚子去买了炊饼' : '歇了歇脚'}`,
+        `${identity.name}${wallet && wallet.copper > 100 ? '数了数钱袋，面露喜色' : '摸了摸空口袋，叹了口气'}`,
+        `${identity.name}和邻人闲聊了几句`,
       ];
-      this.logEvent('npc', identity.profession, actions[Math.floor(Math.random() * actions.length)]());
+      this.logEvent('npc', identity.profession, actions[Math.floor(Math.random() * actions.length)]);
       l0Count++;
     }
 
-    // ═══ L1 NPC 事件（采样，最多 3 条） ═══
+    // L1 NPC 事件（采样，最多 3 条）
     let l1Count = 0;
     for (const entityId of this.l1Entities) {
       if (l1Count >= 3) break;
