@@ -102,11 +102,28 @@ export interface ServerMessage {
     turnSummary?: {
       shichen: string;
       day: number;
-      events: number;
+      tick: number;
+      // L0 NPC 具体行动
+      l0Actions: { npcName: string; action: string; result: string }[];
+      // L1 批量行动摘要
+      l1Summary: { total: number; highlights: string[] };
+      // 重大事件（分等级）
+      majorEvents: {
+        type: 'weather' | 'economy' | 'ecology' | 'npc' | 'player';
+        title: string;
+        detail: string;
+        impact: 'critical' | 'important' | 'minor';
+      }[];
+      // 环境变化
+      weatherChange: string | null;
+      priceChanges: Record<string, { change: string; reason: string }>;
+      // 统计
+      totalEvents: number;
       npcActions: number;
-      priceChanges: Record<string, string>;
+      // 向后兼容
       weather: string;
       weatherDesc: string;
+      events: number;
     };
     distantNews?: { message: string; cause: string; source: string }[];
     briefing?: TurnBriefing;

@@ -500,6 +500,113 @@ body::before {
   font-size: 11px;
   line-height: 1.6;
 }
+.ts-weather-change {
+  color: var(--vermillion);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* 重大事件面板 */
+.ts-events {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--paper-dark);
+}
+.ts-events-title {
+  font-weight: 700;
+  color: var(--vermillion);
+  font-size: 11px;
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+.ts-event {
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  border-left: 3px solid var(--paper-dark);
+  border-radius: 2px;
+  background: rgba(255,255,255,0.2);
+}
+.ts-event-critical {
+  border-left-color: var(--vermillion);
+  background: rgba(194, 58, 46, 0.06);
+}
+.ts-event-critical .ts-event-title {
+  color: var(--vermillion);
+  font-weight: 700;
+}
+.ts-event-important {
+  border-left-color: var(--gold);
+  background: rgba(184, 134, 11, 0.06);
+}
+.ts-event-important .ts-event-title {
+  color: var(--gold);
+  font-weight: 600;
+}
+.ts-event-minor {
+  border-left-color: var(--paper-dark);
+}
+.ts-event-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ts-event-detail {
+  font-size: 10px;
+  color: rgba(44,24,16,0.6);
+  margin-top: 1px;
+  line-height: 1.4;
+}
+
+/* L0 NPC 行动列表 */
+.ts-l0 {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dotted var(--paper-dark);
+}
+.ts-l0-title {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.ts-l0-item {
+  font-size: 10px;
+  color: rgba(44,24,16,0.7);
+  line-height: 1.5;
+  padding: 1px 0;
+}
+
+/* L1 批量行动摘要 */
+.ts-l1 {
+  margin-top: 4px;
+}
+.ts-l1-item {
+  font-size: 10px;
+  color: rgba(44,24,16,0.5);
+  font-style: italic;
+}
+
+/* 物价变动 */
+.ts-prices {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dotted var(--paper-dark);
+}
+.ts-prices-title {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.ts-price-item {
+  font-size: 10px;
+  color: rgba(44,24,16,0.7);
+  line-height: 1.4;
+}
+.ts-price-reason {
+  color: rgba(44,24,16,0.4);
+  font-size: 9px;
+}
 
 /* ===== 回合简报 ===== */
 .briefing {
@@ -2069,7 +2176,7 @@ body::before {
         <div class="briefing-body" id="briefing-body"></div>
       </div>
       <div class="turn-summary" id="turn-summary" style="display:none">
-        <div class="turn-summary-header">本回合</div>
+        <div class="turn-summary-header">本回合大事记</div>
         <div class="turn-summary-body" id="turn-summary-body"></div>
       </div>
       <div class="status-bar" id="status-bar">
@@ -2879,19 +2986,74 @@ function renderTurnSummary(summary, distantNews) {
 
   let html = `<div class="ts-row"><span class="ts-label">时间</span><span class="ts-value">第${summary.day}天 · ${summary.shichen}时</span></div>`;
 
-  // 天气显示
+  // 天气显示（含变化）
   if (summary.weather) {
     const icon = getWeatherIcon(summary.weather);
-    html += `<div class="ts-row"><span class="ts-label">天气</span><span class="ts-value">${icon} ${summary.weatherDesc || summary.weather}</span></div>`;
+    html += `<div class="ts-row"><span class="ts-label">天气</span><span class="ts-value">${icon} ${summary.weatherDesc || summary.weather}`;
+    if (summary.weatherChange) {
+      html += ` <span class="ts-weather-change">${summary.weatherChange}</span>`;
+    }
+    html += `</span></div>`;
   }
 
-  html += `<div class="ts-row"><span class="ts-label">本回合</span><span class="ts-value">${summary.npcActions}个NPC行动，${summary.events}个事件</span></div>`;
+  html += `<div class="ts-row"><span class="ts-label">本回合</span><span class="ts-value">${summary.npcActions}个NPC行动，${summary.totalEvents || summary.events || 0}个事件</span></div>`;
 
-  const prices = Object.entries(summary.priceChanges);
+  // 重大事件面板
+  const majorEvents = summary.majorEvents || [];
+  if (majorEvents.length > 0) {
+    html += `<div class="ts-events">`;
+    html += `<div class="ts-events-title">本回合大事记</div>`;
+    // 按 impact 排序：critical > important > minor
+    const order = { critical: 0, important: 1, minor: 2 };
+    const sorted = [...majorEvents].sort((a, b) => (order[a.impact] || 2) - (order[b.impact] || 2));
+    for (const evt of sorted) {
+      html += `<div class="ts-event ts-event-${evt.impact}">`;
+      html += `<div class="ts-event-title">${evt.title}</div>`;
+      html += `<div class="ts-event-detail">${evt.detail}</div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // L0 NPC 行动列表
+  const l0Actions = summary.l0Actions || [];
+  if (l0Actions.length > 0) {
+    html += `<div class="ts-l0">`;
+    html += `<div class="ts-l0-title">人物动态</div>`;
+    for (const act of l0Actions) {
+      if (act.result) {
+        html += `<div class="ts-l0-item">${act.result}</div>`;
+      }
+    }
+    html += `</div>`;
+  }
+
+  // L1 批量行动摘要
+  const l1Summary = summary.l1Summary;
+  if (l1Summary && l1Summary.highlights && l1Summary.highlights.length > 0) {
+    html += `<div class="ts-l1">`;
+    for (const h of l1Summary.highlights) {
+      html += `<div class="ts-l1-item">${h}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // 物价变动（增强版：含原因）
+  const prices = Object.entries(summary.priceChanges || {});
   if (prices.length > 0) {
-    html += `<div class="ts-row"><span class="ts-label">物价</span><span class="ts-value">${prices.map(([k,v]) => `${k}${v}`).join(' ')}</span></div>`;
+    html += `<div class="ts-prices">`;
+    html += `<div class="ts-prices-title">物价变动</div>`;
+    for (const [k, v] of prices) {
+      if (typeof v === 'string') {
+        html += `<div class="ts-price-item">${k}${v}</div>`;
+      } else {
+        html += `<div class="ts-price-item">${k}${v.change} <span class="ts-price-reason">${v.reason}</span></div>`;
+      }
+    }
+    html += `</div>`;
   }
 
+  // 远方消息
   if (distantNews && distantNews.length > 0) {
     html += `<div class="ts-news">`;
     for (const n of distantNews) {

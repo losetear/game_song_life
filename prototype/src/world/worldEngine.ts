@@ -21,6 +21,22 @@ import { InteractionContext } from '../server/protocol';
 import { getEmergentActions, executeEmergentAction } from './emergenceRules';
 import { MAP_CONNECTIONS, GRID_NAMES, GRID_ICONS } from './mapData';
 
+// === 重大事件 ===
+export interface MajorEvent {
+  type: 'weather' | 'economy' | 'ecology' | 'npc' | 'player';
+  title: string;
+  detail: string;
+  impact: 'critical' | 'important' | 'minor';
+}
+
+// === L0 NPC 行动结果 ===
+interface L0ActionResult {
+  npcName: string;
+  action: string;
+  result: string;
+  majorEvents: MajorEvent[];
+}
+
 // === 世界事件日志（含因果链） ===
 export interface WorldEvent {
   tick: number;
@@ -86,11 +102,23 @@ export interface TickResult {
   turnSummary: {
     shichen: string;
     day: number;
-    events: number;
+    tick: number;
+    // L0 NPC 具体行动
+    l0Actions: { npcName: string; action: string; result: string }[];
+    // L1 批量行动摘要
+    l1Summary: { total: number; highlights: string[] };
+    // 重大事件（分等级）
+    majorEvents: MajorEvent[];
+    // 环境变化
+    weatherChange: string | null;
+    priceChanges: Record<string, { change: string; reason: string }>;
+    // 统计
+    totalEvents: number;
     npcActions: number;
-    priceChanges: Record<string, string>;
+    // 向后兼容旧字段
     weather: string;
     weatherDesc: string;
+    events: number;
   };
   distantNews: { message: string; cause: string; source: string }[];
   briefing: TurnBriefing;
@@ -990,10 +1018,22 @@ export class WorldEngine {
   }
 
   /** 回合模拟：全世界推进一回合 */
-  private simulateTurn(): { npcActions: number; priceChanges: Record<string, string>; causalEvents: CausalEvent[] } {
+  private simulateTurn(): {
+    npcActions: number;
+    priceChanges: Record<string, string>;
+    causalEvents: CausalEvent[];
+    l0Actions: { npcName: string; action: string; result: string }[];
+    l1Summary: { total: number; highlights: string[] };
+    majorEvents: MajorEvent[];
+    weatherChange: string | null;
+    enrichedPriceChanges: Record<string, { change: string; reason: string }>;
+  } {
+    // 结算数据收集
+    const l0Actions: { npcName: string; action: string; result: string }[] = [];
+    const majorEvents: MajorEvent[] = [];
+
     // 保存当前物价
     const oldPrices = this.economy.getPrices();
-
     // 1. 时间推进
     this.time.advance();
 
@@ -1004,11 +1044,15 @@ export class WorldEngine {
 
     // 3. L0 NPC 行动 (优先级规则, 10个核心NPC)
     for (const entityId of this.l0Entities) {
-      this.simulateL0Action(entityId);
+      const l0Result = this.simulateL0Action(entityId);
+      if (l0Result) {
+        l0Actions.push({ npcName: l0Result.npcName, action: l0Result.action, result: l0Result.result });
+        majorEvents.push(...l0Result.majorEvents);
+      }
     }
 
     // 4. L1 NPC 批量行动 (简化模拟)
-    this.simulateL1Batch();
+    const l1Summary = this.simulateL1Batch();
 
     // 5. L2 区域统计更新
     this.regionSim.update(this.time.season, this.weather.farmYieldMod);
@@ -1031,22 +1075,39 @@ export class WorldEngine {
       em: this.em,
       l0Entities: this.l0Entities,
     });
-    // 将因果事件写入事件日志
+    // 将因果事件写入事件日志 + 收集重大事件
     for (const ce of causalEvents) {
       this.logEvent(ce.source === 'weather' ? 'weather' : ce.source === 'economy' ? 'economy' : ce.source === 'ecology' ? 'ecology' : 'npc',
         ce.source, ce.message);
-      // 填充 cause 字段到最近一条事件
       if (this.eventLog.length > 0) {
         this.eventLog[this.eventLog.length - 1].cause = ce.cause;
         this.eventLog[this.eventLog.length - 1].source = ce.source;
       }
+      // 因果事件 -> 重大事件
+      if (ce.message.includes('暴雨') || ce.message.includes('洪涝') || ce.message.includes('瘟疫')) {
+        majorEvents.push({ type: 'weather', title: ce.message.substring(0, 20), detail: ce.message, impact: 'critical' });
+      } else if (ce.spreadRadius >= 3) {
+        majorEvents.push({ type: ce.source as any, title: ce.message.substring(0, 20), detail: ce.message, impact: 'important' });
+      }
     }
-
+    
+    // 天气变化 → 重大事件
+    const weatherChanged = this.previousWeather !== this.weather.weather;
+    const weatherChange = weatherChanged ? `${this.previousWeather}→${this.weather.weather}` : null;
+    if (weatherChanged) {
+      if (this.weather.isHeavyRain) {
+        majorEvents.push({ type: 'weather', title: `天气突变：${weatherChange}`, detail: `天色骤变，${this.weather.getDescription()}`, impact: 'critical' });
+      } else {
+        majorEvents.push({ type: 'weather', title: `天气变化：${weatherChange}`, detail: this.weather.getDescription(), impact: 'important' });
+      }
+    }
+    
     // 9. 随机事件（旧逻辑）
     this.generateTickEvents();
 
     // 计算物价变动
     const priceChanges: Record<string, string> = {};
+    const enrichedPriceChanges: Record<string, { change: string; reason: string }> = {};
     const priceNames: Record<string, string> = { food: '粮', herbs: '药', cloth: '布', material: '材', cargo: '货' };
     const priceReasons: Record<string, string> = {
       '粮': this.weather.farmYieldMod < 0.8 ? '天气不佳，农田减产' : this.weather.farmYieldMod > 1.1 ? '风调雨顺，粮食丰收' : '市场供需变动',
@@ -1063,7 +1124,16 @@ export class WorldEngine {
         const changeStr = `${sign}${diff.toFixed(1)}%`;
         const name = priceNames[key] || key;
         priceChanges[name] = changeStr;
-        this.economy.recordChange(name, changeStr, priceReasons[name] || '市场波动');
+        const reason = priceReasons[name] || '市场波动';
+        this.economy.recordChange(name, changeStr, reason);
+        enrichedPriceChanges[name] = { change: changeStr, reason };
+        // 物价大幅波动 → 重大事件
+        const pct = parseFloat(changeStr);
+        if (Math.abs(pct) > 20) {
+          majorEvents.push({ type: 'economy', title: `${name}价${pct > 0 ? '飙升' : '暴跌'}${changeStr}`, detail: `${name}价变动${changeStr}，${reason}`, impact: 'critical' });
+        } else if (Math.abs(pct) > 10) {
+          majorEvents.push({ type: 'economy', title: `${name}价${pct > 0 ? '上涨' : '下跌'}${changeStr}`, detail: reason, impact: 'important' });
+        }
       }
     }
 
@@ -1091,15 +1161,15 @@ export class WorldEngine {
       this.propagationChains = this.propagationChains.slice(-30);
     }
 
-    return { npcActions: this.lastTickEvents, priceChanges, causalEvents };
+    return { npcActions: this.lastTickEvents, priceChanges, causalEvents, l0Actions, l1Summary, majorEvents, weatherChange, enrichedPriceChanges };
   }
 
   /** L0 NPC 单个行动模拟（状态驱动决策） */
-  private simulateL0Action(entityId: number): void {
+  private simulateL0Action(entityId: number): L0ActionResult {
     const vital = this.em.getComponent(entityId, 'Vital');
     const wallet = this.em.getComponent(entityId, 'Wallet');
     const identity = this.em.getComponent(entityId, 'Identity');
-    if (!vital || !identity) return;
+    if (!vital || !identity) return { npcName: '某人', action: '', result: '', majorEvents: [] };
 
     const name = identity.name;
     const hunger = vital.hunger;
@@ -1112,35 +1182,65 @@ export class WorldEngine {
 
     let action: string;
     let actionCause = '';
+    let resultDesc = '';
+    const majorEvents: MajorEvent[] = [];
 
     // 状态驱动决策：按优先级检查
     if (hunger < 30) {
       // 饿了 → 吃饭
       action = 'eat';
       actionCause = `饥饿(${hunger})`;
-      vital.hunger = Math.min(100, hunger + 30);
-      if (wallet) wallet.copper = Math.max(0, copper - 10);
+      if (wallet && copper >= 10) {
+        wallet.copper = Math.max(0, copper - 10);
+        vital.hunger = Math.min(100, hunger + 30);
+        resultDesc = `${name}花了10文钱买了顿饭，饱腹感恢复了不少。`;
+      } else {
+        vital.mood = Math.max(0, mood - 10);
+        vital.hunger = Math.max(0, hunger - 5);
+        resultDesc = `${name}饿得肚子咕噜响，但囊中羞涩，只能忍着。`;
+        // 重大事件：NPC 快饿死了
+        if (vital.hunger < 15) {
+          majorEvents.push({
+            type: 'npc', title: `${name}快要饿死了`,
+            detail: `${name}已经饿了好几天了，面色蜡黄，走路都打晃。`,
+            impact: 'critical',
+          });
+        } else if (vital.hunger < 30) {
+          majorEvents.push({
+            type: 'npc', title: `${name}正在挨饿`,
+            detail: `${name}没钱吃饭，只能饿着肚子干活。`,
+            impact: 'important',
+          });
+        }
+      }
     } else if (fatigue > 80) {
       // 太累 → 休息
       action = 'rest';
       actionCause = `疲劳(${fatigue})`;
       vital.fatigue = Math.max(0, fatigue - 30);
+      resultDesc = fatigue > 90
+        ? `${name}累得实在撑不住了，找了个角落瘫倒歇息。`
+        : `${name}找了个阴凉处歇了一会儿。`;
     } else if (copper < 20 && Math.random() < 0.6) {
       // 没钱 → 找活赚钱
       const jobs = ['work_dock', 'work_teahouse', 'work_errand'];
       action = jobs[Math.floor(Math.random() * jobs.length)];
       actionCause = `铜钱(${copper})`;
-      if (wallet) wallet.copper += Math.floor(Math.random() * 20) + 15;
-      vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15); // +15~25
-      vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);       // -8~10
+      const earned = Math.floor(Math.random() * 20) + 15;
+      if (wallet) wallet.copper += earned;
+      vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15);
+      vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);
+      resultDesc = `${name}手头紧，去打零工赚了${earned}文钱。`;
     } else if (copper > 200 && Math.random() < 0.4) {
       // 有钱 → 消费
       const shops = ['consume_cloth', 'consume_food', 'consume_tea'];
       action = shops[Math.floor(Math.random() * shops.length)];
       actionCause = `富裕(${copper})`;
-      if (wallet) wallet.copper -= Math.floor(Math.random() * 50) + 20;
+      const spent = Math.floor(Math.random() * 50) + 20;
+      if (wallet) wallet.copper -= spent;
       vital.mood = Math.min(100, mood + Math.floor(Math.random() * 10) + 5);
       vital.hunger = Math.min(100, hunger + 10);
+      resultDesc = `${name}花了${spent}文钱享受了一番，心情变好了。`;
     } else if (mood < 30) {
       // 心情差 → 社交/去茶馆
       action = 'socialize';
@@ -1148,6 +1248,14 @@ export class WorldEngine {
       vital.mood = Math.min(100, mood + Math.floor(Math.random() * 15) + 10);
       if (wallet) wallet.copper = Math.max(0, copper - 5);
       vital.hunger = Math.min(100, hunger + 5);
+      resultDesc = `${name}心情低落，去找朋友聊天解闷。`;
+      if (mood < 20) {
+        majorEvents.push({
+          type: 'npc', title: `${name}心情极差`,
+          detail: `${name}整日愁眉苦脸，看样子遇到了什么难处。`,
+          impact: 'important',
+        });
+      }
     } else {
       // 按职业工作，但每次效果不同
       const profActions: Record<string, string[]> = {
@@ -1167,12 +1275,28 @@ export class WorldEngine {
       const options = profActions[identity.profession] || ['wander', 'stroll', 'chat'];
       action = options[Math.floor(Math.random() * options.length)];
       actionCause = `职业:${identity.profession}`;
-      // 工作收入随机
+      const earned = Math.floor(Math.random() * 40) + 10;
       if (wallet && action !== 'wander' && action !== 'stroll' && action !== 'chat') {
-        wallet.copper += Math.floor(Math.random() * 40) + 10;
+        wallet.copper += earned;
       }
-      vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15); // +15~25
-      vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);       // -8~10
+      vital.fatigue = Math.min(100, fatigue + Math.floor(Math.random() * 11) + 15);
+      vital.hunger = Math.max(0, hunger - Math.floor(Math.random() * 3) - 8);
+      resultDesc = '';  // 用下方模板生成
+    }
+
+    // 检查健康状态重大事件
+    if (vital.health <= 0) {
+      majorEvents.push({
+        type: 'npc', title: `${name}倒下了`,
+        detail: `${name}的健康状况急剧恶化，已经无法起身了。`,
+        impact: 'critical',
+      });
+    } else if (vital.health < 20) {
+      majorEvents.push({
+        type: 'npc', title: `${name}身体堪忧`,
+        detail: `${name}面色苍白，看起来病得不轻。`,
+        impact: 'important',
+      });
     }
 
     // 记录叙事事件
@@ -1210,6 +1334,7 @@ export class WorldEngine {
     };
     const templates = eventTemplates[action] || eventTemplates.wander;
     const description = templates[Math.floor(Math.random() * templates.length)];
+    if (!resultDesc) resultDesc = description;
     this.logEvent('npc', 'npc_action', description);
 
     // 记录NPC行为历史
@@ -1235,10 +1360,12 @@ export class WorldEngine {
     const hist = this.npcHistory.get(entityId)!;
     hist.push(historyEntry);
     if (hist.length > 50) hist.shift();
+
+    return { npcName: name, action, result: resultDesc, majorEvents };
   }
 
   /** L1 NPC 批量模拟 */
-  private simulateL1Batch(): void {
+  private simulateL1Batch(): { total: number; highlights: string[] } {
     let actions = 0;
     for (const entityId of this.l1Entities) {
       const vital = this.em.getComponent(entityId, 'Vital');
@@ -1251,14 +1378,18 @@ export class WorldEngine {
 
     // 生成 L1 汇总事件
     const npcCount = this.l1Entities.length;
+    const highlights: string[] = [];
     if (npcCount > 0) {
       const summaries = [
         `城中有${Math.min(npcCount, Math.floor(npcCount * 0.3))}人在忙碌地干活。`,
         `街上来来往往${Math.floor(npcCount * 0.1)}个行人。`,
         `码头上${Math.floor(Math.random() * 30 + 10)}个搬运工在扛货。`,
       ];
-      this.logEvent('npc', 'l1_summary', summaries[Math.floor(Math.random() * summaries.length)]);
+      const summary = summaries[Math.floor(Math.random() * summaries.length)];
+      this.logEvent('npc', 'l1_summary', summary);
+      highlights.push(summary);
     }
+    return { total: actions, highlights };
   }
 
   /** 生成远方消息（基于 tick+day 哈希，避免短时间重复） */
@@ -1341,7 +1472,7 @@ export class WorldEngine {
           health: vital?.health ?? 80, mood: vital?.mood ?? 50,
           copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max,
         },
-        turnSummary: { shichen: this.time.shichenName, day: this.time.day, events: 0, npcActions: 0, priceChanges: {}, weather: this.weather.weather, weatherDesc: this.weather.getDescription() },
+        turnSummary: { shichen: this.time.shichenName, day: this.time.day, tick: this.time.tick, l0Actions: [], l1Summary: { total: 0, highlights: [] }, majorEvents: [], weatherChange: null, priceChanges: {}, totalEvents: 0, npcActions: 0, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), events: 0 },
         distantNews: [],
         briefing: this.generateBriefing(gridId, {}, []),
       };
@@ -1433,11 +1564,17 @@ export class WorldEngine {
       turnSummary: {
         shichen: this.time.shichenName,
         day: this.time.day,
-        events: tickEvents,
+        tick: this.time.tick,
+        l0Actions: simResult.l0Actions,
+        l1Summary: simResult.l1Summary,
+        majorEvents: simResult.majorEvents,
+        weatherChange: simResult.weatherChange,
+        priceChanges: simResult.enrichedPriceChanges,
+        totalEvents: tickEvents,
         npcActions: simResult.npcActions,
-        priceChanges: simResult.priceChanges,
         weather: this.weather.weather,
         weatherDesc: this.weather.getDescription(),
+        events: tickEvents,
       },
       distantNews,
       briefing,
@@ -1510,10 +1647,14 @@ export class WorldEngine {
         copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max,
       },
       turnSummary: {
-        shichen: this.time.shichenName, day: this.time.day,
-        events: tickEvents, npcActions: simResult.npcActions,
-        priceChanges: simResult.priceChanges,
-        weather: this.weather.weather, weatherDesc: this.weather.getDescription(),
+        shichen: this.time.shichenName, day: this.time.day, tick: this.time.tick,
+        l0Actions: simResult.l0Actions,
+        l1Summary: simResult.l1Summary,
+        majorEvents: simResult.majorEvents,
+        weatherChange: simResult.weatherChange,
+        priceChanges: simResult.enrichedPriceChanges,
+        totalEvents: tickEvents, npcActions: simResult.npcActions,
+        weather: this.weather.weather, weatherDesc: this.weather.getDescription(), events: tickEvents,
       },
       distantNews,
       briefing,
