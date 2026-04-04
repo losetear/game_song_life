@@ -3590,11 +3590,22 @@ function handleEndTurnResult(data) {
   addLog('⏳ 回合结束，世界继续运转');
 }
 
-// ===== renderOptions 已移除 — 选项由服务端 renderServerOptions 和 move-options 动态提供 =====
+// ===== 底部选项区域 — 动态涌现 =====
 function renderOptions() {
-  // 不再渲染硬编码选项，清空选项区域
   const area = document.getElementById('options-area');
-  if (area) area.innerHTML = '';
+  if (!area) return;
+
+  // 如果选中了实体，底部显示该实体的涌现行为
+  if (selectedEntityId) {
+    const entity = nearbyEntities.find(e => e.id === selectedEntityId);
+    if (entity) {
+      area.innerHTML = `<div style="font-size:11px;color:rgba(44,24,16,0.4);padding:4px 0;">${entity.icon} ${entity.name} 的可用行为见右侧面板</div>`;
+      return;
+    }
+  }
+
+  // 没有选中实体时，显示提示
+  area.innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);padding:8px;">点击周围对象查看可用行为，或从下方「去向」移动</div>';
 }
 
 function doAction(actionId) {
