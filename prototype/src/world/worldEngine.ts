@@ -757,8 +757,23 @@ export class WorldEngine {
       }
       // 建筑特有信息
       else if (type === 'building') {
+        const bExt = building as any;
         entity.buildingType = building?.type || 'house';
         entity.openHours = building?.openHours || '';
+        entity.name = bExt?.name || this.getTypeDisplayName(id, type);
+        entity.quality = bExt?.quality || 50;
+        entity.description = bExt?.description || '';
+        // 获取所有者名字
+        if (building?.ownerId && this.em.isAlive(building.ownerId)) {
+          const ownerIdentity = this.em.getComponent(building.ownerId, 'Identity');
+          entity.ownerName = ownerIdentity?.name || '';
+        } else {
+          entity.ownerName = '';
+        }
+        // 房间摘要
+        entity.rooms = (bExt?.rooms || []).map((r: any) => ({
+          id: r.id, name: r.name, icon: r.icon,
+        }));
       }
 
       result.push(entity);
@@ -928,12 +943,16 @@ export class WorldEngine {
     for (const eid of entities) {
       if (this.em.getType(eid) === 'building') {
         const building = this.em.getComponent(eid, 'Building');
-        const identity = this.em.getComponent(eid, 'Identity');
         if (building) {
+          const bName = (building as any).name || this.getTypeDisplayName(eid, 'building');
+          const iconMap: Record<string, string> = {
+            house: '🏠', shop: '🏪', teahouse: '🍵', clinic: '🏥',
+            tavern: '🍺', warehouse: '📦', temple: '⛩', government: '🏛',
+          };
           options.push({
             id: `enter_building_${eid}`,
-            name: `进入${this.getTypeDisplayName(eid, this.em.getType(eid))}`,
-            icon: '🚪',
+            name: bName,
+            icon: iconMap[building.type] || '🏠',
             targetGrid: `${currentGrid}`,
             type: 'enter',
           });
@@ -951,7 +970,11 @@ export class WorldEngine {
       case 'animal': return '🐾';
       case 'building': {
         const b = this.em.getComponent(id, 'Building');
-        return b?.type === 'shop' ? '🏪' : b?.type === 'teahouse' ? '🍵' : '🏠';
+        const iconMap: Record<string, string> = {
+          house: '🏠', shop: '🏪', teahouse: '🍵', clinic: '🏥',
+          tavern: '🍺', warehouse: '📦', temple: '⛩', government: '🏛',
+        };
+        return b?.type ? (iconMap[b.type] || '🏠') : '🏠';
       }
       case 'plant': return '🌿';
       case 'mineral': return '🪨';
@@ -975,13 +998,13 @@ export class WorldEngine {
         return names[Math.floor(id) % names.length];
       }
       case 'building': {
-        const b = this.em.getComponent(id, 'Building');
+        const b = this.em.getComponent(id, 'Building') as any;
+        // 优先使用建筑组件中存储的 name
+        if (b?.name) return b.name;
         const identity = this.em.getComponent(id, 'Identity');
         if (identity?.name) return identity.name;
         const bType = b?.type || 'house';
-        const pos = this.em.getComponent(id, 'Position');
-        const area = pos?.areaId || 'city';
-        // 根据类型和区域生成名字
+        // fallback 名字
         const shopNames = ['锦绣布庄', '济世堂药铺', '聚宝斋', '福来杂货', '如意绸缎庄', '丰盛粮铺', '百味酱园', '同福酒楼', '德兴铁铺', '天成银楼'];
         const houseNames = ['张家宅', '李家院', '赵家小院', '孙家旧宅', '周家新居', '吴家老宅', '郑家大院', '王家小楼', '陈家院落', '刘家茅舍'];
         const teahouseNames = ['清风茶楼', '望月茶馆', '醉仙楼', '碧云轩'];
@@ -1015,6 +1038,115 @@ export class WorldEngine {
     if (age < 35) return '青年';
     if (age < 50) return '中年';
     return '年长';
+  }
+
+  /** 获取建筑内部详情 */
+  getBuildingInterior(buildingId: number): any {
+    if (!this.em.isAlive(buildingId)) return null;
+    const building = this.em.getComponent(buildingId, 'Building');
+    if (!building) return null;
+    const bExt = building as any;
+
+    const bName = bExt.name || this.getTypeDisplayName(buildingId, 'building');
+    let ownerName = '';
+    if (building.ownerId && this.em.isAlive(building.ownerId)) {
+      const ownerIdentity = this.em.getComponent(building.ownerId, 'Identity');
+      ownerName = ownerIdentity?.name || '';
+    }
+
+    // 获取建筑原始 grid 中的实体（NPC + 物品）
+    const bPos = this.em.getComponent(buildingId, 'Position');
+    const gridId = bPos?.gridId || 'center_street';
+    const interiorGrid = `interior_${buildingId}`;
+    const gridToQuery = gridId.startsWith('interior_') ? 'center_street' : gridId;
+
+    const entityIds = this.worldMap.getEntitiesInGrid(gridToQuery);
+    const interiorEntities: any[] = [];
+    for (const eid of entityIds) {
+      if (eid === buildingId) continue;
+      const type = this.em.getType(eid);
+      if (!type) continue;
+      const identity = this.em.getComponent(eid, 'Identity');
+
+      if (type === 'npc' || type === 'item') {
+        const ent: any = {
+          id: eid,
+          type,
+          name: identity?.name || this.getTypeDisplayName(eid, type),
+          icon: this.getTypeIcon(eid, type),
+          briefDesc: type === 'npc'
+            ? `${identity?.profession || '路人'}，${this.getAgeDesc(identity?.age)}`
+            : '物品',
+        };
+        if (type === 'npc' && building.ownerId === eid) {
+          ent.briefDesc = '宅子主人';
+        }
+        interiorEntities.push(ent);
+      }
+    }
+
+    // 当前房间（默认第一个房间）
+    const rooms: any[] = bExt.rooms || [];
+    const currentRoom = rooms.length > 0 ? rooms[0].id : '';
+
+    // 当前房间物件
+    const currentRoomData = rooms.find((r: any) => r.id === currentRoom);
+
+    return {
+      buildingId,
+      buildingName: bName,
+      buildingType: building.type,
+      ownerName,
+      currentRoom,
+      rooms: rooms.map((r: any) => ({ id: r.id, name: r.name, icon: r.icon, description: r.description, objects: r.objects, capacity: r.capacity })),
+      entities: interiorEntities,
+      roomObjects: currentRoomData?.objects || [],
+      description: bExt.description || '',
+      quality: bExt.quality || 50,
+    };
+  }
+
+  /** 获取建筑详情（监控面板用） */
+  getBuildingDetail(buildingId: number): any {
+    if (!this.em.isAlive(buildingId)) return null;
+    const building = this.em.getComponent(buildingId, 'Building');
+    if (!building) return null;
+    const bExt = building as any;
+
+    const bName = bExt.name || this.getTypeDisplayName(buildingId, 'building');
+    let ownerName = '';
+    if (building.ownerId && this.em.isAlive(building.ownerId)) {
+      const ownerIdentity = this.em.getComponent(building.ownerId, 'Identity');
+      ownerName = ownerIdentity?.name || '';
+    }
+
+    const bPos = this.em.getComponent(buildingId, 'Position');
+    const gridId = bPos?.gridId || '';
+
+    // 查找当前在建筑内的实体
+    const interiorGrid = `interior_${buildingId}`;
+    const interiorEntityIds = this.worldMap.getEntitiesInGrid(interiorGrid);
+    const entitiesInside = interiorEntityIds.map(eid => {
+      const identity = this.em.getComponent(eid, 'Identity');
+      return {
+        id: eid,
+        type: this.em.getType(eid) || 'unknown',
+        name: identity?.name || '未知',
+      };
+    });
+
+    return {
+      id: buildingId,
+      name: bName,
+      type: building.type,
+      ownerName,
+      quality: bExt.quality || 50,
+      gridId,
+      openHours: building.openHours || '',
+      rooms: (bExt.rooms || []).map((r: any) => ({ id: r.id, name: r.name, icon: r.icon, description: r.description, objects: r.objects, capacity: r.capacity })),
+      entitiesInside,
+      description: bExt.description || '',
+    };
   }
 
   /** 回合模拟：全世界推进一回合 */

@@ -7,6 +7,7 @@ import { generateNPC } from './npcTemplates';
 import { getAnimalType } from './animalTemplates';
 import { getPlantType } from './plantTemplates';
 import { CITY_GRIDS, FARM_GRIDS, MOUNTAIN_GRIDS, RIVER_GRIDS, ALL_GRID_IDS } from './areaDefs';
+import { BUILDING_TEMPLATES, BUILDING_TYPE_LIST, SPECIAL_BUILDING_TYPES, getBuildingName, getBuildingDescription, getBuildingRooms, getBuildingOpenHours } from './buildingTemplates';
 
 export interface EntityGenerationResult {
   totalCount: number;
@@ -152,18 +153,104 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
   breakdown.mineral += 800;
 
   // === 建筑: 500 (L1) ===
-  for (let i = 0; i < 500; i++) {
+  // 5% 特殊建筑（shop/teahouse/clinic/tavern）分布在 CITY_GRIDS
+  // 95% 民居，分布在所有 GRID
+  const specialCount = 25;  // 5%
+  const houseCount = 475;   // 95%
+  const buildingIds: number[] = [];
+
+  // 特殊建筑
+  for (let i = 0; i < specialCount; i++) {
     const id = em.create(EntityType.BUILDING);
-    const gridId = ALL_GRID_IDS[Math.floor(Math.random() * ALL_GRID_IDS.length)];
+    const bType = SPECIAL_BUILDING_TYPES[i % SPECIAL_BUILDING_TYPES.length];
+    const gridId = CITY_GRIDS[Math.floor(Math.random() * CITY_GRIDS.length)];
     const areaId = getAreaByGrid(gridId);
+    const bName = getBuildingName(bType, i);
+    const bDesc = getBuildingDescription(bType, i);
+    const quality = 50 + Math.floor(Math.random() * 50);
 
     em.addComponent(id, 'Position', { x: Math.random() * 100, y: Math.random() * 100, areaId, gridId });
-    em.addComponent(id, 'Building', { type: 'house', ownerId: 0, openHours: '辰-酉' });
+    em.addComponent(id, 'Building', { type: bType, ownerId: 0, openHours: getBuildingOpenHours(bType), name: bName, quality, rooms: getBuildingRooms(bType), description: bDesc } as any);
     em.addComponent(id, 'Durability', { max: 100, current: 80 + Math.floor(Math.random() * 20) });
 
     worldMap.addEntity(id, gridId);
     l1Ids.push(id);
+    buildingIds.push(id);
     breakdown.building++;
+  }
+
+  // 民居
+  for (let i = 0; i < houseCount; i++) {
+    const id = em.create(EntityType.BUILDING);
+    const gridId = ALL_GRID_IDS[Math.floor(Math.random() * ALL_GRID_IDS.length)];
+    const areaId = getAreaByGrid(gridId);
+    const bName = getBuildingName('house', i);
+    const bDesc = getBuildingDescription('house', i);
+    const quality = 30 + Math.floor(Math.random() * 40);
+
+    em.addComponent(id, 'Position', { x: Math.random() * 100, y: Math.random() * 100, areaId, gridId });
+    em.addComponent(id, 'Building', { type: 'house', ownerId: 0, openHours: '', name: bName, quality, rooms: getBuildingRooms('house'), description: bDesc } as any);
+    em.addComponent(id, 'Durability', { max: 100, current: 70 + Math.floor(Math.random() * 30) });
+
+    worldMap.addEntity(id, gridId);
+    l1Ids.push(id);
+    buildingIds.push(id);
+    breakdown.building++;
+  }
+
+  // === NPC-建筑关系分配 ===
+  // 给前 800 个 NPC 分配住所（homeId），给特殊建筑分配经营者（workplaceId）
+  const allNpcIds = [...l0Ids, ...l1Ids.filter(id => em.getType(id) === 'npc')];
+
+  // 每个民居分配一个 NPC 作为主人
+  for (let i = 0; i < buildingIds.length && i < allNpcIds.length; i++) {
+    const buildingId = buildingIds[i];
+    const building = em.getComponent(buildingId, 'Building');
+    if (building && building.type === 'house') {
+      building.ownerId = allNpcIds[i];
+      // 给 NPC 设置 homeId
+      const identity = em.getComponent(allNpcIds[i], 'Identity');
+      if (identity) {
+        (identity as any).homeId = buildingId;
+      }
+    }
+  }
+
+  // 特殊建筑分配给对应职业 NPC 作为工作地点
+  const professionBuildingMap: Record<string, string> = {
+    merchant: 'shop',
+    doctor: 'clinic',
+  };
+  for (const npcId of allNpcIds) {
+    const identity = em.getComponent(npcId, 'Identity');
+    if (!identity || !identity.profession) continue;
+    const preferredType = professionBuildingMap[identity.profession];
+    if (!preferredType) continue;
+    // 找一个同区域且没有 workplaceId 的建筑
+    const npcPos = em.getComponent(npcId, 'Position');
+    const npcGrid = npcPos?.gridId;
+    let assigned = false;
+    for (const bid of buildingIds) {
+      const b = em.getComponent(bid, 'Building');
+      if (!b || b.type !== preferredType) continue;
+      const bpos = em.getComponent(bid, 'Position');
+      if (bpos && bpos.gridId === npcGrid) {
+        (identity as any).workplaceId = bid;
+        if (b.ownerId === 0) b.ownerId = npcId;
+        assigned = true;
+        break;
+      }
+    }
+    if (!assigned) {
+      // fallback: 找任意同类型建筑
+      for (const bid of buildingIds) {
+        const b = em.getComponent(bid, 'Building');
+        if (!b || b.type !== preferredType) continue;
+        (identity as any).workplaceId = bid;
+        if (b.ownerId === 0) b.ownerId = npcId;
+        break;
+      }
+    }
   }
 
   // === 物品: 2,500 ===

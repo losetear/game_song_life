@@ -981,6 +981,26 @@ body::before {
 }
 .move-option:active { transform: scale(0.95); }
 .move-option .move-icon { font-size: 16px; }
+.move-option.building-enter {
+  background: rgba(184, 134, 11, 0.06);
+  border-color: rgba(184, 134, 11, 0.15);
+}
+.move-option.building-enter:hover {
+  border-color: var(--gold);
+  background: rgba(184, 134, 11, 0.1);
+  color: var(--gold);
+}
+.move-type-tag {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(44,24,16,0.06);
+  color: rgba(44,24,16,0.4);
+}
+.move-type-tag.enter {
+  background: rgba(184,134,11,0.1);
+  color: var(--gold);
+}
 
 /* 实体详情卡片 */
 .entity-detail-card {
@@ -3422,12 +3442,20 @@ function loadMoveOptions() {
         return;
       }
       section.style.display = 'block';
-      grid.innerHTML = options.map(o => `
-        <div class="move-option" onclick="doMove('${o.targetGrid}', '${o.name}')">
-          <span class="move-icon">${o.icon}</span>
-          <span>${o.name}</span>
-        </div>
-      `).join('');
+      grid.innerHTML = options.map(o => {
+        const isEnter = o.type === 'enter';
+        const clickAction = isEnter
+          ? `doEnterBuilding(${o.id.replace('enter_building_', '')}, '${o.name.replace(/'/g, "\\'")}')`
+          : `doMove('${o.targetGrid}', '${o.name.replace(/'/g, "\\'")}')`;
+        const typeLabel = isEnter ? '<span class="move-type-tag enter">进入</span>' : '';
+        return `
+          <div class="move-option ${isEnter ? 'building-enter' : ''}" onclick="${clickAction}">
+            <span class="move-icon">${o.icon}</span>
+            <span>${o.name}</span>
+            ${typeLabel}
+          </div>
+        `;
+      }).join('');
       // 默认收起，保持 moveGridExpanded 状态
       grid.style.display = moveGridExpanded ? 'grid' : 'none';
     })
@@ -3463,6 +3491,38 @@ function doMove(targetGrid, name) {
     loadNearbyEntities();
     loadMoveOptions();
     addLog(`前往 ${name}`);
+  })
+  .catch(() => {});
+}
+
+function doEnterBuilding(buildingId, name) {
+  // Use emergent action: enter_building
+  if (connStatus === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
+    seqId++;
+    ws.send(JSON.stringify({ type: 'action', actionId: 'enter_building', params: { targetId: buildingId }, seqId }));
+    addLog(`→ 进入 ${name}`);
+    return;
+  }
+  fetch('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actionId: 'enter_building', params: { targetId: buildingId } })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const msg = data.message || `你走进了${name}。`;
+    showActionFeedback(msg, false);
+    if (data.playerState) {
+      showStatChanges(data.playerState);
+      updatePlayerState(data.playerState);
+    }
+    if (data.worldState) updateWorldState(data.worldState);
+    if (data.turnSummary) renderTurnSummary(data.turnSummary, data.distantNews);
+    if (data.briefing) renderBriefing(data.briefing);
+    closeEntityDetail();
+    loadNearbyEntities();
+    loadMoveOptions();
+    addLog(`进入 ${name}`);
   })
   .catch(() => {});
 }
@@ -3509,7 +3569,12 @@ function loadEntityActions(entityId) {
   let desc = '';
   if (entity.profession) desc += entity.profession;
   if (entity.briefDesc) desc = entity.briefDesc;
-  if (entity.buildingType) desc = entity.buildingType === 'shop' ? '店铺 · 可购买商品' : entity.buildingType === 'teahouse' ? '茶楼 · 可喝茶休息' : '民居 · 可进入探访';
+  if (entity.buildingType) {
+    const typeLabels = { shop: '店铺', teahouse: '茶楼', clinic: '药铺', tavern: '酒肆', warehouse: '货栈', temple: '寺庙', government: '衙门', house: '民居' };
+    desc = typeLabels[entity.buildingType] || '建筑';
+    if (entity.ownerName) desc += ` · 主人: ${entity.ownerName}`;
+  }
+  if (entity.description) desc = entity.description;
   document.getElementById('detail-desc').textContent = desc;
 
   // Build stats
@@ -3525,6 +3590,10 @@ function loadEntityActions(entityId) {
     entity.personality.forEach(p => { statsHtml += `<div class="entity-stat">${p}</div>`; });
   }
   if (entity.openHours) statsHtml += `<div class="entity-stat">营业: ${entity.openHours}</div>`;
+  if (entity.quality) statsHtml += `<div class="entity-stat">品质: ${entity.quality}</div>`;
+  if (entity.rooms && entity.rooms.length > 0) {
+    entity.rooms.forEach(r => { statsHtml += `<div class="entity-stat">${r.icon} ${r.name}</div>`; });
+  }
   statsEl.innerHTML = statsHtml;
 
   // Fetch NPC recent activity if NPC
@@ -3553,7 +3622,7 @@ function loadEntityActions(entityId) {
       animal: entity.vital ? `活力: ${Math.round(entity.vital.health || 0)}` : '自在活动',
       plant: entity.growth ? `生长状态: ${entity.growth}` : '生长中',
       mineral: entity.quality ? `品质: ${entity.quality}` : '可采集',
-      building: entity.openHours ? `营业: ${entity.openHours}` : '正常营业',
+      building: entity.description || (entity.openHours ? `营业: ${entity.openHours}` : '可进入探访'),
       item: entity.rarity ? `稀有度: ${entity.rarity}` : '可使用',
     };
     const statusDesc = statusMap[entity.type] || '';

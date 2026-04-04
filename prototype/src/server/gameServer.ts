@@ -407,6 +407,36 @@ export class GameServer {
         res.status(500).json({ error: String(err) });
       }
     });
+
+    // GET /api/world/building/:id/interior — 建筑内部数据
+    this.app.get('/api/world/building/:id/interior', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const data = this.engine.getBuildingInterior(id);
+        if (!data) {
+          res.status(404).json({ error: 'Building not found' });
+          return;
+        }
+        res.json(data);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/building/:id — 建筑详情（监控面板用）
+    this.app.get('/api/world/building/:id', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const data = this.engine.getBuildingDetail(id);
+        if (!data) {
+          res.status(404).json({ error: 'Building not found' });
+          return;
+        }
+        res.json(data);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
   }
 
   private setupWebSocket(): void {
@@ -518,6 +548,8 @@ export class GameServer {
       console.log(`   GET  /api/world/move-options → 移动选项`);
       console.log(`   GET  /api/world/entity/:id/actions → 实体行为`);
       console.log(`   POST /api/end-turn           → 结束回合`);
+      console.log(`   GET  /api/world/building/:id → 建筑详情`);
+      console.log(`   GET  /api/world/building/:id/interior → 建筑内部`);
       console.log(`   WebSocket           → 游戏交互`);
     });
   }
