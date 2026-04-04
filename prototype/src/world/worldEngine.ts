@@ -1129,30 +1129,84 @@ export class WorldEngine {
   getNearbyEntities(playerId: number): any[] {
     const pos = this.em.getComponent(playerId, 'Position');
     if (!pos) return [];
-    let gridId = pos.gridId;
+    const gridId = pos.gridId;
 
-    // 如果在建筑内部（interior_*），查询父 grid 的实体
-    let parentGrid: string | null = null;
+    // 如果在建筑内部（interior_*），只返回与建筑相关的实体
     if (gridId.startsWith('interior_')) {
-      // 从 interior_1116 中提取建筑 ID，找到建筑原始所在的 grid
-      const buildingIdStr = gridId.replace('interior_', '');
-      const buildingId = parseInt(buildingIdStr);
-      if (this.em.isAlive(buildingId)) {
-        const bpos = this.em.getComponent(buildingId, 'Position');
-        parentGrid = bpos?.gridId || 'center_street';
-        // 如果建筑也被移到了 interior grid（不应该了），fallback
-        if (parentGrid.startsWith('interior_')) parentGrid = 'center_street';
-      } else {
-        parentGrid = 'center_street';
-      }
-      gridId = parentGrid;
+      const buildingId = parseInt(gridId.replace('interior_', ''));
+      return this.getEntitiesInBuilding(buildingId, playerId);
     }
 
+    // 室外：返回当前 grid 的实体
     const entityIds = this.worldMap.getEntitiesInGrid(gridId);
+    return this.formatEntityList(entityIds, playerId);
+  }
 
+  /** 建筑内实体筛选：所有者 + 工作人员 + 随机访客 + 少量物品，总数 5-15 */
+  private getEntitiesInBuilding(buildingId: number, playerId: number): any[] {
+    const building = this.em.getComponent(buildingId, 'Building') as any;
+    const buildingPos = this.em.getComponent(buildingId, 'Position');
+    const parentGrid = buildingPos?.gridId || 'center_street';
+    const resolvedParentGrid = parentGrid.startsWith('interior_') ? 'center_street' : parentGrid;
+    const bType = building?.type || 'house';
+
+    const selected: number[] = [];
+    const parentEntities = this.worldMap.getEntitiesInGrid(resolvedParentGrid);
+
+    for (const eid of parentEntities) {
+      if (eid === playerId) continue;
+      const type = this.em.getType(eid);
+      if (!type) continue;
+
+      if (type === 'npc') {
+        // 建筑所有者必选
+        if (eid === building?.ownerId) { selected.push(eid); continue; }
+        // 工作人员必选
+        const identity = this.em.getComponent(eid, 'Identity') as any;
+        if (identity?.workplaceId === buildingId) { selected.push(eid); continue; }
+        // 住户必选
+        if (identity?.homeId === buildingId) { selected.push(eid); continue; }
+        // 随机访客（基于建筑类型概率）
+        if (bType === 'shop' && Math.random() < 0.08) { selected.push(eid); continue; }
+        if (bType === 'teahouse' && Math.random() < 0.12) { selected.push(eid); continue; }
+        if (bType === 'tavern' && Math.random() < 0.10) { selected.push(eid); continue; }
+        if (bType === 'clinic' && Math.random() < 0.06) { selected.push(eid); continue; }
+        if (bType === 'house' && Math.random() < 0.02) { selected.push(eid); continue; }
+        if (bType === 'temple' && Math.random() < 0.07) { selected.push(eid); continue; }
+        if (bType === 'government' && Math.random() < 0.04) { selected.push(eid); continue; }
+      }
+
+      if (type === 'item' && Math.random() < 0.08) {
+        selected.push(eid);
+      }
+    }
+
+    // 控制总数在 5-15
+    const minCount = 5;
+    const maxCount = 15;
+    if (selected.length < minCount) {
+      // 补充：从父 grid 的 NPC 中随机选几个凑数
+      for (const eid of parentEntities) {
+        if (selected.length >= minCount) break;
+        if (eid === playerId || selected.includes(eid)) continue;
+        const type = this.em.getType(eid);
+        if (type === 'npc' || type === 'item') {
+          selected.push(eid);
+        }
+      }
+    }
+    if (selected.length > maxCount) {
+      selected.length = maxCount;
+    }
+
+    return this.formatEntityList(selected, playerId);
+  }
+
+  /** 格式化实体列表 */
+  private formatEntityList(entityIds: number[], playerId: number): any[] {
     const result: any[] = [];
     for (const id of entityIds) {
-      if (id === playerId) continue; // 跳过玩家自己
+      if (id === playerId) continue;
       const type = this.em.getType(id);
       if (!type) continue;
 
@@ -1185,14 +1239,12 @@ export class WorldEngine {
         entity.name = bExt?.name || this.getTypeDisplayName(id, type);
         entity.quality = bExt?.quality || 50;
         entity.description = bExt?.description || '';
-        // 获取所有者名字
         if (building?.ownerId && this.em.isAlive(building.ownerId)) {
           const ownerIdentity = this.em.getComponent(building.ownerId, 'Identity');
           entity.ownerName = ownerIdentity?.name || '';
         } else {
           entity.ownerName = '';
         }
-        // 房间摘要
         entity.rooms = (bExt?.rooms || []).map((r: any) => ({
           id: r.id, name: r.name, icon: r.icon,
         }));
@@ -1856,28 +1908,29 @@ export class WorldEngine {
       });
     }
 
-    // 记录叙事事件
+    // 记录叙事事件（含位置变化描述）
+    const targetGrid = this.getTargetGridForAction(entityId, action);
     const eventTemplates: Record<string, string[]> = {
-      eat: [`${name}在路边买了两个炊饼，蹲着吃起来。`, `${name}去茶馆吃了一碗热汤面。`, `${name}啃着冷馒头，就着咸菜。`],
-      rest: [`${name}找了个阴凉处歇了一会儿。`, `${name}打了个盹。`, `${name}靠在墙根眯了一小会儿。`],
+      eat: [`${name}去中心大街买了两个炊饼，蹲着吃起来。`, `${name}去茶馆吃了一碗热汤面。`, `${name}啃着冷馒头，就着咸菜。`],
+      rest: [`${name}回家休息了。`, `${name}回到住处打了个盹。`, `${name}靠在自家墙根眯了一小会儿。`],
       work_dock: [`${name}去码头扛了几包货，赚了些辛苦钱。`, `${name}在码头帮人卸了一船货。`],
-      work_teahouse: [`${name}在茶楼帮忙跑堂。`, `${name}去茶楼帮工端茶倒水。`],
-      work_errand: [`${name}帮人跑腿送了封信。`, `${name}在集市帮人搬了一车货。`],
-      consume_cloth: [`${name}在布庄挑了匹好布，眉开眼笑。`, `${name}买了块新帕子，高兴得不得了。`],
-      consume_food: [`${name}在酒楼点了一桌子好菜。`, `${name}买了只烧鸡，美滋滋地啃着。`],
-      consume_tea: [`${name}在茶楼叫了一壶好茶，悠闲地品着。`, `${name}请朋友喝了壶碧螺春。`],
-      socialize: [`${name}去找朋友串门聊天。`, `${name}在茶馆里和人大声说笑。`, `${name}和邻家大婶聊了半天闲话。`],
-      sell: [`${name}卖出了一批货物，笑得合不拢嘴。`, `${name}在铺子里招呼客人。`],
+      work_teahouse: [`${name}去茶楼帮忙跑堂。`, `${name}去茶楼帮工端茶倒水。`],
+      work_errand: [`${name}帮人跑腿送了封信。`, `${name}在东市帮人搬了一车货。`],
+      consume_cloth: [`${name}去布庄挑了匹好布，眉开眼笑。`, `${name}买了块新帕子，高兴得不得了。`],
+      consume_food: [`${name}在东市买了只烧鸡，美滋滋地啃着。`, `${name}去东市点了一桌子好菜。`],
+      consume_tea: [`${name}去茶楼叫了一壶好茶，悠闲地品着。`, `${name}请朋友在茶楼喝了壶碧螺春。`],
+      socialize: [`${name}去找朋友串门聊天。`, `${name}去茶馆里和人大声说笑。`, `${name}和邻家大婶聊了半天闲话。`],
+      sell: [`${name}在铺子里卖出了一批货物，笑得合不拢嘴。`, `${name}在铺子里招呼客人。`],
       buy_stock: [`${name}去码头进了一批新货。`, `${name}和供货商讨价还价半天。`],
       bargain: [`${name}和客商谈了一笔大买卖。`, `${name}在柜台后面拨算盘，精打细算。`],
-      farm: [`${name}在田间忙碌了一个时辰。`, `${name}弯腰在田里除草。`],
+      farm: [`${name}去田里忙碌了一个时辰。`, `${name}弯腰在田里除草。`],
       water: [`${name}挑水浇了一亩菜地。`, `${name}在田埂上修水渠。`],
       harvest: [`${name}收割了一筐庄稼。`, `${name}在田里忙着收麦子。`],
       patrol: [`${name}在街上巡逻，目光警惕。`, `${name}检查了几个摊位的执照。`],
       inspect: [`${name}在城门口盘查过往行人。`, `${name}挨家挨户查火烛。`],
       guard_gate: [`${name}在城门口站岗。`, `${name}守在府衙门口。`],
-      heal: [`${name}给一个病人开了药方。`, `${name}在药铺里配药。`],
-      gather_herbs: [`${name}背着药篓上山采药去了。`, `${name}在城墙根找草药。`],
+      heal: [`${name}在药铺里给病人开了药方。`, `${name}在药铺里配药。`],
+      gather_herbs: [`${name}背着药篓上山采药去了。`, `${name}在山里找草药。`],
       prescribe: [`${name}在灯下翻医书。`, `${name}给老主顾配了几丸补药。`],
       hunt: [`${name}扛着弓进了山林。`, `${name}在溪边设了陷阱。`],
       set_trap: [`${name}在山路上布了几个套子。`, `${name}检查了昨天的陷阱。`],
@@ -1918,6 +1971,9 @@ export class WorldEngine {
     hist.push(historyEntry);
     if (hist.length > 50) hist.shift();
 
+    // 根据行为移动 NPC（targetGrid 已在上方事件模板前计算）
+    this.moveNPCToGrid(entityId, targetGrid);
+
     return { npcName: name, action, result: resultDesc, majorEvents };
   }
 
@@ -1929,6 +1985,20 @@ export class WorldEngine {
       if (!vital) continue;
       vital.hunger = Math.max(0, vital.hunger - 5);
       vital.fatigue = Math.min(100, vital.fatigue + 3);
+
+      // 10% 概率随机移到相邻 grid（只移动 NPC，不动其他实体）
+      const type = this.em.getType(entityId);
+      if (type === 'npc' && Math.random() < 0.1) {
+        const pos = this.em.getComponent(entityId, 'Position');
+        if (pos && !pos.gridId.startsWith('interior_')) {
+          const neighbors = MAP_CONNECTIONS[pos.gridId];
+          if (neighbors && neighbors.length > 0) {
+            const targetGrid = neighbors[Math.floor(Math.random() * neighbors.length)];
+            this.moveNPCToGrid(entityId, targetGrid);
+          }
+        }
+      }
+
       actions++;
     }
     this.lastTickEvents = actions + this.l0Entities.length;
@@ -1947,6 +2017,64 @@ export class WorldEngine {
       highlights.push(summary);
     }
     return { total: actions, highlights };
+  }
+
+  /** NPC 移动到指定 grid */
+  private moveNPCToGrid(entityId: number, targetGrid: string): void {
+    const pos = this.em.getComponent(entityId, 'Position');
+    if (!pos || pos.gridId === targetGrid) return;
+    // interior_ grid 不能作为 NPC 目标，只移动到真实 grid
+    if (targetGrid.startsWith('interior_')) return;
+    this.worldMap.moveEntity(entityId, targetGrid);
+    pos.gridId = targetGrid;
+  }
+
+  /** 根据 NPC 的 homeId 获取住宅所在 grid */
+  private getHomeGrid(entityId: number): string {
+    const identity = this.em.getComponent(entityId, 'Identity') as any;
+    const homeId = identity?.homeId;
+    if (homeId && this.em.isAlive(homeId)) {
+      const bpos = this.em.getComponent(homeId, 'Position');
+      if (bpos?.gridId && !bpos.gridId.startsWith('interior_')) return bpos.gridId;
+    }
+    return 'residential_north';
+  }
+
+  /** 根据 NPC 的 workplaceId 获取工作地点所在 grid */
+  private getWorkGrid(entityId: number): string {
+    const identity = this.em.getComponent(entityId, 'Identity') as any;
+    const workplaceId = identity?.workplaceId;
+    if (workplaceId && this.em.isAlive(workplaceId)) {
+      const bpos = this.em.getComponent(workplaceId, 'Position');
+      if (bpos?.gridId && !bpos.gridId.startsWith('interior_')) return bpos.gridId;
+    }
+    return 'east_market';
+  }
+
+  /** 根据 action 确定目标 grid */
+  private getTargetGridForAction(entityId: number, action: string): string {
+    switch (action) {
+      case 'eat': return 'center_street';
+      case 'rest': return this.getHomeGrid(entityId);
+      case 'work_dock': return 'dock';
+      case 'work_teahouse': return 'tea_house';
+      case 'work_errand': return 'east_market';
+      case 'consume_cloth': return 'cloth_shop';
+      case 'consume_food': return 'east_market';
+      case 'consume_tea': return 'tea_house';
+      case 'socialize': return Math.random() < 0.5 ? 'tea_house' : 'center_street';
+      case 'gamble': return 'center_street';
+      case 'scout': return 'center_street';
+      case 'steal': return 'east_market';
+      case 'sell': case 'buy_stock': case 'bargain': return this.getWorkGrid(entityId);
+      case 'farm': case 'water': case 'harvest': return Math.random() < 0.5 ? 'east_farm' : 'south_farm';
+      case 'patrol': case 'inspect': case 'guard_gate': return 'center_street';
+      case 'heal': case 'prescribe': return this.getWorkGrid(entityId);
+      case 'gather_herbs': return 'shallow_mountain';
+      case 'hunt': case 'set_trap': case 'skin_game': return 'shallow_mountain';
+      case 'wander': case 'stroll': case 'chat': return 'center_street';
+      default: return this.getWorkGrid(entityId);
+    }
   }
 
   /** 生成远方消息（基于 tick+day 哈希，避免短时间重复） */
