@@ -2194,8 +2194,11 @@ body::before {
         </div>
       </div>
       <div class="move-section" id="move-section" style="display:none">
-        <div class="nearby-title">【 去向 】</div>
-        <div class="move-grid" id="move-grid">
+        <div class="nearby-title" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleMoveGrid()">
+          <span>【 去向 】</span>
+          <span id="move-toggle-icon" style="font-size:10px;opacity:0.4;">▼ 展开</span>
+        </div>
+        <div class="move-grid" id="move-grid" style="display:none;">
           <!-- Dynamic move options -->
         </div>
       </div>
@@ -3390,6 +3393,16 @@ function loadNearbyEntities() {
     .catch(() => {});
 }
 
+let moveGridExpanded = false;
+function toggleMoveGrid() {
+  const grid = document.getElementById('move-grid');
+  const icon = document.getElementById('move-toggle-icon');
+  if (!grid) return;
+  moveGridExpanded = !moveGridExpanded;
+  grid.style.display = moveGridExpanded ? 'grid' : 'none';
+  if (icon) icon.textContent = moveGridExpanded ? '▲ 收起' : '▼ 展开';
+}
+
 function loadMoveOptions() {
   fetch('/api/world/move-options')
     .then(r => r.json())
@@ -3415,6 +3428,8 @@ function loadMoveOptions() {
           <span>${o.name}</span>
         </div>
       `).join('');
+      // 默认收起，保持 moveGridExpanded 状态
+      grid.style.display = moveGridExpanded ? 'grid' : 'none';
     })
     .catch(() => {});
 }
