@@ -1026,7 +1026,10 @@ export class WorldEngine {
         const mineralNames = ['铁矿石', '铜矿石', '石块', '燧石'];
         return mineralNames[id % mineralNames.length];
       }
-      case 'item': return '物品';
+      case 'item': {
+        const itemIdentity = this.em.getComponent(id, 'Identity');
+        return itemIdentity?.name || '物品';
+      }
       default: return '未知';
     }
   }
@@ -1795,8 +1798,8 @@ export class WorldEngine {
 
   /** 获取行动的 AP 消耗 */
   private getActionAPCost(actionId: string): number {
-    // 通用移动消耗 0 AP
-    if (actionId === 'move') return 0;
+    // 通用移动消耗 1 AP
+    if (actionId === 'move') return 1;
 
     // 旧移动类行动消耗 0 AP
     const freeActions = ['go_center', 'go_east_market', 'go_tea_house', 'go_dock', 'go_residential',
@@ -1809,7 +1812,7 @@ export class WorldEngine {
       help_request: 1, steal: 2, learn_skill: 2, invite_travel: 1, heal: 2,
       provoke: 2, sworn_brothers: 3, gift: 1,
       shelter: 0, gather_fruit: 1, fish: 2, scavenge: 1,
-      enter_building: 0, buy_from_shop: 1, ask_around: 1,
+      enter_building: 1, buy_from_shop: 1, ask_around: 1,
       observe: 0, feed_animal: 1, chase_away: 1, track_animal: 1, hunt: 2, tame: 3,
       chop: 2, water_plant: 1, gather: 1,
       mine: 3, collect: 2,

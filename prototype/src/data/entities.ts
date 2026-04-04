@@ -259,7 +259,17 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
     const gridId = ALL_GRID_IDS[Math.floor(Math.random() * ALL_GRID_IDS.length)];
     const areaId = getAreaByGrid(gridId);
 
+    // 随机生成物品名字
+    const itemNames = [
+      '铜钱袋', '旧书卷', '布包袱', '木碗', '陶罐', '竹篮', '麻绳', '油灯',
+      '铜镜', '木梳', '瓷碗', '铁钉', '铜锁', '竹简', '纸伞', '蓑衣',
+      '草鞋', '布鞋', '茶壶', '酒壶', '香囊', '玉佩', '铜簪', '木簪',
+      '砚台', '毛笔', '墨锭', '宣纸', '丝绸帕', '铜手炉', '瓷枕', '铜铃',
+    ];
+    const itemName = itemNames[Math.floor(Math.random() * itemNames.length)];
+
     em.addComponent(id, 'Position', { x: Math.random() * 100, y: Math.random() * 100, areaId, gridId });
+    em.addComponent(id, 'Identity', { name: itemName, profession: '物品', age: 0, personality: [] });
     em.addComponent(id, 'Durability', { max: 100, current: 50 + Math.floor(Math.random() * 50) });
     em.addComponent(id, 'Interactable', { actions: ['pickup'], conditions: {} });
 
