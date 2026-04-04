@@ -1303,6 +1303,326 @@ body::before {
   float: right;
 }
 .refresh-btn:hover { border-color: var(--gold); color: var(--ink); }
+
+/* ===== 本回合统计卡片 ===== */
+.tick-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.tick-stat-card {
+  background: var(--paper-light);
+  border: 1px solid rgba(44,24,16,0.08);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+.tick-stat-value {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 22px;
+  font-weight: 700;
+}
+.tick-stat-value.events { color: var(--vermillion); }
+.tick-stat-value.npc { color: var(--indigo); }
+.tick-stat-value.economy { color: var(--gold); }
+.tick-stat-value.weather { color: var(--jade); }
+.tick-stat-label {
+  font-size: 11px;
+  color: rgba(44,24,16,0.5);
+  margin-top: 2px;
+}
+
+/* ===== 事件分组样式 ===== */
+.event-group {
+  margin-bottom: 14px;
+}
+.event-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(44,24,16,0.04);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'Noto Serif SC', serif;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.event-group-header:hover { background: rgba(44,24,16,0.08); }
+.event-group-header .eg-icon { font-size: 16px; }
+.event-group-header .eg-count {
+  font-size: 11px;
+  color: rgba(44,24,16,0.4);
+  margin-left: auto;
+}
+.event-group-header .eg-toggle {
+  font-size: 10px;
+  color: rgba(44,24,16,0.3);
+  transition: transform 0.2s;
+}
+.event-group-header.collapsed .eg-toggle { transform: rotate(-90deg); }
+.event-group-body { transition: max-height 0.3s ease; overflow: hidden; }
+.event-group-body.collapsed { max-height: 0 !important; }
+
+.event-item-card {
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border-left: 3px solid;
+  background: rgba(44,24,16,0.02);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.event-item-card.type-weather { border-left-color: var(--indigo); }
+.event-item-card.type-npc { border-left-color: var(--indigo); }
+.event-item-card.type-economy { border-left-color: var(--gold); }
+.event-item-card.type-ecology { border-left-color: var(--jade); }
+.event-item-card.type-propagation { border-left-color: #8b6914; }
+.event-item-card.type-player { border-left-color: var(--jade); }
+.event-item-card.type-other { border-left-color: rgba(44,24,16,0.2); }
+
+.event-msg { color: var(--ink); font-weight: 500; }
+.event-chain {
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(44,24,16,0.5);
+  padding-left: 12px;
+  border-left: 2px dashed rgba(44,24,16,0.08);
+}
+.event-chain .chain-cause { color: var(--gold); }
+.event-chain .chain-effect { color: var(--jade); }
+.event-detail-toggle {
+  display: inline-block;
+  font-size: 10px;
+  color: rgba(44,24,16,0.35);
+  cursor: pointer;
+  margin-left: 6px;
+  border-bottom: 1px dashed rgba(44,24,16,0.2);
+}
+.event-detail-toggle:hover { color: var(--ink); }
+
+/* ===== NPC增强样式 ===== */
+.npc-section-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 12px 0 6px;
+  padding-left: 8px;
+  border-left: 3px solid var(--gold);
+}
+.npc-section-title.inv { border-left-color: var(--jade); }
+.npc-section-title.ai { border-left-color: var(--indigo); }
+.npc-section-title.mem { border-left-color: var(--vermillion); }
+.npc-section-title.hist { border-left-color: var(--gold); }
+.npc-section-title.rel { border-left-color: #8b6914; }
+
+.npc-inventory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inv-item {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(46,139,87,0.08);
+  color: var(--jade);
+  border: 1px solid rgba(46,139,87,0.15);
+}
+
+.npc-ai-state {
+  padding: 8px 12px;
+  background: rgba(58,79,122,0.04);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.npc-ai-goal { color: var(--vermillion); font-weight: 700; }
+
+.npc-memory-list {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.npc-memory-item {
+  padding: 2px 0 2px 12px;
+  position: relative;
+  color: rgba(44,24,16,0.7);
+}
+.npc-memory-item::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: rgba(44,24,16,0.3);
+}
+
+.npc-impression-item {
+  display: inline-block;
+  margin: 2px 8px 2px 0;
+  font-size: 12px;
+}
+
+.npc-history-toggle {
+  text-align: center;
+  padding: 6px;
+  cursor: pointer;
+  color: rgba(44,24,16,0.4);
+  font-size: 11px;
+  border-top: 1px dashed rgba(44,24,16,0.08);
+  margin-top: 8px;
+}
+.npc-history-toggle:hover { color: var(--ink); }
+
+.relation-svg { width: 100%; height: 200px; }
+
+/* ===== 经济增强样式 ===== */
+.econ-change {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.econ-change.up { background: rgba(194,58,46,0.1); color: var(--vermillion); }
+.econ-change.down { background: rgba(46,139,87,0.1); color: var(--jade); }
+.econ-change.flat { background: rgba(44,24,16,0.06); color: rgba(44,24,16,0.4); }
+
+.supply-demand-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  font-size: 11px;
+}
+.sd-label { width: 36px; text-align: right; color: rgba(44,24,16,0.5); flex-shrink: 0; }
+.sd-bar-wrap { flex: 1; height: 14px; background: rgba(44,24,16,0.04); border-radius: 3px; overflow: hidden; display: flex; }
+.sd-supply { background: var(--jade); opacity: 0.6; height: 100%; }
+.sd-demand { background: var(--vermillion); opacity: 0.4; height: 100%; }
+.sd-gap {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+.sd-gap.deficit { background: rgba(194,58,46,0.08); color: var(--vermillion); }
+.sd-gap.surplus { background: rgba(46,139,87,0.08); color: var(--jade); }
+.sd-gap.balanced { background: rgba(44,24,16,0.04); color: rgba(44,24,16,0.4); }
+
+.econ-reason {
+  font-size: 10px;
+  color: rgba(44,24,16,0.4);
+  margin-left: 4px;
+}
+
+/* ===== 生态增强样式 ===== */
+.eco-category-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 12px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed rgba(44,24,16,0.1);
+}
+.eco-category-title::before { margin-right: 6px; }
+.eco-weather-impact {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(58,79,122,0.08);
+  color: var(--indigo);
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* ===== 天气预警 ===== */
+.weather-warning {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 10px;
+}
+.weather-warning.warn { border-color: rgba(184,134,11,0.3); background: rgba(184,134,11,0.06); color: var(--gold); }
+.weather-warning.danger { border-color: rgba(194,58,46,0.3); background: rgba(194,58,46,0.06); color: var(--vermillion); }
+.weather-trend-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: rgba(44,24,16,0.03);
+  border-radius: 4px;
+}
+
+/* ===== 传播链增强 ===== */
+.prop-chain-card {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(44,24,16,0.08);
+  border-radius: 6px;
+  background: var(--paper-light);
+}
+.prop-chain-card.inactive { opacity: 0.45; }
+.prop-msg { font-weight: 700; color: var(--ink); font-size: 13px; }
+.prop-meta { font-size: 11px; color: rgba(44,24,16,0.5); margin-top: 4px; line-height: 1.7; }
+.prop-path {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.prop-path-node {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(58,79,122,0.08);
+  color: var(--indigo);
+}
+.prop-path-arrow { color: rgba(44,24,16,0.3); }
+.prop-fidelity {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+}
+.prop-fidelity.high { background: rgba(46,139,87,0.1); color: var(--jade); }
+.prop-fidelity.mid { background: rgba(184,134,11,0.1); color: var(--gold); }
+.prop-fidelity.low { background: rgba(194,58,46,0.1); color: var(--vermillion); }
+
+.prop-section-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin: 12px 0 6px;
+  padding-left: 8px;
+  border-left: 3px solid var(--jade);
+}
+.prop-section-title.history { border-left-color: rgba(44,24,16,0.2); color: rgba(44,24,16,0.4); }
+
+/* ===== 搜索增强 ===== */
+.search-grid-filter {
+  padding: 4px 10px;
+  border: 1px solid rgba(44,24,16,0.15);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+.search-result-count {
+  font-size: 12px;
+  color: rgba(44,24,16,0.5);
+  margin: 8px 0;
+}
 </style>
 </head>
 <body>
@@ -1498,6 +1818,28 @@ body::before {
       </div>
 
       <div class="monitor-card" style="margin-top:12px">
+        <div class="monitor-card-title">本回合动态</div>
+        <div class="tick-stats-row" id="tick-stats-row">
+          <div class="tick-stat-card">
+            <div class="tick-stat-value events" id="ts-event-count">—</div>
+            <div class="tick-stat-label">事件数</div>
+          </div>
+          <div class="tick-stat-card">
+            <div class="tick-stat-value npc" id="ts-npc-action-count">—</div>
+            <div class="tick-stat-label">NPC行动</div>
+          </div>
+          <div class="tick-stat-card">
+            <div class="tick-stat-value economy" id="ts-price-change-count">—</div>
+            <div class="tick-stat-label">价格变动</div>
+          </div>
+          <div class="tick-stat-card">
+            <div class="tick-stat-value weather" id="ts-weather-change">—</div>
+            <div class="tick-stat-label">天气变化</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="monitor-card" style="margin-top:12px">
         <div class="monitor-card-title">Grid 热力图</div>
         <div class="heatmap-grid" id="heatmap-grid"></div>
       </div>
@@ -1590,6 +1932,9 @@ body::before {
             <option value="building">建筑</option>
             <option value="item">物品</option>
           </select>
+          <select class="search-grid-filter" id="entity-filter-grid" onchange="loadEntities()">
+            <option value="">全部区域</option>
+          </select>
           <select class="filter-select" id="entity-filter-lod" onchange="loadEntities()">
             <option value="">全部 LOD</option>
             <option value="0">L0 GOAP</option>
@@ -1598,6 +1943,7 @@ body::before {
           </select>
           <input class="filter-input" id="entity-search" placeholder="搜索名称…" oninput="loadEntities()">
         </div>
+        <div class="search-result-count" id="search-result-count"></div>
         <div class="entity-table-wrap">
           <table class="entity-table">
             <thead>
@@ -2638,13 +2984,14 @@ function switchSubTab(name, el) {
     case 'ecology': loadEcologyPanel(); break;
     case 'weather': loadWeatherPanel(); break;
     case 'propagation': loadPropagationPanel(); break;
-    case 'search': loadEntities(); break;
+    case 'search': populateGridFilter(); loadEntities(); break;
   }
 }
 
 function startMonitor() {
   if (monitorStatsTimer) return;
   loadWorldStats();
+  populateGridFilter();
   loadEntities();
   monitorStatsTimer = setInterval(loadWorldStats, 5000);
 }
@@ -2693,6 +3040,9 @@ function renderWorldStats(data) {
 
   renderHeatmap(data.byGrid);
 
+  // 本回合统计
+  loadTickStats(data);
+
   // 经济摘要
   if (data.economySummary) {
     const econEl = document.getElementById('monitor-econ-summary');
@@ -2719,6 +3069,40 @@ function renderWorldStats(data) {
 
   // 更新回合事件tick显示
   if (currentEventTick === 0) currentEventTick = data.tick;
+}
+
+async function loadTickStats(statsData) {
+  const tick = statsData.tick;
+  if (tick === undefined) return;
+  try {
+    const res = await fetch(`/api/world/events/${tick}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const events = data.events || [];
+
+    // 按类型计数
+    let npcCount = 0, econCount = 0, weatherCount = 0;
+    for (const e of events) {
+      if (e.type === 'npc' || e.type === 'player' || e.type === 'move') npcCount++;
+      else if (e.type === 'economy') econCount++;
+      else if (e.type === 'weather') weatherCount++;
+    }
+
+    document.getElementById('ts-event-count').textContent = events.length;
+    document.getElementById('ts-npc-action-count').textContent = npcCount;
+    document.getElementById('ts-price-change-count').textContent = econCount;
+
+    // 天气变化
+    const wcEl = document.getElementById('ts-weather-change');
+    if (weatherCount > 0) {
+      const wEvt = events.find(e => e.type === 'weather');
+      wcEl.textContent = wEvt ? wEvt.message.substring(0, 10) : weatherCount + '次';
+    } else {
+      wcEl.textContent = '无变化';
+    }
+  } catch (err) {
+    // ignore
+  }
 }
 
 function formatUptime(sec) {
@@ -2772,29 +3156,99 @@ async function loadTickEvents() {
       container.innerHTML = '<div style="text-align:center;color:rgba(44,24,16,0.3);padding:20px;">该回合暂无事件</div>';
       return;
     }
-    const typeLabels = { npc: 'NPC', player: '玩家', economy: '经济', state: '状态', move: '移动', weather: '天气', ecology: '生态' };
-    // 按类别分组
+
+    const typeConfig = {
+      weather: { icon: '🌤️', label: '天气事件' },
+      npc: { icon: '👥', label: 'NPC行动事件' },
+      player: { icon: '🧑', label: '玩家事件' },
+      economy: { icon: '💰', label: '经济事件' },
+      ecology: { icon: '🌿', label: '生态事件' },
+      propagation: { icon: '📢', label: '信息传播' },
+      move: { icon: '🚶', label: '移动事件' },
+      state: { icon: '📊', label: '状态变化' },
+      other: { icon: '📋', label: '其他事件' },
+    };
+
+    // 按类型分组，保持设计文档顺序
+    const typeOrder = ['weather', 'npc', 'player', 'economy', 'ecology', 'propagation', 'move', 'state', 'other'];
     const groups = {};
     for (const evt of data.events) {
       const type = evt.type || 'other';
       if (!groups[type]) groups[type] = [];
       groups[type].push(evt);
     }
+
     let html = '';
-    for (const [type, events] of Object.entries(groups)) {
-      html += `<div style="margin-bottom:12px;"><div style="font-weight:700;color:var(--ink);margin-bottom:4px;font-size:13px;">${typeLabels[type] || type}</div>`;
-      for (const evt of events) {
-        const causeHtml = evt.cause ? `<span class="cause-tag" style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:rgba(184,134,11,0.1);color:var(--gold);margin-left:4px;">${evt.cause}</span>` : '';
-        html += `<div style="padding:6px 10px;border-left:3px solid ${TYPE_LABELS[evt.type]?.color || '#999'};margin-bottom:4px;background:rgba(44,24,16,0.02);border-radius:0 4px 4px 0;">
-          ${evt.message}${causeHtml}
-        </div>`;
+    for (const type of typeOrder) {
+      if (!groups[type] || groups[type].length === 0) continue;
+      const events = groups[type];
+      const cfg = typeConfig[type] || typeConfig.other;
+      const collapsed = events.length > 5;
+
+      html += `<div class="event-group">
+        <div class="event-group-header" onclick="toggleEventGroup(this)">
+          <span class="eg-icon">${cfg.icon}</span>
+          <span>${cfg.label}</span>
+          <span class="eg-count">(${events.length}条)</span>
+          <span class="eg-toggle">▼</span>
+        </div>
+        <div class="event-group-body">`;
+
+      const showCount = collapsed ? 3 : events.length;
+      for (let i = 0; i < events.length; i++) {
+        const evt = events[i];
+        const isHidden = i >= showCount;
+        const causeHtml = evt.cause ? `<span class="cause-tag">${evt.cause}</span>` : '';
+
+        html += `<div class="event-item-card type-${type}" ${isHidden ? 'style="display:none"' : ''} data-idx="${i}">
+          <div class="event-msg">${evt.message}${causeHtml}</div>`;
+
+        // 因果链
+        if (evt.cause || (evt.effects && evt.effects.length > 0)) {
+          html += '<div class="event-chain">';
+          if (evt.cause) html += `<div><span class="chain-cause">原因:</span> ${evt.cause}</div>`;
+          if (evt.effects && evt.effects.length > 0) {
+            html += `<div><span class="chain-effect">效果:</span> ${evt.effects.join(', ')}</div>`;
+          }
+          html += '</div>';
+        }
+
+        // 前置状态（如有）
+        if (evt.preconditions) {
+          html += `<div class="event-chain"><div>前置: ${typeof evt.preconditions === 'string' ? evt.preconditions : JSON.stringify(evt.preconditions)}</div></div>`;
+        }
+
+        html += '</div>';
       }
-      html += '</div>';
+
+      if (collapsed) {
+        html += `<div class="event-detail-toggle" onclick="expandEventGroup(this, ${events.length})">展开查看全部 ${events.length} 条</div>`;
+      }
+
+      html += '</div></div>';
     }
-    container.innerHTML = html;
+
+    // 回合头部信息
+    const headerHtml = `<div style="padding:6px 10px;background:rgba(44,24,16,0.04);border-radius:6px;margin-bottom:10px;font-size:12px;">
+      第${data.day || '?'}天 · ${data.shichen || '?'}时 · ${getWeatherIcon(data.weather)}${data.weather || ''} · 共 <strong>${data.events.length}</strong> 条事件
+    </div>`;
+
+    container.innerHTML = headerHtml + html;
   } catch (err) {
     container.innerHTML = '<div style="text-align:center;color:var(--vermillion);">加载失败</div>';
   }
+}
+
+function toggleEventGroup(header) {
+  const body = header.nextElementSibling;
+  header.classList.toggle('collapsed');
+  body.classList.toggle('collapsed');
+}
+
+function expandEventGroup(btn, total) {
+  const body = btn.parentElement;
+  body.querySelectorAll('.event-item-card').forEach(c => c.style.display = '');
+  btn.remove();
 }
 
 // === NPC 档案 ===
@@ -2835,15 +3289,22 @@ async function loadNPCProfile() {
 
     const name = entity.Identity?.name || '未知';
     const prof = entity.Identity?.profession || '—';
+    const age = entity.Identity?.age || '—';
+    const personality = entity.Identity?.personality || [];
     const vital = entity.Vital || {};
     const wallet = entity.Wallet || {};
+    const inventory = entity.Inventory || {};
+    const ai = entity.AI || {};
+    const memory = entity.Memory || {};
 
+    // 基本信息
     let html = `<div class="npc-card">
       <div class="npc-card-header">
         <div class="npc-avatar">${name[0]}</div>
         <div class="npc-info">
           <div class="npc-name">${name}</div>
           <div class="npc-profession">${prof} · ID:${id} · ${GRID_NAMES[entity.Position?.gridId] || entity.Position?.gridId || '—'}</div>
+          <div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:2px;">年龄: ${age} · 性格: ${personality.join(', ')} · LOD: L${ai.aiLevel ?? '?'} ${ai.aiLevel === 0 ? '(核心NPC, GOAP驱动)' : ai.aiLevel === 1 ? '(行为树)' : '(统计模拟)'}</div>
         </div>
       </div>`;
 
@@ -2855,47 +3316,175 @@ async function loadNPCProfile() {
       { label: '心情', value: vital.mood ?? 0, invert: false },
     ];
     for (const s of stats) {
+      const val = Math.round(s.value);
       const color = s.invert
-        ? (s.value < 30 ? 'var(--jade)' : s.value < 70 ? 'var(--gold)' : 'var(--vermillion)')
-        : (s.value >= 70 ? 'var(--jade)' : s.value >= 40 ? 'var(--gold)' : 'var(--vermillion)');
+        ? (val < 30 ? 'var(--jade)' : val < 70 ? 'var(--gold)' : 'var(--vermillion)')
+        : (val >= 70 ? 'var(--jade)' : val >= 40 ? 'var(--gold)' : 'var(--vermillion)');
+      const warning = s.invert
+        ? (val >= 80 ? ' ⚠️' : '')
+        : (val < 30 ? ' ⚠️' : '');
       html += `<div class="stat-bar-wrap">
-        <div class="stat-bar-label"><span>${s.label}</span><span>${Math.round(s.value)}</span></div>
-        <div class="stat-bar"><div class="stat-bar-fill" style="width:${s.value}%;background:${color}"></div></div>
+        <div class="stat-bar-label"><span>${s.label}${warning}</span><span>${val}/100</span></div>
+        <div class="stat-bar"><div class="stat-bar-fill" style="width:${val}%;background:${color}"></div></div>
       </div>`;
     }
-    html += `<div style="margin-top:8px;font-size:13px;">铜钱: <strong style="color:var(--gold)">${wallet.copper ?? 0}文</strong></div>`;
+    const copperWarn = (wallet.copper ?? 0) < 20 ? ' ⚠️' : '';
+    html += `<div style="margin-top:8px;font-size:13px;">铜钱: <strong style="color:var(--gold)">${wallet.copper ?? 0}文</strong>${copperWarn}</div>`;
     html += '</div>';
 
-    // 行为历史
+    // 背包物品
+    html += '<div class="npc-section-title inv">背包</div>';
+    const items = inventory.items || [];
+    if (items.length > 0) {
+      html += '<div class="npc-inventory">';
+      for (const item of items) {
+        const itemName = ITEM_NAMES[item.itemType] || item.itemType;
+        html += `<span class="inv-item">${itemName}×${item.amount}</span>`;
+      }
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:12px;color:rgba(44,24,16,0.35);">空空如也</div>';
+    }
+
+    // AI 状态
+    html += '<div class="npc-section-title ai">AI 状态</div>';
+    const goals = ai.goals || [];
+    const plan = ai.currentPlan || [];
+    html += `<div class="npc-ai-state">
+      <div>当前目标: <span class="npc-ai-goal">${goals.length > 0 ? goals.join(', ') : '无'}</span></div>
+      <div>当前计划: ${plan.length > 0 ? plan.join(' → ') : '无计划'}</div>
+      <div>冷却: ${ai.planCooldown ?? 0}</div>
+    </div>`;
+
+    // 记忆
+    html += '<div class="npc-section-title mem">记忆</div>';
+    const recentEvents = memory.recentEvents || [];
+    const impressions = memory.impressions || {};
+    if (recentEvents.length > 0) {
+      html += '<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-bottom:4px;">最近事件:</div>';
+      html += '<div class="npc-memory-list">';
+      for (const e of recentEvents.slice(-10).reverse()) {
+        html += `<div class="npc-memory-item">${typeof e === 'string' ? e : JSON.stringify(e)}</div>`;
+      }
+      html += '</div>';
+    }
+    const impEntries = Object.entries(impressions);
+    if (impEntries.length > 0) {
+      html += '<div style="font-size:11px;color:rgba(44,24,16,0.4);margin:8px 0 4px;">印象:</div>';
+      html += '<div>';
+      for (const [target, score] of impEntries) {
+        const scoreColor = score > 0 ? 'var(--jade)' : score < 0 ? 'var(--vermillion)' : 'rgba(44,24,16,0.5)';
+        html += `<span class="npc-impression-item">${target} <span style="color:${scoreColor};font-weight:700">${score > 0 ? '+' : ''}${score}</span></span>`;
+      }
+      html += '</div>';
+    }
+    if (recentEvents.length === 0 && impEntries.length === 0) {
+      html += '<div style="font-size:12px;color:rgba(44,24,16,0.35);">暂无记忆</div>';
+    }
+
+    // 完整经历
     if (history.history && history.history.length > 0) {
-      html += '<div class="monitor-card-title" style="margin-top:12px;">行为历史</div>';
-      html += '<div class="timeline">';
-      for (const h of history.history.slice(-15).reverse()) {
+      html += '<div class="npc-section-title hist">完整经历</div>';
+      const showCount = 5;
+      const allHistory = history.history;
+      html += '<div class="timeline" id="npc-history-timeline">';
+      for (const h of allHistory.slice(-showCount).reverse()) {
         html += `<div class="timeline-item">
-          <div class="tick-label">T${h.tick} ${h.shichen}</div>
-          <div class="action-desc">${h.description}</div>
-          <span class="cause-tag">${h.cause}</span>
+          <div class="tick-label">第${h.day || '?'}天 T${h.tick} ${h.shichen}</div>
+          <div class="action-desc">${h.description || h.action}</div>
+          ${h.cause ? `<span class="cause-tag">${h.cause}</span>` : ''}
+          ${h.result ? `<span style="font-size:10px;color:rgba(44,24,16,0.4);margin-left:4px;">[${h.result}]</span>` : ''}
         </div>`;
       }
       html += '</div>';
+      if (allHistory.length > showCount) {
+        html += `<div class="npc-history-toggle" onclick="expandNPCHistory(this, '${id}', ${showCount})">展开查看全部 ${allHistory.length} 条记录 ▼</div>`;
+      }
     } else {
       html += '<div style="margin-top:12px;font-size:12px;color:rgba(44,24,16,0.4);">暂无行为历史</div>';
     }
 
-    // 关系图谱
+    // 关系图谱 (SVG)
     if (relations.relations && relations.relations.length > 0) {
-      html += '<div class="monitor-card-title" style="margin-top:12px;">关系图谱</div>';
+      html += '<div class="npc-section-title rel">关系图谱</div>';
       html += '<div style="font-size:12px;line-height:2;">';
       for (const r of relations.relations) {
         const scoreColor = r.score > 0 ? 'var(--jade)' : r.score < 0 ? 'var(--vermillion)' : 'rgba(44,24,16,0.5)';
-        html += `<span style="margin-right:12px;">${r.targetName} <span style="color:${scoreColor};font-weight:700">${r.score > 0 ? '+' : ''}${r.score}</span></span>`;
+        const relLabel = r.score > 20 ? '友好' : r.score > 0 ? '略好' : r.score > -20 ? '冷淡' : '敌对';
+        html += `<span style="margin-right:12px;">${r.targetName} <span style="color:${scoreColor};font-weight:700">${r.score > 0 ? '+' : ''}${r.score}</span> <span style="font-size:10px;color:rgba(44,24,16,0.3)">(${relLabel})</span></span>`;
       }
       html += '</div>';
+
+      // SVG关系图
+      html += renderRelationSVG(name, relations.relations);
     }
 
     container.innerHTML = html;
   } catch (err) {
     container.innerHTML = '<div style="text-align:center;color:var(--vermillion);">加载失败: ' + err.message + '</div>';
+  }
+}
+
+function renderRelationSVG(centerName, relations) {
+  const W = 400, H = 200;
+  const cx = W / 2, cy = H / 2;
+  const n = relations.length;
+  if (n === 0) return '';
+  const radius = Math.min(70, 40 + n * 8);
+
+  let svg = `<svg class="relation-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Lines
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+    const tx = cx + radius * Math.cos(angle);
+    const ty = cy + radius * Math.sin(angle);
+    const r = relations[i];
+    const lineColor = r.score > 0 ? '#2e8b57' : r.score < 0 ? '#c23a2e' : '#999';
+    const dashArray = Math.abs(r.score) < 10 ? '4,4' : 'none';
+    svg += `<line x1="${cx}" y1="${cy}" x2="${tx}" y2="${ty}" stroke="${lineColor}" stroke-width="${Math.min(4, Math.abs(r.score) / 10 + 1)}" stroke-dasharray="${dashArray}" opacity="0.6"/>`;
+  }
+
+  // Center node
+  svg += `<circle cx="${cx}" cy="${cy}" r="18" fill="#c23a2e" opacity="0.8"/>`;
+  svg += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="white" font-size="12" font-weight="700" font-family="Noto Serif SC,serif">${centerName[0]}</text>`;
+
+  // Target nodes
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i / n) - Math.PI / 2;
+    const tx = cx + radius * Math.cos(angle);
+    const ty = cy + radius * Math.sin(angle);
+    const r = relations[i];
+    const nodeColor = r.score > 0 ? '#2e8b57' : r.score < 0 ? '#c23a2e' : '#8b7355';
+    svg += `<circle cx="${tx}" cy="${ty}" r="14" fill="${nodeColor}" opacity="0.7"/>`;
+    svg += `<text x="${tx}" y="${ty + 4}" text-anchor="middle" fill="white" font-size="10" font-weight="700" font-family="Noto Serif SC,serif">${(r.targetName || '?')[0]}</text>`;
+    svg += `<text x="${tx}" y="${ty + 22}" text-anchor="middle" fill="rgba(44,24,16,0.5)" font-size="9" font-family="Noto Sans SC,sans-serif">${r.targetName} ${r.score > 0 ? '+' : ''}${r.score}</text>`;
+  }
+
+  svg += '</svg>';
+  return svg;
+}
+
+async function expandNPCHistory(btn, npcId, shown) {
+  const timeline = document.getElementById('npc-history-timeline');
+  try {
+    const res = await fetch(`/api/world/npc/${npcId}/history`);
+    const data = await res.json();
+    const allHistory = data.history || [];
+    let html = '';
+    for (const h of allHistory.reverse()) {
+      html += `<div class="timeline-item">
+        <div class="tick-label">第${h.day || '?'}天 T${h.tick} ${h.shichen}</div>
+        <div class="action-desc">${h.description || h.action}</div>
+        ${h.cause ? `<span class="cause-tag">${h.cause}</span>` : ''}
+        ${h.result ? `<span style="font-size:10px;color:rgba(44,24,16,0.4);margin-left:4px;">[${h.result}]</span>` : ''}
+      </div>`;
+    }
+    timeline.innerHTML = html;
+    btn.textContent = `共 ${allHistory.length} 条记录（已展开）`;
+    btn.style.cursor = 'default';
+  } catch (err) {
+    btn.textContent = '加载失败';
   }
 }
 
@@ -2911,34 +3500,69 @@ async function loadEconomyPanel() {
 
     let html = '';
 
-    // 商品价格表
-    html += '<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:13px;margin-bottom:8px;">商品价格</div>';
-    html += '<table class="entity-table"><thead><tr><th>商品</th><th>现价</th><th>供需比</th><th>供给</th><th>需求</th></tr></thead><tbody>';
+    // 商品价格表 + 变动 + 原因
+    html += '<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:13px;margin-bottom:8px;">商品价格 (实时)</div>';
+    html += '<table class="entity-table"><thead><tr><th>商品</th><th>现价</th><th>变动</th><th>供需比</th><th>缺口</th></tr></thead><tbody>';
+    const changes = data.recentChanges || [];
     for (const [key, price] of Object.entries(data.prices)) {
       const sd = data.supplyDemand[key] || { supply: 0, demand: 0 };
       const ratio = sd.demand > 0 ? (sd.supply / sd.demand).toFixed(2) : '—';
       const ratioColor = sd.supply >= sd.demand ? 'var(--jade)' : 'var(--vermillion)';
-      html += `<tr><td>${ITEM_NAMES[key] || key}</td><td style="font-weight:700">${Number(price).toFixed(1)}文</td><td style="color:${ratioColor};font-weight:700">${ratio}</td><td>${sd.supply.toFixed(0)}</td><td>${sd.demand.toFixed(0)}</td></tr>`;
+
+      // 计算变动百分比
+      const history = data.priceHistory[key] || [];
+      let changeHtml = '<span class="econ-change flat">—</span>';
+      let reasonHtml = '';
+      if (history.length >= 2) {
+        const prev = history[history.length - 2];
+        const pct = prev > 0 ? ((price - prev) / prev * 100) : 0;
+        if (Math.abs(pct) > 0.1) {
+          const cls = pct > 0 ? 'up' : 'down';
+          changeHtml = `<span class="econ-change ${cls}">${pct > 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+        }
+      }
+      // 查找原因
+      const change = changes.find(c => c.item === key || c.item === ITEM_NAMES[key]);
+      if (change) {
+        reasonHtml = `<span class="econ-reason">${change.reason}</span>`;
+      }
+
+      // 缺口/盈余
+      let gapHtml = '<span class="sd-gap balanced">平衡</span>';
+      if (sd.demand > 0) {
+        const gapPct = ((sd.demand - sd.supply) / sd.demand * 100);
+        if (gapPct > 5) gapHtml = `<span class="sd-gap deficit">缺口 ${gapPct.toFixed(0)}%</span>`;
+        else if (gapPct < -5) gapHtml = `<span class="sd-gap surplus">盈余 ${(-gapPct).toFixed(0)}%</span>`;
+      }
+
+      html += `<tr>
+        <td>${ITEM_NAMES[key] || key}</td>
+        <td style="font-weight:700">${Number(price).toFixed(1)}文</td>
+        <td>${changeHtml}${reasonHtml}</td>
+        <td style="color:${ratioColor};font-weight:700">${ratio}</td>
+        <td>${gapHtml}</td>
+      </tr>`;
     }
     html += '</tbody></table></div>';
 
-    // 供需对比条形图
-    html += '<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:13px;margin-bottom:8px;">供需对比</div>';
+    // 供需详情
+    html += '<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:13px;margin-bottom:8px;">供需详情</div>';
     const maxVal = Math.max(...Object.values(data.supplyDemand).flatMap(sd => [sd.supply, sd.demand]), 1);
     for (const [key, sd] of Object.entries(data.supplyDemand)) {
-      const supplyH = (sd.supply / maxVal * 80).toFixed(0);
-      const demandH = (sd.demand / maxVal * 80).toFixed(0);
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;">
-        <span style="width:30px;text-align:right;">${ITEM_NAMES[key] || key}</span>
-        <div style="flex:1;display:flex;gap:4px;align-items:flex-end;height:40px;">
-          <div style="width:50%;height:${supplyH}%;background:var(--jade);border-radius:2px 2px 0 0;opacity:0.6;"></div>
-          <div style="width:50%;height:${demandH}%;background:var(--vermillion);border-radius:2px 2px 0 0;opacity:0.6;"></div>
+      const supplyPct = (sd.supply / maxVal * 100).toFixed(0);
+      const demandPct = (sd.demand / maxVal * 100).toFixed(0);
+      html += `<div class="supply-demand-bar">
+        <span class="sd-label">${ITEM_NAMES[key] || key}</span>
+        <div class="sd-bar-wrap">
+          <div class="sd-supply" style="width:${supplyPct}%"></div>
+          <div class="sd-demand" style="width:${demandPct}%"></div>
         </div>
+        <span style="font-size:10px;color:rgba(44,24,16,0.5)">${Math.round(sd.supply)}/${Math.round(sd.demand)}</span>
       </div>`;
     }
-    html += '<div style="font-size:10px;color:rgba(44,24,16,0.4);"><span style="color:var(--jade);">■</span> 供给 <span style="color:var(--vermillion);">■</span> 需求</div></div>';
+    html += '<div style="font-size:10px;color:rgba(44,24,16,0.4);margin-top:4px;"><span style="color:var(--jade);">■</span> 供给 <span style="color:var(--vermillion);">■</span> 需求</div></div>';
 
-    // 价格走势
+    // 价格走势（最近10回合柱状图）
     html += '<div><div style="font-weight:700;font-size:13px;margin-bottom:8px;">价格走势（最近10回合）</div>';
     for (const [key, history] of Object.entries(data.priceHistory)) {
       const recent = history.slice(-10);
@@ -2946,11 +3570,18 @@ async function loadEconomyPanel() {
       const max = Math.max(...recent);
       const min = Math.min(...recent);
       const range = max - min || 1;
-      html += `<div style="margin-bottom:8px;"><span style="font-size:11px;color:rgba(44,24,16,0.5);">${ITEM_NAMES[key] || key}</span>`;
+      const trend = recent[recent.length - 1] > recent[0] ? '↑ 上涨' : recent[recent.length - 1] < recent[0] ? '↓ 下跌' : '→ 平稳';
+      const trendColor = recent[recent.length - 1] > recent[0] ? 'var(--vermillion)' : recent[recent.length - 1] < recent[0] ? 'var(--jade)' : 'rgba(44,24,16,0.4)';
+      html += `<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:11px;color:rgba(44,24,16,0.5);">${ITEM_NAMES[key] || key}</span>
+          <span style="font-size:11px;color:${trendColor};font-weight:700">${trend}</span>
+        </div>`;
       html += '<div class="price-chart">';
       for (const p of recent) {
         const h = ((p - min) / range * 60 + 10).toFixed(0);
-        html += `<div class="price-chart-bar" style="height:${h}px;" title="${p.toFixed(1)}"></div>`;
+        const barColor = p === max ? 'var(--vermillion)' : p === min ? 'var(--jade)' : 'var(--gold)';
+        html += `<div class="price-chart-bar" style="height:${h}px;background:${barColor};" title="${p.toFixed(1)}文"></div>`;
       }
       html += '</div></div>';
     }
@@ -2960,8 +3591,11 @@ async function loadEconomyPanel() {
     if (data.recentChanges && data.recentChanges.length > 0) {
       html += '<div style="margin-top:12px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">近期变动</div>';
       for (const c of data.recentChanges) {
-        const color = c.change.startsWith('+') ? 'var(--vermillion)' : 'var(--jade)';
-        html += `<div style="font-size:12px;padding:3px 0;">${c.item} <span style="color:${color};font-weight:700">${c.change}</span> — ${c.reason}</div>`;
+        const color = c.change && c.change.startsWith('+') ? 'var(--vermillion)' : 'var(--jade)';
+        html += `<div style="font-size:12px;padding:4px 0;border-bottom:1px dashed rgba(44,24,16,0.05);">
+          <strong>${c.item}</strong> <span style="color:${color};font-weight:700">${c.change}</span>
+          <div style="font-size:10px;color:rgba(44,24,16,0.4);margin-top:1px;">原因: ${c.reason}</div>
+        </div>`;
       }
       html += '</div>';
     }
@@ -2982,33 +3616,72 @@ async function loadEcologyPanel() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
+    // 同时获取天气状态以标注影响
+    let currentWeather = '晴';
+    try {
+      const wRes = await fetch('/api/world/weather/history');
+      const wData = await wRes.json();
+      currentWeather = wData.current || '晴';
+    } catch(e) {}
+
     let html = '';
     const regionNames = { east_farm: '东郊农庄', south_farm: '南郊农田', irrigation: '灌渠', shallow_mountain: '浅山', deep_mountain: '深山', mountain_village: '山村', upstream: '汴河上游', downstream: '汴河下游', riverbank: '河岸', stream: '溪涧' };
 
-    for (const [id, r] of Object.entries(data.regions)) {
-      const name = regionNames[id] || id;
-      let statusClass = 'good';
-      if (r.status === '欠收' || r.status === '稀少' || r.status === '偏低') statusClass = 'danger';
-      else if (r.status === '正常') statusClass = 'warn';
+    // 按类别分组
+    const categories = {
+      '农田': ['east_farm', 'south_farm', 'irrigation'],
+      '山林': ['shallow_mountain', 'deep_mountain', 'mountain_village', 'stream'],
+      '河流': ['upstream', 'downstream', 'riverbank'],
+    };
 
-      html += `<div class="region-card">
-        <div class="region-card-header">
-          <div class="region-card-title">${name}</div>
-          <div class="region-status ${statusClass}">${r.status} ${r.trend}</div>
-        </div>
-        <div class="region-metrics">`;
+    const weatherImpacts = {
+      '晴': { '农田': '阳光充足，产量正常', '山林': '天气晴好，动物活跃', '河流': '水位正常，鱼获稳定' },
+      '多云': { '农田': '光照略减，影响不大', '山林': '动物正常活动', '河流': '水位正常' },
+      '小雨': { '农田': '水分增加，略有帮助', '山林': '动物减少外出', '河流': '水位微涨，鱼获略增' },
+      '暴雨': { '农田': '⚠️ 暴雨影响，产量下降', '山林': '⚠️ 动物躲藏，猎获减少', '河流': '⚠️ 水位上涨，航运受阻' },
+      '大暴雨': { '农田': '🚨 严重受灾，大幅减产', '山林': '🚨 动物迁移，生态受损', '河流': '🚨 洪涝风险，航运中断' },
+      '雪': { '农田': '❄️ 霜冻风险，产量下降', '山林': '❄️ 动物冬眠，难以狩猎', '河流': '❄️ 水面结冰，渔业受阻' },
+    };
 
-      if (r.production !== undefined) {
-        html += `<div class="region-metric"><div class="region-metric-value">${Math.round(r.production)}</div><div class="region-metric-label">产量 / ${Math.round(r.normal)}</div></div>`;
+    for (const [catName, regionIds] of Object.entries(categories)) {
+      html += `<div class="eco-category-title">🌾 ${catName}</div>`;
+
+      // 天气影响标注
+      const impact = weatherImpacts[currentWeather]?.[catName];
+      if (impact) {
+        html += `<div class="eco-weather-impact">${getWeatherIcon(currentWeather)} 当前天气影响: ${impact}</div>`;
       }
-      if (r.animals !== undefined) {
-        html += `<div class="region-metric"><div class="region-metric-value">${r.animals}</div><div class="region-metric-label">动物 / ${r.capacity}</div></div>`;
+
+      for (const rid of regionIds) {
+        const r = data.regions[rid];
+        if (!r) continue;
+        const name = regionNames[rid] || rid;
+        let statusClass = 'good';
+        if (r.status === '欠收' || r.status === '稀少' || r.status === '偏低') statusClass = 'danger';
+        else if (r.status === '正常') statusClass = 'warn';
+
+        html += `<div class="region-card">
+          <div class="region-card-header">
+            <div class="region-card-title">${name}</div>
+            <div class="region-status ${statusClass}">${r.status} ${r.trend}</div>
+          </div>
+          <div class="region-metrics">`;
+
+        if (r.production !== undefined) {
+          const pct = r.normal > 0 ? (r.production / r.normal * 100).toFixed(0) : 0;
+          const pctColor = pct >= 90 ? 'var(--jade)' : pct >= 60 ? 'var(--gold)' : 'var(--vermillion)';
+          html += `<div class="region-metric"><div class="region-metric-value">${Math.round(r.production)}</div><div class="region-metric-label">产量 / ${Math.round(r.normal)} <span style="color:${pctColor}">(${pct}%)</span></div></div>`;
+        }
+        if (r.animals !== undefined) {
+          const capPct = r.capacity > 0 ? (r.animals / r.capacity * 100).toFixed(0) : 0;
+          html += `<div class="region-metric"><div class="region-metric-value">${r.animals}</div><div class="region-metric-label">数量 / ${r.capacity} (${capPct}%)</div></div>`;
+        }
+        if (r.fishCatch !== undefined) {
+          html += `<div class="region-metric"><div class="region-metric-value">${Math.round(r.fishCatch)}</div><div class="region-metric-label">鱼获</div></div>`;
+          html += `<div class="region-metric"><div class="region-metric-value">${r.tradeVolume || '—'}</div><div class="region-metric-label">贸易量</div></div>`;
+        }
+        html += '</div></div>';
       }
-      if (r.fishCatch !== undefined) {
-        html += `<div class="region-metric"><div class="region-metric-value">${Math.round(r.fishCatch)}</div><div class="region-metric-label">鱼获</div></div>`;
-        html += `<div class="region-metric"><div class="region-metric-value">${r.tradeVolume || '—'}</div><div class="region-metric-label">贸易量</div></div>`;
-      }
-      html += '</div></div>';
     }
 
     container.innerHTML = html || '<div style="text-align:center;color:rgba(44,24,16,0.3);">暂无数据</div>';
@@ -3028,7 +3701,7 @@ async function loadWeatherPanel() {
     const data = await res.json();
 
     let html = `<div style="margin-bottom:16px;">
-      <div style="text-align:center;font-size:24px;">${getWeatherIcon(data.current)}</div>
+      <div style="text-align:center;font-size:32px;">${getWeatherIcon(data.current)}</div>
       <div style="text-align:center;font-family:'Noto Serif SC',serif;font-size:18px;font-weight:700;">当前: ${data.current}</div>
     </div>`;
 
@@ -3048,20 +3721,83 @@ async function loadWeatherPanel() {
       html += '</div>';
     }
 
+    // 天气趋势分析
+    html += '<div style="font-weight:700;font-size:13px;margin:12px 0 6px;">趋势分析</div>';
+    if (data.history && data.history.length >= 2) {
+      const history = data.history;
+      const last = history[history.length - 1];
+      const prev = history[history.length - 2];
+
+      // 判断趋势
+      const severity = { '晴': 0, '多云': 1, '小雨': 2, '暴雨': 3, '大暴雨': 4, '雪': 3 };
+      const lastSev = severity[last.weather] ?? 1;
+      const prevSev = severity[prev.weather] ?? 1;
+
+      // 统计连续相同天气
+      let consecutive = 1;
+      for (let i = history.length - 2; i >= 0; i--) {
+        if (history[i].weather === last.weather) consecutive++;
+        else break;
+      }
+
+      let trendText = '';
+      let trendIcon = '';
+      if (lastSev > prevSev) {
+        trendText = '天气恶化中';
+        trendIcon = '📉';
+      } else if (lastSev < prevSev) {
+        trendText = '天气好转中';
+        trendIcon = '📈';
+      } else {
+        trendText = '天气稳定';
+        trendIcon = '➡️';
+      }
+
+      html += `<div class="weather-trend-bar">
+        <span>${trendIcon}</span>
+        <span style="font-weight:700;">${trendText}</span>
+        <span style="color:rgba(44,24,16,0.4);font-size:11px;">${prev.weather} → ${last.weather}${consecutive > 1 ? `，连续${consecutive}回合${last.weather}` : ''}</span>
+      </div>`;
+
+      // 预警信息
+      const warnings = [];
+      if (last.weather === '暴雨' && consecutive >= 2) {
+        warnings.push({ level: 'danger', text: `⚠️ 连续${consecutive}回合暴雨 → 洪涝风险极高！农田可能严重受灾。` });
+      } else if (last.weather === '暴雨' && consecutive >= 1) {
+        warnings.push({ level: 'warn', text: '⚠️ 暴雨中 → 如果持续，下回合可能引发洪涝。' });
+      }
+      if (last.weather === '大暴雨') {
+        warnings.push({ level: 'danger', text: '🚨 大暴雨 → 农田严重受灾风险，户外NPC活动几乎停止。' });
+      }
+      if (last.weather === '雪' && consecutive >= 2) {
+        warnings.push({ level: 'warn', text: `❄️ 连续${consecutive}回合降雪 → 燃料需求激增，路面积雪难行。` });
+      }
+
+      if (warnings.length > 0) {
+        for (const w of warnings) {
+          html += `<div class="weather-warning ${w.level}">${w.text}</div>`;
+        }
+      } else {
+        html += '<div style="margin-top:8px;font-size:12px;color:rgba(44,24,16,0.35);">暂无预警</div>';
+      }
+    } else {
+      html += '<div style="font-size:12px;color:rgba(44,24,16,0.35);">需要更多数据才能分析趋势</div>';
+    }
+
     // 天气影响说明
     html += '<div style="margin-top:16px;font-size:12px;line-height:2;color:rgba(44,24,16,0.6);">';
     html += '<div style="font-weight:700;color:var(--ink);">天气影响</div>';
     const impacts = {
-      '晴': '户外活动正常，农业产量正常，货运畅通',
-      '多云': '户外活动正常，天气较为温和',
-      '小雨': '户外活动减少40%，鱼获略增，货运略缓',
-      '暴雨': '户外活动减少80%，农田可能受涝，货运中断',
-      '大暴雨': '户外活动减少90%，农田严重受灾，洪涝风险',
-      '雪': '户外活动减少60%，燃料需求猛增，路滑难行',
+      '晴': { desc: '户外活动正常，农业产量正常，货运畅通', areas: ['农田产量+0%', 'NPC户外活动正常', '经济影响无'] },
+      '多云': { desc: '户外活动正常，天气较为温和', areas: ['农田产量+0%', 'NPC户外活动正常', '经济影响无'] },
+      '小雨': { desc: '户外活动减少40%，鱼获略增，货运略缓', areas: ['农田水分+10%', 'NPC户外活动-40%', '鱼获+15%'] },
+      '暴雨': { desc: '户外活动减少80%，农田可能受涝，货运中断', areas: ['农田产量-30%~50%', 'NPC户外活动-80%', '货运中断'] },
+      '大暴雨': { desc: '户外活动减少90%，农田严重受灾，洪涝风险', areas: ['农田产量-50%~80%', 'NPC户外活动-90%', '洪涝风险极高'] },
+      '雪': { desc: '户外活动减少60%，燃料需求猛增，路滑难行', areas: ['农田产量-20%', 'NPC户外活动-60%', '燃料需求+200%'] },
     };
-    for (const [w, desc] of Object.entries(impacts)) {
+    for (const [w, info] of Object.entries(impacts)) {
       const isCurrent = w === data.current;
-      html += `<div style="${isCurrent ? 'color:var(--ink);font-weight:700;' : ''}">${getWeatherIcon(w)} ${w}: ${desc}</div>`;
+      html += `<div style="${isCurrent ? 'color:var(--ink);font-weight:700;padding:4px 8px;background:rgba(44,24,16,0.03);border-radius:4px;margin:2px 0;' : ''}">${getWeatherIcon(w)} ${w}: ${info.desc}</div>`;
     }
     html += '</div>';
 
@@ -3091,25 +3827,55 @@ async function loadPropagationPanel() {
     const active = data.chains.filter(c => c.active);
     const inactive = data.chains.filter(c => !c.active);
 
+    // 活跃消息
     if (active.length > 0) {
-      html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;">活跃消息</div>';
+      html += '<div class="prop-section-title">活跃消息</div>';
       for (const c of active) {
-        html += `<div class="chain-item">
-          <div>${c.message}</div>
-          <div class="chain-source">来源: ${c.source} · T${c.tick}</div>
-          <span class="chain-radius">${radiusLabels[c.spreadRadius] || `${c.spreadRadius}格`}</span>
-          <span class="cause-tag" style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:rgba(184,134,11,0.1);color:var(--gold);margin-left:4px;">${c.cause}</span>
+        // 保真度
+        let fidelity = c.fidelity ?? 100;
+        let fidelityClass = fidelity >= 80 ? 'high' : fidelity >= 50 ? 'mid' : 'low';
+        let fidelityText = fidelity >= 100 ? '完全准确' : fidelity >= 80 ? '部分细节丢失' : fidelity >= 50 ? '信息失真' : '严重失真';
+
+        // 传播路径
+        let pathHtml = '';
+        if (c.path && c.path.length > 0) {
+          pathHtml = '<div class="prop-path">';
+          for (let i = 0; i < c.path.length; i++) {
+            pathHtml += `<span class="prop-path-node">${c.path[i]}</span>`;
+            if (i < c.path.length - 1) pathHtml += '<span class="prop-path-arrow">→</span>';
+          }
+          pathHtml += '</div>';
+        } else if (c.source) {
+          pathHtml = `<div class="prop-path"><span class="prop-path-node">${c.source}</span><span class="prop-path-arrow">→</span><span class="prop-path-node">传播中…</span></div>`;
+        }
+
+        html += `<div class="prop-chain-card">
+          <div class="prop-msg">${c.message}</div>
+          <div class="prop-meta">
+            来源: <strong>${c.source}</strong> · 第${c.tick}回合 · 传播范围: ${radiusLabels[c.spreadRadius] || `${c.spreadRadius}格`}
+            ${c.knownCount !== undefined ? ` · 已知人数: <strong>${c.knownCount}</strong>` : ''}
+            <span class="prop-fidelity ${fidelityClass}">${fidelity}% ${fidelityText}</span>
+          </div>
+          ${pathHtml}
+          ${c.cause ? `<div style="font-size:10px;color:rgba(44,24,16,0.4);margin-top:4px;">原因: ${c.cause}</div>` : ''}
         </div>`;
       }
     }
 
+    // 历史已过期消息
     if (inactive.length > 0) {
-      html += '<div style="font-weight:700;font-size:13px;margin:12px 0 8px;color:rgba(44,24,16,0.4);">历史消息</div>';
-      for (const c of inactive.slice(-10)) {
-        html += `<div class="chain-item inactive">
-          <div>${c.message}</div>
-          <div class="chain-source">来源: ${c.source} · T${c.tick}</div>
+      html += '<div class="prop-section-title history">历史消息 (已不再传播)</div>';
+      const shownInactive = inactive.slice(-10).reverse();
+      let historyCollapsed = shownInactive.length > 3;
+      for (let i = 0; i < shownInactive.length; i++) {
+        const c = shownInactive[i];
+        html += `<div class="prop-chain-card inactive" ${i >= 3 && historyCollapsed ? 'style="display:none"' : ''} data-idx="${i}">
+          <div class="prop-msg">${c.message}</div>
+          <div class="prop-meta">来源: ${c.source} · 第${c.tick}回合 · 已过期</div>
         </div>`;
+      }
+      if (historyCollapsed) {
+        html += `<div class="event-detail-toggle" onclick="this.previousElementSibling.querySelectorAll('.prop-chain-card.inactive').forEach(c=>c.style.display='');this.remove();">展开查看全部 ${shownInactive.length} 条</div>`;
       }
     }
 
@@ -3123,12 +3889,14 @@ async function loadPropagationPanel() {
 async function loadEntities() {
   const type = document.getElementById('entity-filter-type').value;
   const lod = document.getElementById('entity-filter-lod').value;
+  const grid = document.getElementById('entity-filter-grid').value;
   const search = document.getElementById('entity-search').value;
 
   const params = new URLSearchParams();
   if (type) params.set('type', type);
   if (lod !== '') params.set('lod', lod);
-  if (search) params.set('search', search);
+  if (grid) params.set('grid', grid);
+  if (search) params.set('name', search);
   params.set('limit', entityPageSize);
   params.set('offset', entityPage * entityPageSize);
 
@@ -3137,8 +3905,23 @@ async function loadEntities() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     renderEntityTable(data);
+
+    // 结果计数
+    const countEl = document.getElementById('search-result-count');
+    if (countEl) countEl.textContent = `共找到 ${data.total} 个实体`;
   } catch (err) {
     document.getElementById('entity-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(44,24,16,0.3)">无法连接服务器</td></tr>';
+  }
+}
+
+function populateGridFilter() {
+  const select = document.getElementById('entity-filter-grid');
+  if (!select || select.options.length > 1) return;
+  for (const [id, name] of Object.entries(GRID_NAMES)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = name;
+    select.appendChild(opt);
   }
 }
 
@@ -3148,12 +3931,14 @@ function renderEntityTable(data) {
     const hungerColor = e.hunger >= 70 ? 'var(--jade)' : e.hunger >= 40 ? 'var(--gold)' : 'var(--vermillion)';
     const typeInfo = TYPE_LABELS[e.type] || { label: e.type, color: '#999' };
     const displayField = e.profession || (GRID_NAMES[e.grid] || e.grid) || '';
+    const lodLabel = e.lod !== undefined ? `L${e.lod}` : '';
+    const warning = e.hunger < 30 ? ' ⚠️' : '';
     return `<tr onclick="toggleEntityDetail(${e.id}, this)">
       <td>${e.id}</td>
       <td><span style="color:${typeInfo.color};font-weight:700">${typeInfo.label}</span></td>
       <td>${e.name || '—'}</td>
       <td style="font-size:11px">${displayField}</td>
-      <td><span style="color:${hungerColor};font-weight:700">${e.hunger >= 0 ? Math.round(e.hunger) : '—'}</span></td>
+      <td><span style="color:${hungerColor};font-weight:700">${e.hunger >= 0 ? Math.round(e.hunger) : '—'}${warning}</span></td>
       <td>${e.copper >= 0 ? e.copper + '文' : '—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:rgba(44,24,16,0.3)">无数据</td></tr>';
@@ -3163,7 +3948,7 @@ function renderEntityTable(data) {
   pagEl.innerHTML = `
     <button class="page-btn" onclick="entityPage=0;loadEntities()" ${entityPage === 0 ? 'disabled' : ''}>首页</button>
     <button class="page-btn" onclick="entityPage--;loadEntities()" ${entityPage === 0 ? 'disabled' : ''}>上一页</button>
-    <span style="color:rgba(44,24,16,0.5)">第 ${entityPage + 1} / ${totalPages} 页 · 共 ${data.total} 条</span>
+    <span style="color:rgba(44,24,16,0.5)">第 ${entityPage + 1} / ${totalPages || 1} 页 · 共 ${data.total} 条</span>
     <button class="page-btn" onclick="entityPage++;loadEntities()" ${entityPage >= totalPages - 1 ? 'disabled' : ''}>下一页</button>
   `;
 }
@@ -3187,7 +3972,33 @@ async function toggleEntityDetail(id, row) {
     const res = await fetch('/api/world/entity/' + id);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    preEl.textContent = JSON.stringify(data, null, 2);
+
+    // 格式化展示关键信息
+    const name = data.Identity?.name || data.components?.Identity?.name || '—';
+    const prof = data.Identity?.profession || data.components?.Identity?.profession || '';
+    const comps = data.components || {};
+    let detail = `ID: ${id} | ${name}${prof ? ' (' + prof + ')' : ''}\n`;
+    detail += `类型: ${data.type || '?'} | LOD: L${data.lod ?? '?'} | 位置: ${GRID_NAMES[data.gridId || data.Position?.gridId] || data.gridId || '?'}\n`;
+    detail += '─── 组件 ───\n';
+
+    for (const [key, val] of Object.entries(comps)) {
+      if (typeof val === 'object') {
+        detail += `\n[${key}]\n`;
+        for (const [k, v] of Object.entries(val)) {
+          if (Array.isArray(v)) {
+            detail += `  ${k}: ${JSON.stringify(v)}\n`;
+          } else if (typeof v === 'object' && v !== null) {
+            detail += `  ${k}: ${JSON.stringify(v)}\n`;
+          } else {
+            detail += `  ${k}: ${v}\n`;
+          }
+        }
+      } else {
+        detail += `${key}: ${val}\n`;
+      }
+    }
+
+    preEl.textContent = detail;
     row.after(detailEl);
   } catch (err) {
     preEl.textContent = '加载失败: ' + err.message;
