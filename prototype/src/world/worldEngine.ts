@@ -1153,7 +1153,7 @@ export class WorldEngine {
   }
 
   /** 回合模拟：全世界推进一回合 */
-  private simulateTurn(): {
+  simulateTurn(): {
     npcActions: number;
     priceChanges: Record<string, string>;
     causalEvents: CausalEvent[];

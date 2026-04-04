@@ -41,6 +41,9 @@ engine.regionSim.update('summer', 1.0);
 const propEngine = new PropagationEngine();
 propEngine.buildRandomRelations(gen.l0Ids, 3);
 
+// 初始世界模拟 — 生成第一批事件
+engine.simulateTurn();
+
 console.log(`\n世界初始化完成:`);
 console.log(`  总实体: ${gen.totalCount} (ECS 实体: ${engine.em.entityCount})`);
 console.log(`  L0 NPC: ${gen.l0Ids.length} | L1 NPC: ${gen.l1Ids.length}`);
