@@ -1,7 +1,7 @@
 // === 涌现式行为规则引擎 ===
 // 行为不再按类型硬编码，而是根据世界状态动态涌现
 
-import { ActionRule, InteractionContext, EntityAction } from '../server/protocol';
+import { ActionRule, InteractionContext, EntityAction, ActionFeedback } from '../server/protocol';
 
 // === 辅助函数 ===
 
@@ -557,29 +557,420 @@ export const EMERGENCE_RULES: ActionRule[] = [
       };
     },
   },
+
+  // ═══ 环境相关 ═══
+
+  // 13. 避雨
+  {
+    id: 'shelter', name: '避雨', icon: '☔', apCost: 0,
+    shouldAppear: (ctx) => ctx.world.weather === '暴雨' && ctx.world.nearbyEntities.some(e => e.type === 'building'),
+    canExecute: () => ({ met: true, reason: '' }),
+    describeEffects: () => '暴雨如注，快找个地方避一避',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你三步并作两步冲进最近的屋檐下，浑身已经湿透。雨点打在瓦片上噼啪作响，你拧了拧衣角的水，长舒一口气。',
+        '你贴着墙根跑到了一间店铺的廊下，抖落身上的雨水。旁边还有几个避雨的人，大家相视苦笑。',
+      ]),
+      moodChange: 2,
+    }),
+  },
+
+  // 14. 采摘（植物成熟）
+  {
+    id: 'gather_fruit', name: '采摘', icon: '✋', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'plant' && (ctx.target.growth?.stage ?? 0) >= 2,
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '采集成熟的果实',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你仔细采摘了一把果实，放进背包里。虽然不多，但聊胜于无。',
+        '你小心翼翼地摘下成熟的果子，品质还不错。阳光透过树叶洒下来，你觉得心里很踏实。',
+      ]),
+      itemsGained: [{ itemType: 'food', amount: randInt(1, 3) }],
+      fatigueChange: -3,
+    }),
+  },
+
+  // 15. 捕鱼
+  {
+    id: 'fish', name: '捕鱼', icon: '🎣', apCost: 2,
+    shouldAppear: (ctx) => {
+      const g = ctx.player.position.gridId;
+      return ['upstream', 'downstream', 'riverbank', 'dock'].includes(g);
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.vital.fatigue < 15) return { met: false, reason: '太累了' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => '寅卯'.includes(ctx.world.shichen) ? '清晨鱼多，好时候' : '试试能否有所收获',
+    execute: (ctx) => {
+      let chance = 0.5;
+      if ('寅卯'.includes(ctx.world.shichen)) chance += 0.2;
+      if (ctx.world.season === '冬') chance -= 0.3;
+      if (Math.random() < chance) {
+        return {
+          success: true,
+          message: pick([
+            '浮标猛地一沉！你眼疾手快，拉起鱼竿——一条大鱼跃出水面！你满意地笑了。',
+            '你耐心等了好一阵，终于感觉到了鱼咬钩的力道。小心翼翼地收线，收获不错。',
+          ]),
+          itemsGained: [{ itemType: 'food', amount: randInt(2, 6) }],
+          fatigueChange: -8,
+        };
+      }
+      return {
+        success: false,
+        message: pick([
+          '你守了半天，浮标纹丝不动。最终只收获了满身的蚊子包和一身疲惫。',
+          '好不容易等到浮标动了，你一拉——是个破草鞋。你叹了口气。',
+        ]),
+        fatigueChange: -5, moodChange: -3,
+      };
+    },
+  },
+
+  // 16. 拾取（物品）
+  {
+    id: 'pickup', name: '拾取', icon: '✋', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'item',
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '拾起物品放入背包',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你弯腰拾起了地上的物品。掸掉灰，仔细看了看——也许以后用得着。',
+        '这件物品躺在地上不起眼，但你被吸引了。捡起来掂了掂，放进背包里。',
+      ]),
+      itemsGained: [{ itemType: 'misc', amount: 1 }],
+      moodChange: 1,
+    }),
+  },
+
+  // 17. 翻找（山区建筑）
+  {
+    id: 'scavenge', name: '翻找', icon: '🔍', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'building' && ctx.target.position?.areaId === 'mountain',
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '翻翻看有没有有用的东西',
+    execute: () => {
+      if (Math.random() < 0.4) {
+        return {
+          success: true,
+          message: pick([
+            '你在角落里翻到了一个布满灰尘的木箱。撬开一看——里面有几枚铜板和一卷发黄的纸。',
+            '一堆破烂下面，你摸到了一个还算完整的陶罐。晃了晃，里面有东西响。',
+          ]),
+          copperChange: randInt(5, 25),
+        };
+      }
+      return {
+        success: false,
+        message: pick([
+          '你翻了个遍，只找到些腐烂的木头和蛛网。白忙活一场。',
+          '灰尘呛得你直咳嗽，翻了半天一无所获。这座废弃的小屋已经被掏空了。',
+        ]),
+      };
+    },
+  },
+
+  // ═══ 动物相关 ═══
+
+  // 18. 投喂
+  {
+    id: 'feed_animal', name: '投喂', icon: '🌾', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'animal' && ctx.player.inventory.items.some(i => i.itemType === 'food'),
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '喂食动物，增进亲近感',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你蹲下身，把食物慢慢递过去。小家伙犹豫了一下，小心翼翼地凑上来吃了。',
+        '动物嗅了嗅你手里的食物，大着胆子吃了起来。吃完还蹭了蹭你的手。',
+      ]),
+      itemsLost: [{ itemType: 'food', amount: 1 }],
+      impressionChange: 5, moodChange: 3,
+    }),
+  },
+
+  // 19. 驱赶
+  {
+    id: 'chase_away', name: '驱赶', icon: '💨', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'animal') return false;
+      const a = ctx.target.position?.areaId;
+      return a === 'farmland' || ['residential_north', 'residential_south'].includes(ctx.target.position?.gridId || '');
+    },
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '把这只动物赶走',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你挥着手大喊："去！去！"动物被你吓了一跳，撒腿就跑。',
+        '"嘘——走开！"你拍着手驱赶。动物不情不愿地挪开，回头看了你一眼。',
+      ]),
+      moodChange: 1,
+    }),
+  },
+
+  // 20. 跟踪
+  {
+    id: 'track_animal', name: '跟踪', icon: '🐾', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'animal' && Math.random() < 0.5,
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '悄悄跟上，看看它要去哪里',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你蹑手蹑脚地跟了上去。动物七拐八绕，最终钻进了一片灌木丛。',
+        '跟着它走了好一段路，来到了一处你从没到过的地方。动物早已不见踪影。',
+      ]),
+      fatigueChange: -3, moodChange: 2,
+    }),
+  },
+
+  // 21. 观察（动物）
+  {
+    id: 'observe_animal', name: '观察', icon: '👁', apCost: 0,
+    shouldAppear: (ctx) => ctx.target.type === 'animal',
+    canExecute: () => ({ met: true, reason: '' }),
+    describeEffects: () => '仔细观察这只动物的习性',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你安静地蹲在一旁观察。它在地上刨了刨，似乎在找虫子吃。动作灵敏，警惕性很高。',
+        '这只动物毛色光亮，看起来状态不错。它时而低头觅食，时而抬头张望。',
+      ]),
+    }),
+  },
+
+  // 22. 捕猎
+  {
+    id: 'hunt', name: '捕猎', icon: '🏹', apCost: 2,
+    shouldAppear: (ctx) => ctx.target.type === 'animal',
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.vital.fatigue < 15) return { met: false, reason: '太累了' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '尝试捕获或猎杀',
+    execute: (ctx) => {
+      const chance = 0.4 + ctx.player.vital.fatigue / 200;
+      if (Math.random() < chance) {
+        return {
+          success: true,
+          message: pick([
+            '你屏息凝神，猛地出手——抓到了！今晚有肉吃了。',
+            '一番追逐之后，你终于把它逼到了死角。干净利落地解决。',
+          ]),
+          itemsGained: [{ itemType: 'food', amount: randInt(2, 5) }],
+          fatigueChange: -12, moodChange: 5,
+        };
+      }
+      return {
+        success: false,
+        message: pick([
+          '你扑了上去，但它比你想象的敏捷得多——一个闪身就溜走了。你扑了个空。',
+          '追了好一阵子，这畜生东拐西绕，最终钻进了一个你进不去的洞里。',
+        ]),
+        fatigueChange: -8, moodChange: -3,
+      };
+    },
+  },
+
+  // 23. 驯服
+  {
+    id: 'tame', name: '驯服', icon: '🤲', apCost: 3,
+    shouldAppear: (ctx) => ctx.target.type === 'animal',
+    canExecute: (ctx) => ctx.player.ap < 3 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '尝试驯化（需多次尝试）',
+    execute: () => {
+      if (Math.random() < 0.25) {
+        return {
+          success: true,
+          message: pick([
+            '你耐心地慢慢靠近，轻声细语地安抚。它终于让你摸到了它的头。这一刻，你感觉它接纳了你。',
+            '经过反复尝试，它终于不再抗拒你的靠近了。它甚至主动蹭了蹭你的手。',
+          ]),
+          impressionChange: 15, moodChange: 8,
+        };
+      }
+      return {
+        success: false,
+        message: pick([
+          '它对你依然充满戒备，你一靠近它就跑开了。驯服需要时间和耐心。',
+          '你试图靠近，但它警惕地退后了几步，还朝你嘶了一声。',
+        ]),
+        fatigueChange: -3,
+      };
+    },
+  },
+
+  // ═══ 建筑/植物/矿物/物品 补充 ═══
+
+  // 24. 进入建筑
+  {
+    id: 'enter_building', name: '进入', icon: '🚪', apCost: 0,
+    shouldAppear: (ctx) => ctx.target.type === 'building',
+    canExecute: () => ({ met: true, reason: '' }),
+    describeEffects: () => '进入建筑内部',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你推开门走了进去。里面比外面凉快些，光线透过窗户洒进来。',
+        '你迈步走进去，门吱呀一声。里面隐约传来人声和器物碰撞的声音。',
+      ]),
+    }),
+  },
+
+  // 25. 打听（建筑附近）
+  {
+    id: 'ask_around', name: '打听', icon: '👂', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'building',
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '向周围的人打听消息',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '有人悄悄告诉你：最近粮价涨了不少，听说南郊遭了虫灾。',
+        '一个老者对你说："年轻人，最近城里不太平，晚上别出门。"',
+        '闲聊中得知：东市的药铺进了批好药材，有需要趁早去。',
+        '有人说码头来了条大船，运的全是丝绸。',
+      ]),
+      impressionChange: 1, moodChange: 2,
+    }),
+  },
+
+  // 26. 砍伐植物
+  {
+    id: 'chop', name: '砍伐', icon: '🪓', apCost: 2,
+    shouldAppear: (ctx) => ctx.target.type === 'plant',
+    canExecute: (ctx) => ctx.player.ap < 2 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '获取木材',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你抡起斧头砍了下去。木屑飞溅，终于放倒了一棵。你擦擦汗，把木材整理好。',
+        '一声声斧砍声中，木头终于倒下。你把木材劈成段，绑成一捆。虽然累，但很有成就感。',
+      ]),
+      itemsGained: [{ itemType: 'material', amount: randInt(2, 5) }],
+      fatigueChange: -15,
+    }),
+  },
+
+  // 27. 浇水
+  {
+    id: 'water_plant', name: '浇水', icon: '💧', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'plant' && (ctx.target.growth?.stage ?? 0) < 2,
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '浇水促进生长',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你从河边打了一桶水，仔细地浇在根部。植物在微风中轻轻摇曳，似乎在感谢你。',
+        '水慢慢渗入泥土，你看着植物叶片上挂着的水珠，心里有种踏实的感觉。',
+      ]),
+      moodChange: 2,
+    }),
+  },
+
+  // 28. 采集植物
+  {
+    id: 'gather', name: '采集', icon: '🌿', apCost: 1,
+    shouldAppear: (ctx) => ctx.target.type === 'plant',
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: () => '采集一些材料',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你弯腰采集了一些有用的植物材料。仔细分拣后放进背包，不时能闻到淡淡的草药香气。',
+        '你小心翼翼地采下几株，抖掉根上的泥土。虽然不是什么珍稀药材，但日常生活中总能用得上。',
+      ]),
+      itemsGained: [{ itemType: 'herbs', amount: randInt(1, 3) }],
+      fatigueChange: -2,
+    }),
+  },
+
+  // 29. 开采矿物
+  {
+    id: 'mine', name: '开采', icon: '⛏', apCost: 3,
+    shouldAppear: (ctx) => ctx.target.type === 'mineral',
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 3) return { met: false, reason: '行动点不足' };
+      if (ctx.player.vital.fatigue < 20) return { met: false, reason: '太累了' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '深度开采矿石',
+    execute: () => {
+      if (Math.random() < 0.7) {
+        return {
+          success: true,
+          message: pick([
+            '一镐下去，碎石飞溅。你仔细分辨——含铜量还不错！继续挖了好一阵，收获了一堆矿石。',
+            '叮叮当当一阵之后，你终于撬出了一块不错的矿石。在阳光下闪着金属光泽，分量十足。',
+          ]),
+          itemsGained: [{ itemType: 'mineral', amount: randInt(1, 4) }],
+          fatigueChange: -20, moodChange: 3,
+        };
+      }
+      return {
+        success: false,
+        message: pick([
+          '挖了半天全是废石。你的虎口都震裂了，却一无所获。',
+          '镐头打到硬石上弹了回来，震得你手发麻。这块石头下面没什么有价值的东西。',
+        ]),
+        fatigueChange: -15, moodChange: -5,
+      };
+    },
+  },
+
+  // 30. 检查物品
+  {
+    id: 'inspect', name: '检查', icon: '🔍', apCost: 0,
+    shouldAppear: (ctx) => ctx.target.type === 'item',
+    canExecute: () => ({ met: true, reason: '' }),
+    describeEffects: () => '仔细查看这个物品',
+    execute: () => ({
+      success: true,
+      message: pick([
+        '你拿起来仔细端详。做工还算精细，上面刻着模糊的花纹。似乎有些年头了。',
+        '翻来覆去看了看——普普通通的物件，但保养得不错。也许值几个钱。',
+        '你掂了掂分量，又闻了闻。没什么特殊的，但也许对某些人有价值。',
+      ]),
+      moodChange: 1,
+    }),
+  },
 ];
 
 /** 获取所有在当前上下文中涌现的行为 */
 export function getEmergentActions(ctx: InteractionContext): EntityAction[] {
   const actions: EntityAction[] = [];
-
-  for (const rule of EMERGENCE_RULES){
+  for (const rule of EMERGENCE_RULES) {
     try {
       if (!rule.shouldAppear(ctx)) continue;
-
-      const conditionResult = rule.canExecute(ctx);
       actions.push({
         id: rule.id,
         name: rule.name,
         icon: rule.icon,
         apCost: rule.apCost,
-        conditions: conditionResult,
+        conditions: rule.canExecute(ctx),
         effects: rule.describeEffects(ctx),
       });
     } catch (e) {
       continue;
     }
   }
-
   return actions;
+}
+
+/** 执行涌现行为 */
+export function executeEmergentAction(actionId: string, ctx: InteractionContext): ActionFeedback | null {
+  const rule = EMERGENCE_RULES.find(r => r.id === actionId);
+  if (!rule || !rule.execute) return null;
+  return rule.execute(ctx);
 }

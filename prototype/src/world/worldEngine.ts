@@ -18,7 +18,7 @@ import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
 import { VitalComponent, WalletComponent, PositionComponent } from '../ecs/types';
 import { InteractionContext } from '../server/protocol';
-import { getEmergentActions } from './emergenceRules';
+import { getEmergentActions, executeEmergentAction } from './emergenceRules';
 
 // === 世界事件日志（含因果链） ===
 export interface WorldEvent {

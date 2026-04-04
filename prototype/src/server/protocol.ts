@@ -177,3 +177,16 @@ export interface BenchmarkItem {
   passed: boolean;
   detail?: string;
 }
+
+// === 涌现行为执行反馈 ===
+export interface ActionFeedback {
+  success: boolean;
+  message: string;
+  impressionChange?: number;
+  moodChange?: number;
+  copperChange?: number;
+  healthChange?: number;
+  fatigueChange?: number;
+  itemsGained?: { itemType: string; amount: number }[];
+  itemsLost?: { itemType: string; amount: number }[];
+}
