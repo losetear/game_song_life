@@ -19,6 +19,7 @@ import { SceneOption, TurnBriefing } from '../server/protocol';
 import { VitalComponent, WalletComponent, PositionComponent } from '../ecs/types';
 import { InteractionContext } from '../server/protocol';
 import { getEmergentActions, executeEmergentAction } from './emergenceRules';
+import { MAP_CONNECTIONS, GRID_NAMES, GRID_ICONS } from './mapData';
 
 // === 世界事件日志（含因果链） ===
 export interface WorldEvent {
@@ -815,6 +816,66 @@ export class WorldEngine {
     };
   }
 
+  /** 获取 Grid 显示名 */
+  getGridDisplayName(gridId: string): string {
+    return GRID_NAMES[gridId] || gridId;
+  }
+
+  /** 获取 Grid 所属区域 */
+  private getAreaForGrid(gridId: string): string {
+    const AREA_MAP: Record<string, string> = {
+      center_street: 'city', east_market: 'city', west_market: 'city',
+      dock: 'city', cloth_shop: 'city', tea_house: 'city',
+      government: 'city', temple: 'city',
+      residential_north: 'city', residential_south: 'city',
+      east_farm: 'farmland', south_farm: 'farmland', irrigation: 'farmland',
+      shallow_mountain: 'mountain', deep_mountain: 'mountain',
+      stream: 'mountain', mountain_village: 'mountain',
+      upstream: 'river', downstream: 'river', riverbank: 'river',
+    };
+    return AREA_MAP[gridId] || 'city';
+  }
+
+  /** 获取当前位置的移动选项 */
+  getMovementOptions(playerId: number): { id: string; name: string; icon: string; targetGrid: string; type: string }[] {
+    const pos = this.em.getComponent(playerId, 'Position');
+    const currentGrid = pos?.gridId || 'center_street';
+
+    const options: { id: string; name: string; icon: string; targetGrid: string; type: string }[] = [];
+
+    // 1. 相邻地点（从 MAP_CONNECTIONS）
+    const connections = MAP_CONNECTIONS[currentGrid] || [];
+    for (const targetGrid of connections) {
+      options.push({
+        id: `go_${targetGrid}`,
+        name: GRID_NAMES[targetGrid] || targetGrid,
+        icon: GRID_ICONS[targetGrid] || '📍',
+        targetGrid,
+        type: 'move',
+      });
+    }
+
+    // 2. 当前位置的可进入建筑（从真实实体）
+    const entities = this.worldMap.getEntitiesInGrid(currentGrid);
+    for (const eid of entities) {
+      if (this.em.getType(eid) === 'building') {
+        const building = this.em.getComponent(eid, 'Building');
+        const identity = this.em.getComponent(eid, 'Identity');
+        if (building) {
+          options.push({
+            id: `enter_building_${eid}`,
+            name: `进入${identity?.name || '建筑'}`,
+            icon: '🚪',
+            targetGrid: `${currentGrid}`,
+            type: 'enter',
+          });
+        }
+      }
+    }
+
+    return options;
+  }
+
   /** 获取类型显示图标 */
   private getTypeIcon(id: number, type: string | undefined): string {
     switch (type) {
@@ -1191,8 +1252,13 @@ export class WorldEngine {
     };
     const startTotal = performance.now();
 
-    // 确保 AP 组件存在
-    this.resetAP(playerId);
+    // 确保 AP 组件存在（仅当没有时才初始化）
+    {
+      const ap = this.em.getComponent(playerId, 'ActionPoints');
+      if (!ap) {
+        this.em.addComponent(playerId, 'ActionPoints', { current: this.AP_PER_TURN, max: this.AP_PER_TURN });
+      }
+    }
 
     // 检查 AP（移动类和特殊行动消耗不同 AP）
     const apCost = this.getActionAPCost(actionId);
@@ -1405,7 +1471,10 @@ export class WorldEngine {
 
   /** 获取行动的 AP 消耗 */
   private getActionAPCost(actionId: string): number {
-    // 移动类行动消耗 0 AP
+    // 通用移动消耗 0 AP
+    if (actionId === 'move') return 0;
+
+    // 旧移动类行动消耗 0 AP
     const freeActions = ['go_center', 'go_east_market', 'go_tea_house', 'go_dock', 'go_residential',
       'enter_cloth_shop', 'enter_pharmacy', 'leave_cloth_shop', 'leave_pharmacy', 'leave_home'];
     if (freeActions.includes(actionId)) return 0;
@@ -1438,6 +1507,20 @@ export class WorldEngine {
     const inventory = this.em.getComponent(playerId, 'Inventory');
 
     switch (actionId) {
+      // ---- 通用移动 ----
+      case 'move': {
+        const targetGrid = params?.targetGrid;
+        if (pos && targetGrid && MAP_CONNECTIONS[pos.gridId]?.includes(targetGrid)) {
+          const areaId = this.getAreaForGrid(targetGrid);
+          this.worldMap.moveEntity(playerId, targetGrid);
+          pos.gridId = targetGrid;
+          pos.areaId = areaId;
+          this.logEvent('player', '移动', `你来到了${GRID_NAMES[targetGrid] || targetGrid}`);
+          return `你来到了${GRID_NAMES[targetGrid] || targetGrid}。`;
+        }
+        return '无法移动到该地点。';
+      }
+
       // ---- 中心大街 ----
       case 'buy_food': {
         if (!wallet || wallet.copper < 5) return '铜板不够';
@@ -1586,10 +1669,68 @@ export class WorldEngine {
         return '你锁好门，走上街去。';
       }
 
-      default:
-        // 尝试处理基于实体的交互行动
+      default: {
+        // 1. 先尝试涌现规则
+        const targetId = params?.targetId ? Number(params.targetId) : 0;
+        if (targetId && this.em.isAlive(targetId)) {
+          const ctx = this.buildInteractionContext(playerId, targetId);
+          const feedback = executeEmergentAction(actionId, ctx);
+          if (feedback) {
+            this.applyActionFeedback(playerId, targetId, feedback);
+            return feedback.message;
+          }
+        }
+
+        // 2. 再尝试旧的行为系统
         return this.executeEntityAction(playerId, actionId, params, vital, wallet, pos);
+      }
     }
+  }
+
+  /** 将涌现规则的反馈应用到世界状态 */
+  private applyActionFeedback(playerId: number, targetId: number, feedback: any): void {
+    const playerVital = this.em.getComponent(playerId, 'Vital');
+    const playerWallet = this.em.getComponent(playerId, 'Wallet');
+    const playerInventory = this.em.getComponent(playerId, 'Inventory');
+
+    // 玩家状态变更
+    if (feedback.moodChange && playerVital) {
+      playerVital.mood = Math.max(0, Math.min(100, playerVital.mood + feedback.moodChange));
+    }
+    if (feedback.healthChange && playerVital) {
+      playerVital.health = Math.max(0, Math.min(100, playerVital.health + feedback.healthChange));
+    }
+    if (feedback.fatigueChange && playerVital) {
+      playerVital.fatigue = Math.max(0, Math.min(100, playerVital.fatigue + feedback.fatigueChange));
+    }
+    if (feedback.copperChange && playerWallet) {
+      playerWallet.copper = Math.max(0, playerWallet.copper + feedback.copperChange);
+    }
+    if (feedback.itemsGained && playerInventory) {
+      playerInventory.items.push(...feedback.itemsGained);
+    }
+    if (feedback.itemsLost && playerInventory) {
+      for (const lost of feedback.itemsLost) {
+        const idx = playerInventory.items.findIndex((i: any) => i.itemType === lost.itemType);
+        if (idx !== -1) {
+          playerInventory.items[idx].amount -= lost.amount;
+          if (playerInventory.items[idx].amount <= 0) {
+            playerInventory.items.splice(idx, 1);
+          }
+        }
+      }
+    }
+
+    // NPC 好感度变更
+    if (feedback.impressionChange && targetId) {
+      const targetMemory = this.em.getComponent(targetId, 'Memory');
+      if (targetMemory) {
+        targetMemory.impressions[String(playerId)] = (targetMemory.impressions[String(playerId)] || 0) + feedback.impressionChange;
+      }
+    }
+
+    // 记录事件
+    this.logEvent('player', '交互', (feedback.message || '').substring(0, 50));
   }
 
   /** 执行基于实体的交互行动 — 涌现式丰富反馈 */

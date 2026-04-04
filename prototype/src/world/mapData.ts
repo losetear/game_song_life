@@ -1,0 +1,73 @@
+// === 地图连接与名称数据 ===
+
+/** 地点中文名映射 */
+export const GRID_NAMES: Record<string, string> = {
+  'center_street': '中心大街',
+  'east_market': '东市',
+  'west_market': '西市',
+  'dock': '汴河码头',
+  'cloth_shop': '锦绣布庄',
+  'tea_house': '清风茶楼',
+  'government': '府衙',
+  'temple': '护国寺',
+  'residential_north': '北居民区',
+  'residential_south': '南居民区',
+  'east_farm': '东郊农田',
+  'south_farm': '南郊农田',
+  'irrigation': '灌溉渠',
+  'shallow_mountain': '浅山',
+  'deep_mountain': '深山',
+  'stream': '溪涧',
+  'mountain_village': '山村',
+  'upstream': '河上游',
+  'downstream': '河下游',
+  'riverbank': '河岸',
+};
+
+/** 地图连接关系（从 area.ts 的 GRID_ADJACENCY 同步） */
+export const MAP_CONNECTIONS: Record<string, string[]> = {
+  center_street: ['east_market', 'west_market', 'tea_house', 'government'],
+  east_market: ['center_street', 'dock', 'cloth_shop', 'east_farm'],
+  west_market: ['center_street', 'residential_south', 'south_farm'],
+  dock: ['east_market', 'upstream', 'downstream'],
+  cloth_shop: ['east_market', 'residential_north'],
+  tea_house: ['center_street', 'government', 'residential_north'],
+  government: ['center_street', 'tea_house', 'temple'],
+  temple: ['government', 'residential_north', 'shallow_mountain'],
+  residential_north: ['cloth_shop', 'tea_house', 'temple', 'mountain_village'],
+  residential_south: ['west_market', 'south_farm', 'irrigation'],
+  east_farm: ['east_market', 'irrigation', 'south_farm'],
+  south_farm: ['west_market', 'residential_south', 'east_farm', 'irrigation'],
+  irrigation: ['south_farm', 'east_farm', 'riverbank'],
+  shallow_mountain: ['temple', 'mountain_village', 'deep_mountain', 'stream'],
+  deep_mountain: ['shallow_mountain', 'stream'],
+  stream: ['shallow_mountain', 'deep_mountain', 'upstream', 'mountain_village'],
+  mountain_village: ['residential_north', 'shallow_mountain', 'stream'],
+  upstream: ['dock', 'stream', 'riverbank'],
+  downstream: ['dock', 'riverbank'],
+  riverbank: ['irrigation', 'upstream', 'downstream'],
+};
+
+/** 地点图标 */
+export const GRID_ICONS: Record<string, string> = {
+  'center_street': '🏛',
+  'east_market': '🏪',
+  'west_market': '🏪',
+  'dock': '⚓',
+  'cloth_shop': '🏪',
+  'tea_house': '🍵',
+  'government': '🏛',
+  'temple': '⛩',
+  'residential_north': '🏘',
+  'residential_south': '🏘',
+  'east_farm': '🌾',
+  'south_farm': '🌾',
+  'irrigation': '💧',
+  'shallow_mountain': '⛰',
+  'deep_mountain': '🏔',
+  'stream': '🏞',
+  'mountain_village': '🏘',
+  'upstream': '🌊',
+  'downstream': '🌊',
+  'riverbank': '🏖',
+};

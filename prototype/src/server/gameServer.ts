@@ -368,6 +368,19 @@ export class GameServer {
       }
     });
 
+    // GET /api/world/move-options — 获取当前位置的移动选项
+    this.app.get('/api/world/move-options', (_req, res) => {
+      try {
+        if (this.playerId === 0) this.ensurePlayer();
+        const options = this.engine.getMovementOptions(this.playerId);
+        const pos = this.engine.em.getComponent(this.playerId, 'Position');
+        const currentGrid = pos?.gridId || 'center_street';
+        res.json({ currentGrid, currentName: this.engine.getGridDisplayName(currentGrid), options });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
     // GET /api/world/entity/:id/actions — 获取实体可用行为
     this.app.get('/api/world/entity/:id/actions', (req, res) => {
       try {
@@ -502,6 +515,7 @@ export class GameServer {
       console.log(`   GET  /api/world/npc/:id/history → NPC历史`);
       console.log(`   GET  /api/world/npc/:id/relations → NPC关系`);
       console.log(`   GET  /api/world/nearby       → 周围实体`);
+      console.log(`   GET  /api/world/move-options → 移动选项`);
       console.log(`   GET  /api/world/entity/:id/actions → 实体行为`);
       console.log(`   POST /api/end-turn           → 结束回合`);
       console.log(`   WebSocket           → 游戏交互`);

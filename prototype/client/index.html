@@ -844,6 +844,37 @@ body::before {
   white-space: nowrap;
 }
 
+/* 移动选项面板 */
+.move-section {
+  margin-top: 4px;
+}
+.move-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.move-option {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--paper-light);
+  border: 1.5px solid rgba(44, 24, 16, 0.08);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 12px;
+  color: rgba(44, 24, 16, 0.7);
+}
+.move-option:hover {
+  border-color: var(--jade);
+  background: rgba(46, 139, 87, 0.06);
+  color: var(--jade);
+}
+.move-option:active { transform: scale(0.95); }
+.move-option .move-icon { font-size: 16px; }
+
 /* 实体详情卡片 */
 .entity-detail-card {
   display: none;
@@ -2055,6 +2086,12 @@ body::before {
           <!-- Dynamic nearby entities -->
         </div>
       </div>
+      <div class="move-section" id="move-section" style="display:none">
+        <div class="nearby-title">【 去向 】</div>
+        <div class="move-grid" id="move-grid">
+          <!-- Dynamic move options -->
+        </div>
+      </div>
       <div class="entity-detail-card" id="entity-detail-card">
         <div class="entity-detail-header">
           <div class="detail-icon" id="detail-icon"></div>
@@ -2831,6 +2868,7 @@ function handleServerResponse(msg) {
   }
   // Refresh nearby entities after action
   setTimeout(() => loadNearbyEntities(), 300);
+  setTimeout(() => loadMoveOptions(), 400);
 }
 
 function renderTurnSummary(summary, distantNews) {
@@ -2996,6 +3034,7 @@ function handleWelcome(msg) {
   }
   addLog('✅ 已连接服务器，欢迎来到汴京！');
   loadNearbyEntities();
+  loadMoveOptions();
 }
 
 function renderServerOptions(options) {
@@ -3233,6 +3272,68 @@ function loadNearbyEntities() {
     .catch(() => {});
 }
 
+function loadMoveOptions() {
+  fetch('/api/world/move-options')
+    .then(r => r.json())
+    .then(data => {
+      const section = document.getElementById('move-section');
+      const grid = document.getElementById('move-grid');
+      if (!section || !grid) return;
+
+      // Update location display
+      if (data.currentName) {
+        document.getElementById('scene-location').textContent = `汴京 · ${data.currentName}`;
+      }
+
+      const options = data.options || [];
+      if (options.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+      grid.innerHTML = options.map(o => `
+        <div class="move-option" onclick="doMove('${o.targetGrid}', '${o.name}')">
+          <span class="move-icon">${o.icon}</span>
+          <span>${o.name}</span>
+        </div>
+      `).join('');
+    })
+    .catch(() => {});
+}
+
+function doMove(targetGrid, name) {
+  if (connStatus === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
+    seqId++;
+    ws.send(JSON.stringify({ type: 'action', actionId: 'move', params: { targetGrid }, seqId }));
+    addLog(`→ 前往 ${name}`);
+    return;
+  }
+  // Fallback: REST API
+  fetch('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actionId: 'move', params: { targetGrid } })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const msg = data.message || `你来到了${name}。`;
+    showActionFeedback(msg, false);
+    if (data.playerState) {
+      showStatChanges(data.playerState);
+      updatePlayerState(data.playerState);
+    }
+    if (data.worldState) updateWorldState(data.worldState);
+    if (data.options) renderServerOptions(data.options);
+    if (data.turnSummary) renderTurnSummary(data.turnSummary, data.distantNews);
+    if (data.briefing) renderBriefing(data.briefing);
+    closeEntityDetail();
+    loadNearbyEntities();
+    loadMoveOptions();
+    addLog(`前往 ${name}`);
+  })
+  .catch(() => {});
+}
+
 function renderNearbyEntities() {
   const grid = document.getElementById('nearby-grid');
   if (!grid) return;
@@ -3428,6 +3529,7 @@ function doEntityAction(actionId, targetId, btn) {
       setTimeout(() => loadEntityActions(selectedEntityId), 300);
     }
     setTimeout(() => loadNearbyEntities(), 300);
+    setTimeout(() => loadMoveOptions(), 400);
 
     addLog(`← ${msg.substring(0, 50)}${msg.length > 50 ? '...' : ''}`);
   })
@@ -3528,6 +3630,7 @@ function handleEndTurnResult(data) {
   if (data.turnSummary) renderTurnSummary(data.turnSummary, data.distantNews);
   closeEntityDetail();
   loadNearbyEntities();
+  loadMoveOptions();
   addLog('⏳ 回合结束，世界继续运转');
 }
 
@@ -3670,6 +3773,7 @@ function localSimulate(actionId) {
   if (text) showActionFeedback(stripHtml(text), false);
   renderOptions();
   loadNearbyEntities();
+  loadMoveOptions();
   addLog(`${actionId} | 饱腹:${playerState.hunger} 精力:${playerState.fatigue} 钱:${playerState.copper}`);
 }
 
@@ -4768,6 +4872,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderEntityBreakdown();
   renderStatus();
   loadNearbyEntities();
+  loadMoveOptions();
 });
 </script>
 </body>
