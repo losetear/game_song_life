@@ -992,6 +992,14 @@ body::before {
 .float-reward.positive { color: var(--jade); }
 .float-reward.negative { color: var(--vermillion); }
 
+/* Action button success/fail feedback */
+.action-btn.success { animation: actionSuccess 0.3s ease-out; }
+.action-btn.failed { animation: actionFail 0.3s ease-out; }
+
+/* AP exhausted */
+.ap-empty { color: var(--vermillion) !important; }
+.end-turn-pulse { animation: pulse 1s infinite; }
+
 /* 打字机效果 */
 .typewriter-cursor {
   display: inline-block;
@@ -2794,12 +2802,17 @@ function handleServerResponse(msg) {
     renderServerOptions(data.options);
   }
   if (data.playerState) {
+    showStatChanges(data.playerState);
     const oldCopper = playerState.copper;
     updatePlayerState(data.playerState);
     if (data.playerState.copper !== undefined && data.playerState.copper !== oldCopper) {
       const diff = data.playerState.copper - oldCopper;
       showFloatingReward(diff > 0 ? `+${diff}文` : `${diff}文`, diff > 0);
     }
+    // Flash action button
+    const sceneMsg = data.sceneDescription || data.message || '';
+    const isFail = /失败|不够|被发|拒绝|没找到|跑掉|没有|没偷到|空/.test(sceneMsg);
+    flashLastActionBtn(!isFail);
   }
   if (data.worldState) {
     updateWorldState(data.worldState);
@@ -3130,13 +3143,24 @@ function renderStatus() {
   document.getElementById('sv-copper').textContent = playerState.copper;
 
   // AP display
-  document.getElementById('sv-ap').textContent = playerState.ap;
+  const apEl = document.getElementById('sv-ap');
+  apEl.textContent = playerState.ap;
   document.getElementById('sv-ap-max').textContent = playerState.apMax;
 
-  // End turn button blinking when AP is 0
+  // AP exhausted visual
+  const apDisplay = apEl.closest('.ap-display');
+  if (playerState.ap <= 0) {
+    apEl.classList.add('ap-empty');
+    if (apDisplay) apDisplay.classList.add('ap-empty');
+  } else {
+    apEl.classList.remove('ap-empty');
+    if (apDisplay) apDisplay.classList.remove('ap-empty');
+  }
+
+  // End turn button pulse when AP is 0
   const endTurnBtn = document.getElementById('end-turn-btn');
   if (endTurnBtn) {
-    endTurnBtn.classList.toggle('blinking', playerState.ap <= 0);
+    endTurnBtn.classList.toggle('end-turn-pulse', playerState.ap <= 0);
   }
 }
 
@@ -3145,6 +3169,59 @@ function renderStatus() {
 // ============================================================
 let nearbyEntities = [];
 let selectedEntityId = null;
+let lastClickedActionBtn = null;
+
+/** Show floating stat change near a status element */
+function showFloatingStat(targetElId, text, isPositive) {
+  const el = document.createElement('div');
+  el.className = `float-reward ${isPositive ? 'positive' : 'negative'}`;
+  el.textContent = text;
+  const target = document.getElementById(targetElId);
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    el.style.left = rect.left + 'px';
+    el.style.top = (rect.top - 10) + 'px';
+  }
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1300);
+}
+
+/** Show floating numbers for all changed stats (before playerState is updated) */
+function showStatChanges(changes) {
+  const statMap = {
+    hunger: { el: 'sv-hunger', icon: '🍖' },
+    fatigue: { el: 'sv-fatigue', icon: '💤' },
+    health: { el: 'sv-health', icon: '❤️' },
+    mood: { el: 'sv-mood', icon: '😊' },
+  };
+  for (const [key, info] of Object.entries(statMap)) {
+    if (changes[key] !== undefined && playerState[key] !== undefined) {
+      const diff = changes[key] - playerState[key];
+      if (Math.abs(diff) >= 1) {
+        const label = diff > 0 ? `+${Math.round(diff)}` : `${Math.round(diff)}`;
+        showFloatingStat(info.el, `${info.icon}${label}`, diff > 0);
+      }
+    }
+  }
+}
+
+/** Strip HTML tags to get plain text */
+function stripHtml(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || '';
+}
+
+/** Flash the last clicked action button with success/fail animation */
+function flashLastActionBtn(isSuccess) {
+  if (!lastClickedActionBtn) return;
+  const btn = lastClickedActionBtn;
+  btn.classList.remove('success', 'failed');
+  void btn.offsetWidth; // force reflow
+  btn.classList.add(isSuccess ? 'success' : 'failed');
+  setTimeout(() => btn.classList.remove('success', 'failed'), 500);
+  lastClickedActionBtn = null;
+}
 
 function loadNearbyEntities() {
   fetch('/api/world/nearby')
@@ -3223,11 +3300,11 @@ function loadEntityActions(entityId) {
       .then(r => r.json())
       .then(data => {
         if (data.history && data.history.length > 0) {
-          const last3 = data.history.slice(-3);
+          const last2 = data.history.slice(-2);
           recentEl.innerHTML = `
             <div class="entity-recent">
               <div class="entity-recent-title">最近动向</div>
-              ${last3.map(h => `<div class="entity-recent-item">${h.description || h.action}</div>`).join('')}
+              ${last2.map(h => `<div class="entity-recent-item">${h.description || h.action}</div>`).join('')}
             </div>
           `;
           recentEl.style.display = 'block';
@@ -3236,6 +3313,27 @@ function loadEntityActions(entityId) {
         }
       })
       .catch(() => { recentEl.style.display = 'none'; });
+  } else if (entity.type) {
+    // Show brief status for non-NPC entities
+    const statusMap = {
+      animal: entity.vital ? `活力: ${Math.round(entity.vital.health || 0)}` : '自在活动',
+      plant: entity.growth ? `生长状态: ${entity.growth}` : '生长中',
+      mineral: entity.quality ? `品质: ${entity.quality}` : '可采集',
+      building: entity.openHours ? `营业: ${entity.openHours}` : '正常营业',
+      item: entity.rarity ? `稀有度: ${entity.rarity}` : '可使用',
+    };
+    const statusDesc = statusMap[entity.type] || '';
+    if (statusDesc) {
+      recentEl.innerHTML = `
+        <div class="entity-recent">
+          <div class="entity-recent-title">状态</div>
+          <div class="entity-recent-item">${statusDesc}</div>
+        </div>
+      `;
+      recentEl.style.display = 'block';
+    } else {
+      recentEl.style.display = 'none';
+    }
   } else {
     recentEl.style.display = 'none';
   }
@@ -3263,7 +3361,7 @@ function renderEntityActions(data) {
   list.innerHTML = data.actions.map(a => {
     const canDo = a.conditions.met;
     return `
-      <button class="action-btn ${canDo ? 'available' : 'unavailable'}" onclick="${canDo ? `doEntityAction('${a.id}', ${data.targetId})` : ''}" ${canDo ? '' : 'disabled'}>
+      <button class="action-btn ${canDo ? 'available' : 'unavailable'}" onclick="${canDo ? `doEntityAction('${a.id}', ${data.targetId}, this)` : ''}" ${canDo ? '' : 'disabled'}>
         <div class="action-icon">${a.icon}</div>
         <div class="action-info">
           <div class="action-name">${a.name}</div>
@@ -3276,7 +3374,8 @@ function renderEntityActions(data) {
   }).join('');
 }
 
-function doEntityAction(actionId, targetId) {
+function doEntityAction(actionId, targetId, btn) {
+  lastClickedActionBtn = btn || null;
   if (connStatus === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
     seqId++;
     ws.send(JSON.stringify({ type: 'action', actionId, params: { targetId }, seqId }));
@@ -3299,6 +3398,9 @@ function doEntityAction(actionId, targetId) {
     // Show feedback with typewriter effect
     if (msg) showActionFeedback(msg, isFail);
 
+    // Flash animation on action button
+    flashLastActionBtn(isSuccess);
+
     // Flash animation on detail card
     const card = document.getElementById('entity-detail-card');
     if (card) {
@@ -3309,6 +3411,7 @@ function doEntityAction(actionId, targetId) {
 
     // Show floating rewards
     if (data.playerState) {
+      showStatChanges(data.playerState);
       const oldCopper = playerState.copper;
       const newCopper = data.playerState.copper;
       if (newCopper !== oldCopper) {
@@ -3331,10 +3434,18 @@ function doEntityAction(actionId, targetId) {
   .catch(err => addLog(`操作失败: ${err}`));
 }
 
+let typewriterTimer = null;
+
 /** 打字机效果显示行为反馈 */
 function showActionFeedback(message, isFail) {
   const sceneText = document.getElementById('scene-text');
   if (!sceneText) return;
+
+  // Cancel previous typewriter
+  if (typewriterTimer) {
+    clearTimeout(typewriterTimer);
+    typewriterTimer = null;
+  }
 
   sceneText.textContent = '';
   sceneText.style.color = isFail ? 'var(--vermillion)' : 'var(--ink)';
@@ -3348,9 +3459,9 @@ function showActionFeedback(message, isFail) {
       sceneText.textContent = message.substring(0, i + 1);
       sceneText.appendChild(cursor);
       i++;
-      setTimeout(type, 20 + Math.random() * 15);
+      typewriterTimer = setTimeout(type, 25);
     } else {
-      // Remove cursor after typing
+      typewriterTimer = null;
       setTimeout(() => {
         if (cursor.parentNode) cursor.remove();
         sceneText.style.color = '';
@@ -3402,9 +3513,12 @@ function doEndTurn() {
 }
 
 function handleEndTurnResult(data) {
-  if (data.sceneDescription) updateSceneText(data.sceneDescription);
-  else if (data.message) updateSceneText(data.message);
-  if (data.playerState) updatePlayerState(data.playerState);
+  if (data.sceneDescription) showActionFeedback(data.sceneDescription, false);
+  else if (data.message) showActionFeedback(data.message, false);
+  if (data.playerState) {
+    showStatChanges(data.playerState);
+    updatePlayerState(data.playerState);
+  }
   if (data.worldState) updateWorldState(data.worldState);
   if (data.options) renderServerOptions(data.options);
   if (data.npcMessages && data.npcMessages.length > 0) {
@@ -3413,6 +3527,7 @@ function handleEndTurnResult(data) {
   if (data.briefing) renderBriefing(data.briefing);
   if (data.turnSummary) renderTurnSummary(data.turnSummary, data.distantNews);
   closeEntityDetail();
+  loadNearbyEntities();
   addLog('⏳ 回合结束，世界继续运转');
 }
 
@@ -3528,8 +3643,13 @@ function localSimulate(actionId) {
       text = `你做了一个动作：${actionId}`;
   }
 
-  // Apply state changes
+  // Apply state changes with floating numbers
   if (Object.keys(stateChanges).length > 0) {
+    showStatChanges(stateChanges);
+    if (stateChanges.copper !== undefined && playerState.copper !== stateChanges.copper) {
+      const diff = stateChanges.copper - playerState.copper;
+      showFloatingReward(diff > 0 ? `+${diff}文` : `${diff}文`, diff > 0);
+    }
     updatePlayerState(stateChanges);
   }
 
@@ -3546,8 +3666,10 @@ function localSimulate(actionId) {
   if ((idx + 1) % 12 === 0) playerState.day++;
   document.getElementById('scene-time').textContent = `${playerState.shichen}时 · 第 ${playerState.day} 天 · ${playerState.season}`;
 
-  updateSceneText(text);
+  // Use typewriter for scene text
+  if (text) showActionFeedback(stripHtml(text), false);
   renderOptions();
+  loadNearbyEntities();
   addLog(`${actionId} | 饱腹:${playerState.hunger} 精力:${playerState.fatigue} 钱:${playerState.copper}`);
 }
 
