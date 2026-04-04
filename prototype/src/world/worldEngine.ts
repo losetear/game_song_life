@@ -679,7 +679,25 @@ export class WorldEngine {
   getNearbyEntities(playerId: number): any[] {
     const pos = this.em.getComponent(playerId, 'Position');
     if (!pos) return [];
-    const gridId = pos.gridId;
+    let gridId = pos.gridId;
+
+    // 如果在建筑内部（interior_*），查询父 grid 的实体
+    let parentGrid: string | null = null;
+    if (gridId.startsWith('interior_')) {
+      // 从 interior_1116 中提取建筑 ID，找到建筑原始所在的 grid
+      const buildingIdStr = gridId.replace('interior_', '');
+      const buildingId = parseInt(buildingIdStr);
+      if (this.em.isAlive(buildingId)) {
+        const bpos = this.em.getComponent(buildingId, 'Position');
+        parentGrid = bpos?.gridId || 'center_street';
+        // 如果建筑也被移到了 interior grid（不应该了），fallback
+        if (parentGrid.startsWith('interior_')) parentGrid = 'center_street';
+      } else {
+        parentGrid = 'center_street';
+      }
+      gridId = parentGrid;
+    }
+
     const entityIds = this.worldMap.getEntitiesInGrid(gridId);
 
     const result: any[] = [];
@@ -843,7 +861,29 @@ export class WorldEngine {
 
     const options: { id: string; name: string; icon: string; targetGrid: string; type: string }[] = [];
 
-    // 1. 相邻地点（从 MAP_CONNECTIONS）
+    // 1. 如果在建筑内部，显示"离开"选项
+    if (currentGrid.startsWith('interior_')) {
+      // 提取建筑 ID，找到原始 grid
+      const buildingIdStr = currentGrid.replace('interior_', '');
+      const buildingId = parseInt(buildingIdStr);
+      // 建筑实体可能也被移到了 interior grid，需要记住原始位置
+      // 使用一个简单策略：回到中心大街
+      const buildingEntity = this.em.isAlive(buildingId) ? this.em.getComponent(buildingId, 'Position') : null;
+      const origGrid = buildingEntity?.gridId || 'center_street';
+      // 如果建筑也在 interior grid，说明我们需要一个"记住原始位置"的机制
+      // 简单方案：解析 interior 前缀，默认回 center_street
+      const exitGrid = origGrid.startsWith('interior_') ? 'center_street' : origGrid;
+      options.push({
+        id: 'leave_building',
+        name: `离开${this.getTypeDisplayName(buildingId, 'building')}`,
+        icon: '🚶',
+        targetGrid: exitGrid,
+        type: 'leave',
+      });
+      return options;
+    }
+
+    // 2. 相邻地点（从 MAP_CONNECTIONS）
     const connections = MAP_CONNECTIONS[currentGrid] || [];
     for (const targetGrid of connections) {
       options.push({
@@ -908,7 +948,18 @@ export class WorldEngine {
       }
       case 'building': {
         const b = this.em.getComponent(id, 'Building');
-        return b?.type === 'shop' ? '店铺' : '房屋';
+        const identity = this.em.getComponent(id, 'Identity');
+        if (identity?.name) return identity.name;
+        const bType = b?.type || 'house';
+        const pos = this.em.getComponent(id, 'Position');
+        const area = pos?.areaId || 'city';
+        // 根据类型和区域生成名字
+        const shopNames = ['锦绣布庄', '济世堂药铺', '聚宝斋', '福来杂货', '如意绸缎庄', '丰盛粮铺', '百味酱园', '同福酒楼', '德兴铁铺', '天成银楼'];
+        const houseNames = ['张家宅', '李家院', '赵家小院', '孙家旧宅', '周家新居', '吴家老宅', '郑家大院', '王家小楼', '陈家院落', '刘家茅舍'];
+        const teahouseNames = ['清风茶楼', '望月茶馆', '醉仙楼', '碧云轩'];
+        if (bType === 'shop') return shopNames[id % shopNames.length];
+        if (bType === 'teahouse') return teahouseNames[id % teahouseNames.length];
+        return houseNames[id % houseNames.length];
       }
       case 'plant': {
         const pos = this.em.getComponent(id, 'Position');
@@ -1510,7 +1561,31 @@ export class WorldEngine {
       // ---- 通用移动 ----
       case 'move': {
         const targetGrid = params?.targetGrid;
-        if (pos && targetGrid && MAP_CONNECTIONS[pos.gridId]?.includes(targetGrid)) {
+        if (!pos || !targetGrid) return '无法移动。';
+        
+        // 离开建筑内部（interior grid → 外部 grid）
+        if (pos.gridId.startsWith('interior_') || params?.type === 'leave') {
+          // 把建筑内移入的实体移回原处
+          const currentInterior = pos.gridId;
+          const interiorEntities = this.worldMap.getEntitiesInGrid(currentInterior);
+          for (const eid of interiorEntities) {
+            if (eid === playerId) continue;
+            const epos = this.em.getComponent(eid, 'Position');
+            if (epos) {
+              // 移回目标 grid
+              this.worldMap.moveEntity(eid, targetGrid);
+              epos.gridId = targetGrid;
+            }
+          }
+          this.worldMap.moveEntity(playerId, targetGrid);
+          pos.gridId = targetGrid;
+          pos.areaId = this.getAreaForGrid(targetGrid);
+          this.logEvent('player', '移动', `你离开了建筑，回到了${GRID_NAMES[targetGrid] || targetGrid}`);
+          return `你推开门走了出来，回到了${GRID_NAMES[targetGrid] || targetGrid}。`;
+        }
+        
+        // 普通移动（检查 MAP_CONNECTIONS）
+        if (MAP_CONNECTIONS[pos.gridId]?.includes(targetGrid)) {
           const areaId = this.getAreaForGrid(targetGrid);
           this.worldMap.moveEntity(playerId, targetGrid);
           pos.gridId = targetGrid;
@@ -1670,6 +1745,12 @@ export class WorldEngine {
       }
 
       default: {
+        // 移动类行为直接走 executeEntityAction（需要操作世界地图）
+        const moveActions = ['enter_building', 'leave_building', 'shelter'];
+        if (moveActions.includes(actionId)) {
+          return this.executeEntityAction(playerId, actionId, params, vital, wallet, pos);
+        }
+        
         // 1. 先尝试涌现规则
         const targetId = params?.targetId ? Number(params.targetId) : 0;
         if (targetId && this.em.isAlive(targetId)) {
@@ -2185,12 +2266,18 @@ export class WorldEngine {
       // ════════════════════════════════════════════
 
       case 'enter_building': {
-        const targetPos = this.em.getComponent(targetId, 'Position');
-        if (pos && targetPos) {
-          this.worldMap.moveEntity(playerId, targetPos.gridId);
-          pos.gridId = targetPos.gridId;
-          pos.areaId = targetPos.areaId;
+        // 创建建筑内部 grid：interior_{buildingId}
+        const interiorGrid = `interior_${targetId}`;
+        // 记住建筑的原始 grid（用于 nearby 查询和离开时返回）
+        const buildingOrigGrid = this.em.getComponent(targetId, 'Position')?.gridId || 'center_street';
+        if (pos) {
+          this.worldMap.moveEntity(playerId, interiorGrid);
+          pos.gridId = interiorGrid;
+          // areaId 保持不变
         }
+        // 不移动 NPC —— simulateTurn 会把它们移回去
+        // getNearbyEntities 会自动查询父 grid 的实体
+
         const building = this.em.getComponent(targetId, 'Building');
         const bType = building?.type || 'house';
 

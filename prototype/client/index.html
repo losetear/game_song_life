@@ -3055,51 +3055,7 @@ function renderServerOptions(options) {
 }
 
 // ============================================================
-// 场景管理
-// ============================================================
-const SCENES = {
-  center_street: {
-    name: '中心大街',
-    desc: '午后的阳光透过街边的酒旗，在青石板上洒下斑驳光影。街上人来人往，小贩的吆喝声此起彼伏。远处飘来炊饼的香味，你的肚子咕噜一声。',
-    options: [
-      { id: 'buy_food', icon: '🫓', text: '买炊饼', cost: '5文', desc: '炊饼铺的老板娘笑盈盈地看着你' },
-      { id: 'go_east_market', icon: '🏪', text: '去东市逛逛', cost: null, desc: '听说东市今天到了新货' },
-      { id: 'go_tea_house', icon: '🍵', text: '去茶馆听书', cost: '2文', desc: '茶馆里传来醒木拍桌的声音' },
-      { id: 'chat', icon: '💬', text: '和路人闲聊', cost: null, desc: '旁边一个书生模样的人在踱步' },
-      { id: 'rest', icon: '😴', text: '靠墙歇歇', cost: null, desc: '墙根下有块平整的石头' },
-    ]
-  },
-  east_market: {
-    name: '东市',
-    desc: '东市热闹非凡，各色店铺鳞次栉比。布庄门口挂着各色绸缎，药铺飘出草药的苦香。几个小贩推着板车在叫卖。',
-    options: [
-      { id: 'buy_cloth', icon: '👘', text: '进布庄看看', cost: '15文', desc: '"客官，新到的苏绣！"' },
-      { id: 'buy_herbs', icon: '🌿', text: '去药铺买药', cost: '10文', desc: '药铺老掌柜正在称量草药' },
-      { id: 'chat_market', icon: '🤝', text: '打听消息', cost: null, desc: '茶摊边几个人在低声议论什么' },
-      { id: 'go_center', icon: '🚶', text: '回中心大街', cost: null, desc: '' },
-    ]
-  },
-  tea_house: {
-    name: '清风茶楼',
-    desc: '茶楼内烟雾缭绕，说书先生正在讲《水浒传》的一段。几个茶客边喝边议论着城里近日的物价。角落里一个老者在独自品茶。',
-    options: [
-      { id: 'drink_tea', icon: '🍵', text: '叫壶龙井', cost: '3文', desc: '"小二，来壶龙井！"' },
-      { id: 'listen_rumor', icon: '👂', text: '偷听闲话', cost: null, desc: '邻桌的人在说布价涨了的事' },
-      { id: 'talk_elder', icon: '👴', text: '和老者攀谈', cost: null, desc: '老者看起来知道不少事' },
-      { id: 'go_center', icon: '🚶', text: '离开茶楼', cost: null, desc: '' },
-    ]
-  },
-  cloth_shop: {
-    name: '锦绣布庄',
-    desc: '布庄里五颜六色的绸缎挂满了墙。王掌柜笑眯眯地迎上来："哟，稀客啊！今天想看点什么？上好的苏绣刚到一批，不过嘛…价格涨了些。"',
-    options: [
-      { id: 'buy_fine_cloth', icon: '👘', text: '买苏绣布料', cost: '30文', desc: '精美的苏绣，涨价了' },
-      { id: 'buy_plain_cloth', icon: '🧵', text: '买普通棉布', cost: '10文', desc: '实惠耐穿的棉布' },
-      { id: 'ask_price', icon: '❓', text: '问为何涨价', cost: null, desc: '"这您就不知道了…"' },
-      { id: 'leave_shop', icon: '🚶', text: '告辞', cost: null, desc: '' },
-    ]
-  },
-};
+// 场景管理（硬编码选项已移除，全部由服务端动态提供）
 
 // Scene transitions
 const SCENE_MAP = {
@@ -3634,23 +3590,11 @@ function handleEndTurnResult(data) {
   addLog('⏳ 回合结束，世界继续运转');
 }
 
-// ===== Original renderOptions =====
+// ===== renderOptions 已移除 — 选项由服务端 renderServerOptions 和 move-options 动态提供 =====
 function renderOptions() {
+  // 不再渲染硬编码选项，清空选项区域
   const area = document.getElementById('options-area');
-  const scene = SCENES[playerState.gridId] || SCENES['center_street'];
-  area.innerHTML = scene.options.map(opt => {
-    const disabled = opt.cost && playerState.copper < parseInt(opt.cost);
-    return `
-      <button class="option-btn" onclick="doAction('${opt.id}')" ${disabled ? 'disabled' : ''}>
-        <div class="option-icon">${opt.icon}</div>
-        <div class="option-text">
-          <div>${opt.text}</div>
-          ${opt.desc ? `<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:1px">${opt.desc}</div>` : ''}
-        </div>
-        ${opt.cost ? `<div class="option-cost">${opt.cost}</div>` : ''}
-      </button>
-    `;
-  }).join('');
+  if (area) area.innerHTML = '';
 }
 
 function doAction(actionId) {
@@ -3756,10 +3700,9 @@ function localSimulate(actionId) {
     updatePlayerState(stateChanges);
   }
 
-  // Update scene
-  const scene = SCENES[playerState.gridId];
-  if (scene) {
-    document.getElementById('scene-location').textContent = `汴京 · ${scene.name}`;
+  // Update scene（位置名由 loadMoveOptions 动态更新）
+  if (playerState.gridId) {
+    document.getElementById('scene-location').textContent = `汴京 · ${playerState.gridId}`;
   }
 
   // Advance time
