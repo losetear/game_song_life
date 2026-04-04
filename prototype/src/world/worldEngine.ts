@@ -1327,7 +1327,7 @@ export class WorldEngine {
         message: '行动点不足，请结束回合。',
         sceneDescription: template.getDescription(sceneCtx),
         sceneLocation: template.locationName,
-        options: template.getOptions(sceneCtx),
+        options: [],
         npcMessages: [],
         timings: { total: 0, playerAction: 0, l0GOAP: 0, l1BehaviorTree: 0, l2Statistics: 0, economy: 0, perception: 0, vitalDecay: 0, assemble: 0 },
         perception: this.perception.getPerceptionData(playerId),
@@ -1371,7 +1371,7 @@ export class WorldEngine {
     const sceneCtx = this.getSceneContext(playerId, simResult.causalEvents);
 
     const sceneDescription = template.getDescription(sceneCtx);
-    const options = template.getOptions(sceneCtx);
+    // options removed — 动态提供
     const sceneLocation = template.locationName;
 
     // 生成 NPC 消息（含因果事件）
@@ -1408,7 +1408,7 @@ export class WorldEngine {
       message: actionMessage,
       sceneDescription,
       sceneLocation,
-      options,
+      options: [],
       npcMessages,
       timings,
       perception: percData,
@@ -1454,7 +1454,7 @@ export class WorldEngine {
     return {
       description: template.getDescription(ctx),
       location: template.locationName,
-      options: template.getOptions(ctx),
+      options: [],
     };
   }
 
@@ -1472,7 +1472,7 @@ export class WorldEngine {
     const sceneCtx = this.getSceneContext(playerId, simResult.causalEvents);
 
     const sceneDescription = template.getDescription(sceneCtx);
-    const options = template.getOptions(sceneCtx);
+    // options removed — 动态提供
 
     const npcMessages: string[] = [];
     for (const ce of simResult.causalEvents) {
@@ -1495,7 +1495,7 @@ export class WorldEngine {
       message: '你结束了本回合，世界继续运转。',
       sceneDescription,
       sceneLocation: template.locationName,
-      options,
+      options: [],
       npcMessages,
       timings: { total: 0, playerAction: 0, l0GOAP: 0, l1BehaviorTree: 0, l2Statistics: 0, economy: 0, perception: 0, vitalDecay: 0, assemble: 0 },
       perception: this.perception.getPerceptionData(playerId),

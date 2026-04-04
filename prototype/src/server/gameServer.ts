@@ -427,7 +427,7 @@ export class GameServer {
           message: '连接成功，欢迎来到汴京！',
           sceneDescription: initialScene.description,
           sceneLocation: `汴京 · ${initialScene.location}`,
-          options: initialScene.options,
+          // 不再发送硬编码的场景选项 — 选项由 nearby 实体和 move-options 动态提供
           npcMessages: [],
           worldState: {
             tick: this.engine.time.tick,
@@ -464,7 +464,7 @@ export class GameServer {
                 message: result.message,
                 sceneDescription: result.sceneDescription,
                 sceneLocation: `汴京 · ${result.sceneLocation}`,
-                options: result.options,
+                // 不再发送硬编码的场景选项 — 选项由 nearby 实体和 move-options 动态提供
                 npcMessages: result.npcMessages,
                 worldState: result.worldState,
                 perception: result.perception,
