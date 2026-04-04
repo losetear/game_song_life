@@ -904,7 +904,7 @@ export class WorldEngine {
         if (building) {
           options.push({
             id: `enter_building_${eid}`,
-            name: `进入${identity?.name || '建筑'}`,
+            name: `进入${this.getTypeDisplayName(eid, this.em.getType(eid))}`,
             icon: '🚪',
             targetGrid: `${currentGrid}`,
             type: 'enter',

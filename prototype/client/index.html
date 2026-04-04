@@ -3332,7 +3332,7 @@ function loadEntityActions(entityId) {
   let desc = '';
   if (entity.profession) desc += entity.profession;
   if (entity.briefDesc) desc = entity.briefDesc;
-  if (entity.buildingType) desc = entity.buildingType === 'shop' ? '店铺' : '建筑';
+  if (entity.buildingType) desc = entity.buildingType === 'shop' ? '店铺 · 可购买商品' : entity.buildingType === 'teahouse' ? '茶楼 · 可喝茶休息' : '民居 · 可进入探访';
   document.getElementById('detail-desc').textContent = desc;
 
   // Build stats
