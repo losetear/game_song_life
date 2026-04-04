@@ -1,5 +1,60 @@
 // === 消息协议 ===
 
+// === 涌现式行为系统类型 ===
+
+export interface InteractionContext {
+  player: {
+    vital: { hunger: number; fatigue: number; health: number; mood: number };
+    wallet: { copper: number };
+    inventory: { items: { itemType: string; amount: number }[] };
+    ap: number;
+    apMax: number;
+    position: { gridId: string; areaId: string };
+    memory: { recentEvents: { content: string; tick: number }[]; impressions: Record<string, number> };
+  };
+  target: {
+    id: number;
+    type: string;
+    vital: { hunger: number; fatigue: number; health: number; mood: number } | null;
+    wallet: { copper: number } | null;
+    identity: { name: string; profession: string; age: number; personality: string[] } | null;
+    position: { gridId: string; areaId: string } | null;
+    ai: { goals: string[]; currentPlan: string[]; planCooldown: number; aiLevel: 0 | 1 | 2 } | null;
+    memory: { recentEvents: { content: string; tick: number }[]; impressions: Record<string, number> } | null;
+    growth: { stage: number; growProgress: number; seasonReq: string } | null;
+    building: { type: string; ownerId: number; openHours: string } | null;
+  };
+  world: {
+    weather: string;
+    season: string;
+    shichen: string;
+    prices: Record<string, number>;
+    nearbyEntities: { id: number; type: string }[];
+    causalEvents: { cause: string; effect: string; tick: number }[];
+    tick: number;
+  };
+}
+
+export interface ActionRule {
+  id: string;
+  name: string;
+  icon: string;
+  apCost: number;
+  shouldAppear: (ctx: InteractionContext) => boolean;
+  canExecute: (ctx: InteractionContext) => { met: boolean; reason: string };
+  describeEffects: (ctx: InteractionContext) => string;
+  execute?: (ctx: InteractionContext) => any;
+}
+
+export interface EntityAction {
+  id: string;
+  name: string;
+  icon: string;
+  apCost: number;
+  conditions: { met: boolean; reason: string };
+  effects: string;
+}
+
 export interface ClientMessage {
   type: 'action';
   actionId: string;

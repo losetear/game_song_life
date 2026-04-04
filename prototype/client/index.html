@@ -957,6 +957,94 @@ body::before {
   flex-shrink: 0;
 }
 
+/* 行为执行反馈动画 */
+@keyframes actionSuccess {
+  0% { box-shadow: 0 0 0 0 rgba(46, 139, 87, 0.4); }
+  50% { box-shadow: 0 0 12px 4px rgba(46, 139, 87, 0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 139, 87, 0); }
+}
+@keyframes actionFail {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@keyframes floatReward {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+.action-flash-success {
+  animation: actionSuccess 0.6s ease-out;
+}
+.action-flash-fail {
+  animation: actionFail 0.5s ease-out;
+}
+.float-reward {
+  position: fixed;
+  pointer-events: none;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Noto Serif SC', serif;
+  z-index: 9999;
+  animation: floatReward 1.2s ease-out forwards;
+}
+.float-reward.positive { color: var(--jade); }
+.float-reward.negative { color: var(--vermillion); }
+
+/* 打字机效果 */
+.typewriter-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--ink);
+  margin-left: 2px;
+  animation: blink 0.8s step-end infinite;
+  vertical-align: text-bottom;
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* NPC 最近动向 */
+.entity-recent {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(44, 24, 16, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid var(--gold);
+}
+.entity-recent-title {
+  font-size: 10px;
+  color: var(--gold);
+  font-weight: 600;
+  margin-bottom: 3px;
+  letter-spacing: 0.05em;
+}
+.entity-recent-item {
+  font-size: 11px;
+  color: rgba(44, 24, 16, 0.5);
+  line-height: 1.4;
+}
+
+/* 行为加载中 */
+.action-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(44, 24, 16, 0.4);
+}
+.action-loading::after {
+  content: '';
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid rgba(44, 24, 16, 0.15);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* 日志区域 */
 .log-area {
   margin-top: 12px;
@@ -1969,6 +2057,7 @@ body::before {
           <button class="detail-close" onclick="closeEntityDetail()">✕</button>
         </div>
         <div class="entity-stats" id="detail-stats"></div>
+        <div id="detail-recent" style="display:none"></div>
         <div class="action-list" id="action-list"></div>
       </div>
       <div class="options-area" id="options-area">
@@ -2692,10 +2781,11 @@ function updateConnStatus(status) {
 
 function handleServerResponse(msg) {
   const data = msg.data;
-  if (data.sceneDescription) {
-    updateSceneText(data.sceneDescription);
-  } else if (data.message) {
-    updateSceneText(data.message);
+  const sceneMsg = data.sceneDescription || data.message || '';
+  if (sceneMsg) {
+    // Use typewriter for entity interaction feedback
+    const isFail = /失败|不够|被发|拒绝|没找到|跑掉|没有|没偷到|空/.test(sceneMsg);
+    showActionFeedback(sceneMsg, isFail);
   }
   if (data.sceneLocation) {
     document.getElementById('scene-location').textContent = data.sceneLocation;
@@ -2704,7 +2794,12 @@ function handleServerResponse(msg) {
     renderServerOptions(data.options);
   }
   if (data.playerState) {
+    const oldCopper = playerState.copper;
     updatePlayerState(data.playerState);
+    if (data.playerState.copper !== undefined && data.playerState.copper !== oldCopper) {
+      const diff = data.playerState.copper - oldCopper;
+      showFloatingReward(diff > 0 ? `+${diff}文` : `${diff}文`, diff > 0);
+    }
   }
   if (data.worldState) {
     updateWorldState(data.worldState);
@@ -2721,6 +2816,8 @@ function handleServerResponse(msg) {
   if (data.briefing) {
     renderBriefing(data.briefing);
   }
+  // Refresh nearby entities after action
+  setTimeout(() => loadNearbyEntities(), 300);
 }
 
 function renderTurnSummary(summary, distantNews) {
@@ -3084,6 +3181,7 @@ function closeEntityDetail() {
   selectedEntityId = null;
   const card = document.getElementById('entity-detail-card');
   card.classList.remove('visible');
+  document.getElementById('detail-recent').style.display = 'none';
   renderNearbyEntities();
 }
 
@@ -3118,9 +3216,36 @@ function loadEntityActions(entityId) {
   if (entity.openHours) statsHtml += `<div class="entity-stat">营业: ${entity.openHours}</div>`;
   statsEl.innerHTML = statsHtml;
 
+  // Fetch NPC recent activity if NPC
+  const recentEl = document.getElementById('detail-recent');
+  if (entity.type === 'npc' && entity.id) {
+    fetch(`/api/world/npc/${entity.id}/history`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.history && data.history.length > 0) {
+          const last3 = data.history.slice(-3);
+          recentEl.innerHTML = `
+            <div class="entity-recent">
+              <div class="entity-recent-title">最近动向</div>
+              ${last3.map(h => `<div class="entity-recent-item">${h.description || h.action}</div>`).join('')}
+            </div>
+          `;
+          recentEl.style.display = 'block';
+        } else {
+          recentEl.style.display = 'none';
+        }
+      })
+      .catch(() => { recentEl.style.display = 'none'; });
+  } else {
+    recentEl.style.display = 'none';
+  }
+
   card.classList.add('visible');
 
-  // Fetch actions
+  // Show loading state
+  document.getElementById('action-list').innerHTML = '<div class="action-loading">正在观察</div>';
+
+  // Fetch actions — each click re-fetches since world state changes
   fetch(`/api/world/entity/${entityId}/actions`)
     .then(r => r.json())
     .then(data => renderEntityActions(data))
@@ -3166,14 +3291,94 @@ function doEntityAction(actionId, targetId) {
   })
   .then(r => r.json())
   .then(data => {
-    if (data.sceneDescription) updateSceneText(data.sceneDescription);
-    else if (data.message) updateSceneText(data.message);
-    if (data.playerState) updatePlayerState(data.playerState);
+    // Determine success/failure from message content
+    const msg = data.sceneDescription || data.message || '';
+    const isFail = /失败|不够|被发|拒绝|没找到|跑掉|没有|没偷到|空/.test(msg);
+    const isSuccess = !isFail && msg.length > 10;
+
+    // Show feedback with typewriter effect
+    if (msg) showActionFeedback(msg, isFail);
+
+    // Flash animation on detail card
+    const card = document.getElementById('entity-detail-card');
+    if (card) {
+      card.classList.remove('action-flash-success', 'action-flash-fail');
+      void card.offsetWidth; // force reflow
+      card.classList.add(isFail ? 'action-flash-fail' : 'action-flash-success');
+    }
+
+    // Show floating rewards
+    if (data.playerState) {
+      const oldCopper = playerState.copper;
+      const newCopper = data.playerState.copper;
+      if (newCopper !== oldCopper) {
+        const diff = newCopper - oldCopper;
+        showFloatingReward(diff > 0 ? `+${diff}文` : `${diff}文`, diff > 0);
+      }
+      updatePlayerState(data.playerState);
+    }
     if (data.worldState) updateWorldState(data.worldState);
     if (data.options) renderServerOptions(data.options);
-    addLog(`← ${data.message}`);
+
+    // Refresh actions and nearby entities after execution
+    if (selectedEntityId) {
+      setTimeout(() => loadEntityActions(selectedEntityId), 300);
+    }
+    setTimeout(() => loadNearbyEntities(), 300);
+
+    addLog(`← ${msg.substring(0, 50)}${msg.length > 50 ? '...' : ''}`);
   })
   .catch(err => addLog(`操作失败: ${err}`));
+}
+
+/** 打字机效果显示行为反馈 */
+function showActionFeedback(message, isFail) {
+  const sceneText = document.getElementById('scene-text');
+  if (!sceneText) return;
+
+  sceneText.textContent = '';
+  sceneText.style.color = isFail ? 'var(--vermillion)' : 'var(--ink)';
+
+  let i = 0;
+  const cursor = document.createElement('span');
+  cursor.className = 'typewriter-cursor';
+
+  function type() {
+    if (i < message.length) {
+      sceneText.textContent = message.substring(0, i + 1);
+      sceneText.appendChild(cursor);
+      i++;
+      setTimeout(type, 20 + Math.random() * 15);
+    } else {
+      // Remove cursor after typing
+      setTimeout(() => {
+        if (cursor.parentNode) cursor.remove();
+        sceneText.style.color = '';
+      }, 1500);
+    }
+  }
+  type();
+}
+
+/** 浮动奖励数字 */
+function showFloatingReward(text, isPositive) {
+  const el = document.createElement('div');
+  el.className = `float-reward ${isPositive ? 'positive' : 'negative'}`;
+  el.textContent = text;
+
+  // Position near the copper display
+  const copperEl = document.getElementById('sv-copper');
+  if (copperEl) {
+    const rect = copperEl.getBoundingClientRect();
+    el.style.left = rect.left + 'px';
+    el.style.top = (rect.top - 10) + 'px';
+  } else {
+    el.style.left = '50%';
+    el.style.top = '30%';
+  }
+
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1300);
 }
 
 function doEndTurn() {

@@ -100,11 +100,56 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
   // L2: 1000 野生动物（统计）
   breakdown.animal += 1000;
 
-  // === 植物: 4,000 (L2 统计) ===
-  breakdown.plant += 4000;
+  // === 植物: 4,000 ===
+  // L1: 200 农田植物
+  for (let i = 0; i < 100; i++) {
+    const id = em.create(EntityType.PLANT);
+    const plant = getPlantType(true);
+    const gridId = FARM_GRIDS[Math.floor(Math.random() * FARM_GRIDS.length)];
 
-  // === 矿物: 1,000 (L2 统计) ===
-  breakdown.mineral += 1000;
+    em.addComponent(id, 'Position', { x: Math.random() * 100, y: Math.random() * 100, areaId: 'farmland', gridId });
+    em.addComponent(id, 'Identity', { name: plant.name, profession: '', age: 0, personality: [] });
+    em.addComponent(id, 'Growth', { stage: Math.floor(Math.random() * 3), growProgress: Math.random() * 100, seasonReq: plant.seasonReq });
+
+    worldMap.addEntity(id, gridId);
+    l1Ids.push(id);
+    breakdown.plant++;
+  }
+  // L1: 100 野外植物（山/河边）
+  for (let i = 0; i < 100; i++) {
+    const id = em.create(EntityType.PLANT);
+    const plant = getPlantType(false);
+    const gridId = [...MOUNTAIN_GRIDS, ...RIVER_GRIDS][Math.floor(Math.random() * (MOUNTAIN_GRIDS.length + RIVER_GRIDS.length))];
+    const areaId = getAreaByGrid(gridId);
+
+    em.addComponent(id, 'Position', { x: Math.random() * 100, y: Math.random() * 100, areaId, gridId });
+    em.addComponent(id, 'Identity', { name: plant.name, profession: '', age: 0, personality: [] });
+    em.addComponent(id, 'Growth', { stage: Math.floor(Math.random() * 3), growProgress: Math.random() * 100, seasonReq: plant.seasonReq });
+
+    worldMap.addEntity(id, gridId);
+    l1Ids.push(id);
+    breakdown.plant++;
+  }
+  // L2: 3,800 统计
+  breakdown.plant += 3800;
+
+  // === 矿物: 1,000 ===
+  // L1: 200 山区矿物
+  const MINERAL_TYPES = ['铁矿', '铜矿', '石料', '煤矿', '金沙'];
+  for (let i = 0; i < 200; i++) {
+    const id = em.create(EntityType.MINERAL);
+    const mineralName = MINERAL_TYPES[Math.floor(Math.random() * MINERAL_TYPES.length)];
+    const gridId = MOUNTAIN_GRIDS[Math.floor(Math.random() * MOUNTAIN_GRIDS.length)];
+
+    em.addComponent(id, 'Position', { x: Math.random() * 100, y: Math.random() * 100, areaId: 'mountain', gridId });
+    em.addComponent(id, 'Identity', { name: mineralName, profession: '', age: 0, personality: [] });
+
+    worldMap.addEntity(id, gridId);
+    l1Ids.push(id);
+    breakdown.mineral++;
+  }
+  // L2: 800 统计
+  breakdown.mineral += 800;
 
   // === 建筑: 500 (L1) ===
   for (let i = 0; i < 500; i++) {

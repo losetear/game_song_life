@@ -17,6 +17,8 @@ import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
 import { VitalComponent, WalletComponent, PositionComponent } from '../ecs/types';
+import { InteractionContext } from '../server/protocol';
+import { getEmergentActions } from './emergenceRules';
 
 // === 世界事件日志（含因果链） ===
 export interface WorldEvent {
@@ -717,165 +719,100 @@ export class WorldEngine {
     return result;
   }
 
-  /** 根据实体类型和属性动态计算可用行为 */
+  /** 根据涌现规则动态计算可用行为 */
   calculateEntityActions(playerId: number, targetId: number): { targetId: number; targetName: string; actions: any[] } {
     const targetType = this.em.getType(targetId);
     const targetIdentity = this.em.getComponent(targetId, 'Identity');
     const targetName = targetIdentity?.name || this.getTypeDisplayName(targetId, targetType);
 
-    const playerWallet = this.em.getComponent(playerId, 'Wallet');
-    const playerVital = this.em.getComponent(playerId, 'Vital');
-    const playerInventory = this.em.getComponent(playerId, 'Inventory');
-    const playerAP = this.getPlayerAP(playerId);
+    // 构建涌现上下文
+    const ctx = this.buildInteractionContext(playerId, targetId);
 
-    const copper = playerWallet?.copper ?? 0;
-    const fatigue = playerVital?.fatigue ?? 100;
-    const hasItems = playerInventory && playerInventory.items.length > 0;
-    const hasFood = playerInventory && playerInventory.items.some(i => i.itemType === 'food');
-    const ap = playerAP.current;
-
-    const targetPos = this.em.getComponent(targetId, 'Position');
-    const playerPos = this.em.getComponent(playerId, 'Position');
-    const sameGrid = targetPos?.gridId === playerPos?.gridId;
-
-    // 获取目标grid的人数
-    const targetGridId = targetPos?.gridId || '';
-    const nearbyCount = this.worldMap.getEntitiesInGrid(targetGridId).length;
-
-    const actions: any[] = [];
-
-    switch (targetType) {
-      case 'npc': {
-        const memory = this.em.getComponent(targetId, 'Memory');
-        const impression = memory?.impressions?.[playerId] ?? 0;
-
-        actions.push({
-          id: 'talk_to', name: '攀谈', icon: '💬', apCost: 1,
-          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
-          effects: '增加好感度，可能获得信息',
-        });
-        actions.push({
-          id: 'trade', name: '交易', icon: '💰', apCost: 2,
-          conditions: { met: ap >= 2 && copper > 0, reason: ap < 2 ? '行动点不足' : copper <= 0 ? '没有铜钱' : '' },
-          effects: '买卖物品',
-        });
-        actions.push({
-          id: 'steal', name: '偷窃', icon: '🤏', apCost: 2,
-          conditions: { met: ap >= 2 && nearbyCount < 5, reason: ap < 2 ? '行动点不足' : nearbyCount >= 5 ? '周围人太多' : '' },
-          effects: '偷取铜钱，失败会被抓',
-        });
-        actions.push({
-          id: 'ask_advice', name: '请教', icon: '📖', apCost: 1,
-          conditions: { met: ap >= 1 && impression > 0, reason: ap < 1 ? '行动点不足' : impression <= 0 ? '好感度不够' : '' },
-          effects: '学习技能或获取情报',
-        });
-        actions.push({
-          id: 'provoke', name: '挑衅', icon: '👊', apCost: 2,
-          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
-          effects: '引发冲突',
-        });
-        actions.push({
-          id: 'gift', name: '赠礼', icon: '🎁', apCost: 1,
-          conditions: { met: ap >= 1 && hasItems, reason: ap < 1 ? '行动点不足' : !hasItems ? '背包没有物品' : '' },
-          effects: '增加好感度',
-        });
-        break;
-      }
-      case 'building': {
-        const building = this.em.getComponent(targetId, 'Building');
-        const bType = building?.type || 'house';
-        actions.push({
-          id: 'enter_building', name: '进入', icon: '🚪', apCost: 0,
-          conditions: { met: true, reason: '' },
-          effects: '进入建筑内部',
-        });
-        actions.push({
-          id: 'buy_from_shop', name: '购买', icon: '💰', apCost: 1,
-          conditions: { met: ap >= 1 && copper > 0, reason: ap < 1 ? '行动点不足' : copper <= 0 ? '没有铜钱' : '' },
-          effects: '购买商品',
-        });
-        actions.push({
-          id: 'ask_around', name: '打听', icon: '👂', apCost: 1,
-          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
-          effects: '获取附近消息',
-        });
-        break;
-      }
-      case 'animal': {
-        actions.push({
-          id: 'observe', name: '观察', icon: '👁', apCost: 0,
-          conditions: { met: true, reason: '' },
-          effects: '观察动物的习性',
-        });
-        actions.push({
-          id: 'hunt', name: '捕猎', icon: '🏹', apCost: 2,
-          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
-          effects: '尝试捕获或猎杀',
-        });
-        actions.push({
-          id: 'feed', name: '喂食', icon: '🌾', apCost: 1,
-          conditions: { met: ap >= 1 && hasFood, reason: ap < 1 ? '行动点不足' : !hasFood ? '没有食物' : '' },
-          effects: '增加动物好感',
-        });
-        actions.push({
-          id: 'tame', name: '驯服', icon: '🤲', apCost: 3,
-          conditions: { met: ap >= 3, reason: ap < 3 ? '行动点不足' : '' },
-          effects: '尝试驯化（需多次尝试）',
-        });
-        break;
-      }
-      case 'plant': {
-        actions.push({
-          id: 'gather', name: '采摘', icon: '✋', apCost: 1,
-          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
-          effects: '采摘植物产品',
-        });
-        actions.push({
-          id: 'chop', name: '砍伐', icon: '🪓', apCost: 2,
-          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
-          effects: '获取木材',
-        });
-        actions.push({
-          id: 'water', name: '浇水', icon: '💧', apCost: 1,
-          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
-          effects: '促进植物生长',
-        });
-        break;
-      }
-      case 'mineral': {
-        actions.push({
-          id: 'collect', name: '采集', icon: '⛏', apCost: 2,
-          conditions: { met: ap >= 2, reason: ap < 2 ? '行动点不足' : '' },
-          effects: '收集矿石碎片',
-        });
-        actions.push({
-          id: 'mine', name: '开采', icon: '🔨', apCost: 3,
-          conditions: { met: ap >= 3, reason: ap < 3 ? '行动点不足' : '' },
-          effects: '深度开采',
-        });
-        break;
-      }
-      case 'item': {
-        actions.push({
-          id: 'pickup', name: '拾取', icon: '✋', apCost: 1,
-          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
-          effects: '拾起物品放入背包',
-        });
-        actions.push({
-          id: 'inspect', name: '检查', icon: '🔍', apCost: 0,
-          conditions: { met: true, reason: '' },
-          effects: '仔细查看物品',
-        });
-        actions.push({
-          id: 'use_item', name: '使用', icon: '👆', apCost: 1,
-          conditions: { met: ap >= 1, reason: ap < 1 ? '行动点不足' : '' },
-          effects: '使用该物品',
-        });
-        break;
-      }
-    }
+    // 使用涌现规则引擎获取行为
+    const actions = getEmergentActions(ctx);
 
     return { targetId, targetName, actions };
+  }
+
+  /** 构建交互上下文 */
+  private buildInteractionContext(playerId: number, targetId: number): InteractionContext {
+    const playerVital = this.em.getComponent(playerId, 'Vital');
+    const playerWallet = this.em.getComponent(playerId, 'Wallet');
+    const playerInventory = this.em.getComponent(playerId, 'Inventory');
+    const playerAP = this.getPlayerAP(playerId);
+    const playerPos = this.em.getComponent(playerId, 'Position');
+    const playerMemory = this.em.getComponent(playerId, 'Memory');
+
+    const targetType = this.em.getType(targetId);
+    const targetVital = this.em.getComponent(targetId, 'Vital');
+    const targetWallet = this.em.getComponent(targetId, 'Wallet');
+    const targetIdentity = this.em.getComponent(targetId, 'Identity');
+    const targetPos = this.em.getComponent(targetId, 'Position');
+    const targetAI = this.em.getComponent(targetId, 'AI');
+    const targetMemory = this.em.getComponent(targetId, 'Memory');
+    const targetGrowth = this.em.getComponent(targetId, 'Growth');
+    const targetBuilding = this.em.getComponent(targetId, 'Building');
+
+    // 获取附近实体
+    const gridId = playerPos?.gridId || '';
+    const nearbyIds = this.worldMap.getEntitiesInGrid(gridId);
+    const nearbyEntities = nearbyIds
+      .filter(id => id !== playerId)
+      .map(id => ({ id, type: this.em.getType(id) || 'unknown' }));
+
+    // 获取因果事件
+    const recentEvents = this.getEvents(5);
+    const causalEvents = recentEvents.map(e => ({
+      cause: e.cause || e.category || '',
+      effect: e.message,
+      tick: e.tick,
+    }));
+
+    return {
+      player: {
+        vital: {
+          hunger: playerVital?.hunger ?? 50,
+          fatigue: playerVital?.fatigue ?? 50,
+          health: playerVital?.health ?? 80,
+          mood: playerVital?.mood ?? 50,
+        },
+        wallet: { copper: playerWallet?.copper ?? 0 },
+        inventory: {
+          items: playerInventory?.items ? [...playerInventory.items] : [],
+        },
+        ap: playerAP.current,
+        apMax: playerAP.max,
+        position: {
+          gridId: playerPos?.gridId || '',
+          areaId: playerPos?.areaId || '',
+        },
+        memory: {
+          recentEvents: playerMemory?.recentEvents || [],
+          impressions: playerMemory?.impressions || {},
+        },
+      },
+      target: {
+        id: targetId,
+        type: targetType || 'unknown',
+        vital: targetVital ? { hunger: targetVital.hunger, fatigue: targetVital.fatigue, health: targetVital.health, mood: targetVital.mood } : null,
+        wallet: targetWallet ? { copper: targetWallet.copper } : null,
+        identity: targetIdentity ? { name: targetIdentity.name, profession: targetIdentity.profession, age: targetIdentity.age, personality: targetIdentity.personality } : null,
+        position: targetPos ? { gridId: targetPos.gridId, areaId: targetPos.areaId } : null,
+        ai: targetAI ? { goals: targetAI.goals, currentPlan: targetAI.currentPlan, planCooldown: targetAI.planCooldown, aiLevel: targetAI.aiLevel } : null,
+        memory: targetMemory ? { recentEvents: targetMemory.recentEvents, impressions: targetMemory.impressions } : null,
+        growth: targetGrowth ? { stage: targetGrowth.stage, growProgress: targetGrowth.growProgress, seasonReq: targetGrowth.seasonReq } : null,
+        building: targetBuilding ? { type: targetBuilding.type, ownerId: targetBuilding.ownerId, openHours: targetBuilding.openHours } : null,
+      },
+      world: {
+        weather: this.weather.weather,
+        season: this.time.season,
+        shichen: this.time.shichenName,
+        prices: this.economy.getPrices(),
+        nearbyEntities,
+        causalEvents,
+        tick: this.time.tick,
+      },
+    };
   }
 
   /** 获取类型显示图标 */
@@ -1473,14 +1410,19 @@ export class WorldEngine {
       'enter_cloth_shop', 'enter_pharmacy', 'leave_cloth_shop', 'leave_pharmacy', 'leave_home'];
     if (freeActions.includes(actionId)) return 0;
 
-    // 交互类行动（来自实体行为系统）
+    // 交互类行动（来自涌现式行为系统）
     const apCosts: Record<string, number> = {
-      talk_to: 1, trade: 2, steal: 2, ask_advice: 1, provoke: 2, gift: 1,
+      talk_to: 1, ask_rumor: 1, trade_buy: 2, trade_sell: 2, share_food: 1,
+      help_request: 1, steal: 2, learn_skill: 2, invite_travel: 1, heal: 2,
+      provoke: 2, sworn_brothers: 3, gift: 1,
+      shelter: 0, gather_fruit: 1, fish: 2, scavenge: 1,
       enter_building: 0, buy_from_shop: 1, ask_around: 1,
-      observe: 0, hunt: 2, feed: 1, tame: 3,
-      gather: 1, chop: 2, water: 1,
-      collect: 2, mine: 3,
+      observe: 0, feed_animal: 1, chase_away: 1, track_animal: 1, hunt: 2, tame: 3,
+      chop: 2, water_plant: 1, gather: 1,
+      mine: 3, collect: 2,
       pickup: 1, inspect: 0, use_item: 1,
+      // 兼容旧 action ID
+      trade: 2, feed: 1, water: 1,
     };
     if (apCosts[actionId] !== undefined) return apCosts[actionId];
 
@@ -1650,7 +1592,7 @@ export class WorldEngine {
     }
   }
 
-  /** 执行基于实体的交互行动 */
+  /** 执行基于实体的交互行动 — 涌现式丰富反馈 */
   private executeEntityAction(playerId: number, actionId: string, params: any, vital: VitalComponent | undefined, wallet: WalletComponent | undefined, pos: PositionComponent | undefined): string {
     const targetId = params?.targetId ? Number(params.targetId) : 0;
     if (!targetId || !this.em.isAlive(targetId)) {
@@ -1660,21 +1602,120 @@ export class WorldEngine {
     const targetType = this.em.getType(targetId);
     const targetIdentity = this.em.getComponent(targetId, 'Identity');
     const targetName = targetIdentity?.name || this.getTypeDisplayName(targetId, targetType);
+    const personality = targetIdentity?.personality || [];
+
+    // 获取 NPC 状态信息用于生成情境化反馈
+    const targetVital = this.em.getComponent(targetId, 'Vital');
+    const targetMood = targetVital?.mood ?? 50;
+    const targetHunger = targetVital?.hunger ?? 50;
+    const isSad = targetMood < 30;
+    const isHungry = targetHunger < 30;
+    const isTired = (targetVital?.fatigue ?? 50) < 30;
+
+    // 天气和时间
+    const weather = this.weather.weather;
+    const shichen = this.time.shichenName;
+    const season = this.time.season;
+
+    // 性格特征辅助函数
+    const isBrave = personality.includes('勇敢');
+    const isTimid = personality.includes('胆小');
+    const isShrewd = personality.includes('精明');
+    const isKind = personality.includes('善良');
+    const isCunning = personality.includes('狡猾');
+
+    // 好感度
+    const targetMemory = this.em.getComponent(targetId, 'Memory');
+    const impression = targetMemory?.impressions?.[playerId] ?? 0;
 
     switch (actionId) {
-      // NPC 交互
+
+      // ════════════════════════════════════════════
+      // NPC 交互 — 情境化反馈
+      // ════════════════════════════════════════════
+
       case 'talk_to': {
-        if (vital) vital.mood = Math.min(100, vital.mood + 5);
-        const memory = this.em.getComponent(targetId, 'Memory');
-        if (memory) {
-          memory.impressions[playerId] = (memory.impressions[playerId] || 0) + 5;
+        if (vital) vital.mood = Math.min(100, vital.mood + 3);
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 3;
         }
         this.logEvent('player', '社交', `你和${targetName}攀谈了几句`);
-        return `你和${targetName}聊了几句。${targetName}点了点头，似乎对你印象不错。`;
+
+        // 根据 NPC 状态生成对话
+        if (isHungry) {
+          const hungerTalks = [
+            `${targetName}搓着肚子苦笑道："别提了，今天连早饭都没吃上。你闻到那边飘来的饭香没有？馋得我直咽口水。"`,
+            `${targetName}有气无力地看了你一眼："话说一半肚子就叫了……你身上带吃的了吗？"他尴尬地笑了笑。`,
+            `${targetName}叹了口气："今年收成不好，家里断粮两天了。也不知道官府什么时候开仓放粮。"`,
+          ];
+          return hungerTalks[Math.floor(Math.random() * hungerTalks.length)];
+        }
+        if (isSad) {
+          if (isTimid) {
+            return `${targetName}低着头，眼眶有些红，声音细小："没什么……就是最近不太顺心。"她擦了擦眼角，勉强挤出一丝笑容。`;
+          }
+          if (isBrave) {
+            return `${targetName}攥紧了拳头，咬牙道："别问了。总之，有些人做的那些事，我看不惯。"他深吸一口气，"算了，不说了。"`;
+          }
+          return `${targetName}长叹一声，望着远方出神。良久才说："人生在世，总有不如意的时候。"`;
+        }
+        if (isTired) {
+          const tiredTalks = [
+            `${targetName}打了个哈欠，揉了揉眼睛："抱歉，昨晚没睡好。你有什么事快说吧，我还得回去歇着。"`,
+            `${targetName}勉强提起精神："嗯？你说什么？"他晃了晃脑袋，"啊，走神了。最近太忙了，脑子都不好使了。"`,
+          ];
+          return tiredTalks[Math.floor(Math.random() * tiredTalks.length)];
+        }
+
+        // 根据天气/时间
+        if (weather === '暴雨') {
+          return `${targetName}搓着手说：'这天冷得邪乎，码头今天没船来，货都压着呢。'他看了看天色，又补了句：'我劝你也早点回家。'`;
+        }
+        if (shichen === '寅' || shichen === '丑' || shichen === '子') {
+          return `${targetName}惊讶地看着你："这么晚还在外面？最近夜里不太平，你可小心些。"`;
+        }
+
+        // 普通对话
+        const talks = [
+          `${targetName}点了点头："嗯，今天天气不错。有什么事？"`,
+          `${targetName}热情地招呼道："哟，是你啊！最近怎么样？"`,
+          `${targetName}想了想："听说东市来了个新的杂耍班子，要不要去看看？"`,
+          `${targetName}压低声音："你知道码头上那批货吗？来路不太正，不过价钱倒是便宜。"`,
+          `${targetName}聊起了最近的趣事：'前天隔壁王家的鸡跑到县衙去了，把县令老爷吓得够呛。'说完自己也忍不住笑了。`,
+          `${targetName}正色道：'最近城里多了不少外乡人，鱼龙混杂的，你出门在外多留个心眼。'`,
+        ];
+        return talks[Math.floor(Math.random() * talks.length)];
       }
-      case 'trade': {
-        const cost = 10 + Math.floor(Math.random() * 20);
-        if (!wallet || wallet.copper < cost) return '铜钱不够交易。';
+
+      case 'ask_rumor': {
+        const events = targetMemory?.recentEvents || [];
+        if (events.length === 0) {
+          return `${targetName}摇了摇头："最近倒是没什么特别的事，太平日子。"`;
+        }
+        if (vital) vital.mood = Math.min(100, vital.mood + 5);
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 2;
+        }
+        const event = events[Math.floor(Math.random() * events.length)];
+        this.logEvent('player', '社交', `你向${targetName}打听了消息`);
+
+        const rumorPrefixes = [
+          `${targetName}左右看了看，压低声音说：`,
+          `${targetName}凑近了些："我可只跟你说……`,
+          `${targetName}清了清嗓子："这个嘛……`,
+        ];
+        const prefix = rumorPrefixes[Math.floor(Math.random() * rumorPrefixes.length)];
+        return `${prefix}"${event.content}"`;
+      }
+
+      case 'trade_buy': {
+        const cost = 10 + Math.floor(Math.random() * 30);
+        if (!wallet || wallet.copper < cost) {
+          if (isShrewd) {
+            return `${targetName}精明地打量了你一眼："这点钱？怕是连看都看不了什么。回去攒够了再来吧。"`;
+          }
+          return `${targetName}面露为难之色："这……铜板不太够啊。要不你先回去凑凑？"`;
+        }
         wallet.copper -= cost;
         if (vital) vital.mood = Math.min(100, vital.mood + 3);
         const inventory = this.em.getComponent(playerId, 'Inventory');
@@ -1683,48 +1724,325 @@ export class WorldEngine {
           const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
           inventory.items.push({ itemType, amount: 1 });
         }
-        this.logEvent('player', '交易', `你和${targetName}完成了一笔交易`);
-        return `你和${targetName}讨价还价一番，花${cost}文买了一些东西。`;
-      }
-      case 'steal': {
-        const success = Math.random() > 0.4;
-        if (success) {
-          const amount = 5 + Math.floor(Math.random() * 20);
-          const targetWallet = this.em.getComponent(targetId, 'Wallet');
-          if (targetWallet && targetWallet.copper >= amount) {
-            targetWallet.copper -= amount;
-            if (wallet) wallet.copper += amount;
-            this.logEvent('player', '偷窃', `你从${targetName}那里偷了${amount}文`);
-            return `你趁${targetName}不注意，摸走了${amount}文铜钱。心里砰砰直跳。`;
-          }
+        this.logEvent('player', '交易', `你从${targetName}处花了${cost}文购买了商品`);
+
+        if (isShrewd) {
+          return `你跟${targetName}讨价还价了半天，最终花了${cost}文成交。${targetName}笑着说："成交！你眼光不错，这可是好东西。"`;
         }
-        if (vital) { vital.mood = Math.max(0, vital.mood - 10); vital.health = Math.max(0, vital.health - 5); }
-        this.logEvent('player', '偷窃', `你偷窃${targetName}被发现了`);
-        return `你的手刚伸出去就被${targetName}发现了！${targetName}怒目而视，周围的人都看过来了。`;
-      }
-      case 'ask_advice': {
-        if (vital) vital.mood = Math.min(100, vital.mood + 8);
-        return `${targetName}想了想说："最近城里不太平，买东西要趁早。听说布价还要涨。"`;
-      }
-      case 'provoke': {
-        if (vital) { vital.mood = Math.max(0, vital.mood - 5); vital.health = Math.max(0, vital.health - 10); }
-        return `你故意挑衅${targetName}。对方脸色一沉，推了你一把。旁边的人赶紧把你们拉开。`;
-      }
-      case 'gift': {
-        const inventory = this.em.getComponent(playerId, 'Inventory');
-        if (inventory && inventory.items.length > 0) {
-          const item = inventory.items.pop();
-          const memory = this.em.getComponent(targetId, 'Memory');
-          if (memory) {
-            memory.impressions[playerId] = (memory.impressions[playerId] || 0) + 15;
-          }
-          this.logEvent('player', '赠礼', `你送给${targetName}一件${item?.itemType || '物品'}`);
-          return `你把一件${item?.itemType || '物品'}送给了${targetName}。${targetName}感激地说："多谢多谢，你是个好人。"`;
+        if (isKind) {
+          return `${targetName}实诚地说："${cost}文，不赚你钱。下次有什么需要尽管来。"他把东西递给你，又多塞了点小玩意："这个送你了。"`;
         }
-        return '你翻遍背包，没找到什么可以送的。';
+        return `你和${targetName}一番交涉，花${cost}文买了一些东西。${targetName}点了点头："慢走，下次再来。"`;
       }
 
+      case 'trade_sell': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (!inventory || inventory.items.length === 0) return '你翻遍背包，什么都没有。';
+        const item = inventory.items.pop();
+        const sellPrice = 5 + Math.floor(Math.random() * 15);
+        if (wallet) wallet.copper += sellPrice;
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 2;
+        }
+        this.logEvent('player', '交易', `你向${targetName}出售了${item?.itemType || '物品'}，获得${sellPrice}文`);
+
+        if (isShrewd) {
+          return `${targetName}翻来覆去看了半天："品相一般，${sellPrice}文，不能再多了。"你虽然觉得价钱低了些，但也只好接受。`;
+        }
+        return `${targetName}接过你递来的${item?.itemType || '物品'}，看了看说："还行，给你${sellPrice}文。"你把东西交了出去。`;
+      }
+
+      case 'share_food': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (!inventory) return '你身上没有食物。';
+        const foodIdx = inventory.items.findIndex(i => i.itemType === 'food');
+        if (foodIdx < 0) return '你翻遍背包，没找到食物。';
+        inventory.items.splice(foodIdx, 1);
+        if (targetVital) targetVital.hunger = Math.min(100, targetVital.hunger + 30);
+        if (targetVital) targetVital.mood = Math.min(100, targetVital.mood + 15);
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 20;
+        }
+        this.logEvent('player', '赠礼', `你请${targetName}吃了一顿饭`);
+
+        if (targetHunger < 20) {
+          return `你把食物递给${targetName}，他愣了一下，眼眶微微泛红。"你……你是个好人。"他小声说着，大口吃了起来，像是饿了很久。吃完后他郑重地对你抱拳："这份恩情，我记下了。"`;
+        }
+        if (isKind) {
+          return `${targetName}感激地接过食物："谢谢你！这太及时了。"她温和地笑了笑，"改天一定请你吃饭。"`;
+        }
+        return `你把食物递给${targetName}，他有些意外，但很快接了过去："哦？谢了。"大口吃起来，边吃边点头，"味道不错。"`;
+      }
+
+      case 'help_request': {
+        if (!targetVital) return '你想要帮忙，但不知道对方需要什么。';
+        if (targetVital.health < 30) {
+          // 需要药物
+          const inventory = this.em.getComponent(playerId, 'Inventory');
+          const herbIdx = inventory?.items.findIndex(i => i.itemType === 'herbs' || i.itemType === 'medicine') ?? -1;
+          if (herbIdx >= 0 && inventory) {
+            inventory.items.splice(herbIdx, 1);
+            targetVital.health = Math.min(100, targetVital.health + 25);
+            if (targetMemory) {
+              targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 25;
+            }
+            this.logEvent('player', '助人', `你用药帮助了${targetName}`);
+            return `你把药材递给${targetName}，他颤抖着接过，眼中满是感激。"这些药……太贵了，你怎么舍得？"他声音哽咽，"等我好了，一定报答你。"`;
+          }
+          return '你想帮忙，但没有药材。';
+        }
+        // 饥饿求助
+        if (targetVital.hunger < 20) {
+          const inventory = this.em.getComponent(playerId, 'Inventory');
+          const foodIdx = inventory?.items.findIndex(i => i.itemType === 'food') ?? -1;
+          if (foodIdx >= 0 && inventory) {
+            inventory.items.splice(foodIdx, 1);
+            targetVital.hunger = Math.min(100, targetVital.hunger + 25);
+            if (targetMemory) {
+              targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 25;
+            }
+            this.logEvent('player', '助人', `你给了${targetName}食物`);
+            return `${targetName}虚弱地看着你，你赶紧把食物递过去。他狼吞虎咽地吃着，吃完后长舒一口气："谢谢你……我已经两天没吃东西了。"`;
+          }
+          return '你想帮忙，但没有食物可以给他。';
+        }
+        return `${targetName}看起来还好，暂时不需要帮助。`;
+      }
+
+      case 'steal': {
+        const targetWallet = this.em.getComponent(targetId, 'Wallet');
+        const targetCopper = targetWallet?.copper ?? 0;
+        if (targetCopper <= 0) return `${targetName}看起来也没什么钱。`;
+
+        // 成功率：基础50%，周围人少+20%，NPC胆小+10%，NPC精明-15%
+        let successRate = 0.5;
+        const nearby = this.worldMap.getEntitiesInGrid(pos?.gridId || '');
+        if (nearby.length < 3) successRate += 0.2;
+        if (isTimid) successRate += 0.1;
+        if (isShrewd) successRate -= 0.15;
+        if (isBrave) successRate -= 0.1;
+        const success = Math.random() < successRate;
+
+        if (success) {
+          const amount = Math.min(targetCopper, 5 + Math.floor(Math.random() * 20));
+          if (targetWallet) targetWallet.copper -= amount;
+          if (wallet) wallet.copper += amount;
+          if (targetMemory) {
+            targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) - 5;
+          }
+          this.logEvent('player', '偷窃', `你从${targetName}那里偷了${amount}文`);
+          return `你趁${targetName}不注意，手指灵巧地探入钱袋，摸走了${amount}文铜钱。心跳加速，手心微微出汗。赶紧收好，装作若无其事的样子走开。`;
+        }
+
+        // 失败
+        if (vital) { vital.mood = Math.max(0, vital.mood - 15); vital.health = Math.max(0, vital.health - 8); }
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) - 30;
+        }
+        this.logEvent('player', '偷窃', `你偷窃${targetName}被发现了`);
+
+        if (isBrave) {
+          return `你的手刚伸出去，就被${targetName}一把抓住了！"小贼！"他大喝一声，一把将你推倒在地。你摔了个趔趄，铜钱没偷到，还被结结实实地骂了一顿。周围的人纷纷投来鄙夷的目光。`;
+        }
+        if (isCunning) {
+          return `你的手刚伸出去，${targetName}冷笑一声："早就盯着你了。"他不仅抓住了你的手，还大声喊人来。你挣脱不开，被他扭送到了街坊面前示众。`;
+        }
+        return `你的手刚伸出去就被${targetName}发现了！${targetName}怒目而视："你干什么！"周围的人都看过来了。你只好讪讪地退开，脸上火辣辣的。`;
+      }
+
+      case 'learn_skill': {
+        if (vital) vital.mood = Math.min(100, vital.mood + 10);
+        const profession = targetIdentity?.profession || '';
+        const skillMap: Record<string, { skill: string; desc: string }> = {
+          '大夫': { skill: '辨认草药', desc: `${targetName}从药箱中取出一把草药，教你辨认："这种叶子锯齿状的叫活血草，旁边光滑的叫止血蒿，别搞混了。一个救人，一个要命。"` },
+          '猎户': { skill: '追踪术', desc: `${targetName}蹲下身，指着地上的痕迹："看这个蹄印，是两小时前留下的，方向朝东。右前蹄深一些，说明是受惊在跑。"` },
+          '铁匠': { skill: '锻打技巧', desc: `${targetName}挥了挥锤子："打铁关键在火候和力道。你看这一锤——"铛的一声，火星四溅，"重了就裂，轻了不透。"` },
+          '农夫': { skill: '种植知识', desc: `${targetName}弯腰抓起一把土搓了搓："土质松软，湿度正好。种豆子得深耕，种稻子要浅水，这些都是老祖宗传下来的经验。"` },
+          '渔夫': { skill: '捕鱼技法', desc: `${targetName}比划着说："鱼最喜欢在回水湾待着。水面有泡泡冒上来的地方，底下肯定有鱼。甩竿的时候要轻，别惊着它们。"` },
+          '木匠': { skill: '木工手艺', desc: `${targetName}拿起一块木板："看这纹理，顺着纹路刨才光滑。榫卯讲究的是严丝合缝，差一分都不行。"` },
+        };
+        const skillInfo = skillMap[profession];
+        if (skillInfo) {
+          this.logEvent('player', '学习', `你向${targetName}学习了${skillInfo.skill}`);
+          return skillInfo.desc;
+        }
+        return `${targetName}教了你一些实用的技巧。你觉得受益匪浅。`;
+      }
+
+      case 'invite_travel': {
+        if (isTimid) {
+          return `${targetName}犹豫了一下："这……会不会不太安全？"她想了想，又说："不过有你陪着应该没事。好吧，我跟你走。"`;
+        }
+        if (isBrave) {
+          return `${targetName}爽快地拍了拍你的肩膀："好啊！一个人走路也闷得慌，正好做个伴。走，前面带路！"`;
+        }
+        return `${targetName}点了点头："行，正好我也想出去走走。不过说好了，路上你请客吃饭。"说完嘿嘿一笑。`;
+      }
+
+      case 'heal': {
+        if (!wallet || wallet.copper < 20) return '诊金不够。';
+        wallet.copper -= 20;
+        if (vital) vital.health = Math.min(100, vital.health + 20);
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 5;
+        }
+        this.logEvent('player', '治疗', `你请${targetName}为你诊治`);
+
+        const healthLevel = vital ? vital.health : 50;
+        if (healthLevel < 30) {
+          return `${targetName}给你把了脉，眉头紧锁："你这是积劳成疾，得好好调养。"他开了副药方，又叮嘱道："这三副药按时吃，忌生冷辛辣。年轻人，别不把身体当回事。"你服下药后，感觉好了一些。`;
+        }
+        return `${targetName}给你把了脉，松了口气："没什么大碍，调养调养就好。"他开了副药，叮嘱几句注意事项。你服下药后，身体舒服了不少。`;
+      }
+
+      case 'provoke': {
+        if (vital) { vital.mood = Math.max(0, vital.mood - 8); vital.health = Math.max(0, vital.health - 12); }
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) - 20;
+        }
+        this.logEvent('player', '冲突', `你挑衅了${targetName}`);
+
+        if (isBrave) {
+          return `你故意挑衅${targetName}，他二话不说，一把揪住你的衣领！"你找打？！"他一拳砸在你胸口。旁边的人赶紧拉开你们。你揉着胸口，暗暗叫苦。`;
+        }
+        if (isTimid) {
+          return `你故意找茬，${targetName}吓得往后退了两步。"你……你想干什么？"她声音发颤。旁边的人看不下去了，把你推开："欺负老实人算什么本事？"你讪讪地退开。`;
+        }
+        if (isCunning) {
+          return `你挑衅了${targetName}，但他只是冷冷地看了你一眼："激将法对我没用。"说完转身就走。你反而觉得自己像个傻子。`;
+        }
+        return `你故意挑衅${targetName}。对方脸色一沉，推了你一把："有病吧？"旁边的人赶紧把你们拉开。你感觉身上被推的地方隐隐作痛。`;
+      }
+
+      case 'sworn_brothers': {
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 30;
+        }
+        if (vital) vital.mood = Math.min(100, vital.mood + 20);
+        this.logEvent('player', '结义', `你与${targetName}义结金兰`);
+
+        return `你与${targetName}对视一眼，心中默契已生。你们找来三牲香烛，对天盟誓："皇天在上，厚土在下，今日我与${targetName}义结金兰，此后同甘共苦，不离不弃！"${targetName}红了眼眶，紧紧握住你的手："兄弟，从今往后，你就是我亲人。"`;
+      }
+
+      case 'gift': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (!inventory || inventory.items.length === 0) return '你翻遍背包，没找到什么可以送的。';
+        const item = inventory.items.pop();
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 15;
+        }
+        this.logEvent('player', '赠礼', `你送给${targetName}一件${item?.itemType || '物品'}`);
+
+        if (impression >= 50) {
+          return `你把${item?.itemType || '物品'}递给${targetName}，他眼睛一亮："哎呀，你怎么知道我正需要这个？"他高兴地收下了，"你真是太了解我了，谢谢你！"`;
+        }
+        if (isKind) {
+          return `${targetName}接过你的礼物，露出温暖的笑容："你太客气了。"她轻轻抚摸着那件${item?.itemType || '物品'}，"谢谢你的心意，我会好好珍惜的。"`;
+        }
+        if (isShrewd) {
+          return `${targetName}接过东西，掂量了一下："嗯，值几个钱。"他嘴角微微上扬，"行，我收下了。你小子还算懂事。"`;
+        }
+        return `你把${item?.itemType || '物品'}送给了${targetName}。他有些意外，但还是收下了："嗯……谢了。"`;
+      }
+
+      // ════════════════════════════════════════════
+      // 环境交互
+      // ════════════════════════════════════════════
+
+      case 'shelter': {
+        // 找到附近的建筑实体
+        const nearbyBuildings = this.worldMap.getEntitiesInGrid(pos?.gridId || '')
+          .map(id => ({ id, type: this.em.getType(id) }))
+          .filter(e => e.type === 'building');
+        if (nearbyBuildings.length > 0) {
+          const buildingId = nearbyBuildings[0].id;
+          const buildingPos = this.em.getComponent(buildingId, 'Position');
+          if (pos && buildingPos) {
+            this.worldMap.moveEntity(playerId, buildingPos.gridId);
+            pos.gridId = buildingPos.gridId;
+            pos.areaId = buildingPos.areaId;
+          }
+        }
+        if (vital) vital.mood = Math.max(0, vital.mood - 2);
+        this.logEvent('player', '避雨', '你找了个地方避雨');
+        return `暴雨如注，你赶紧跑进最近的建筑里。雨水顺着屋檐哗哗流下，你在门口抖了抖身上的水珠。"好大的雨……"你看着外面的雨幕，庆幸自己跑得快。`;
+      }
+
+      case 'gather_fruit': {
+        const growth = this.em.getComponent(targetId, 'Growth');
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 5);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+
+        const gatherDescs = [
+          `你拨开枝叶，挑了几颗饱满的果实摘下。擦了擦，咬了一口——甘甜多汁，味道不错。你把剩下的放进背包。`,
+          `你伸手去够最高处的那颗果实，踮着脚终于摘到了。放在手心看了看，颜色鲜亮，看来是熟透了。`,
+          `你蹲在地上捡了几个掉落的果实，又从低处的枝桠上摘了些。凑了满满一捧，够吃一阵了。`,
+        ];
+        if (inventory) {
+          const itemTypes = ['food', 'herbs'];
+          const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+          inventory.items.push({ itemType, amount: 1 });
+        }
+        // 植物被采摘后降级
+        if (growth) {
+          growth.growProgress = Math.max(0, growth.growProgress - 30);
+        }
+        return gatherDescs[Math.floor(Math.random() * gatherDescs.length)];
+      }
+
+      case 'fish': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 15);
+        const success = Math.random() > 0.45;
+        // 季节和时间影响
+        const isMorning = '寅卯辰'.includes(shichen);
+        const isWinter = season === 'winter';
+
+        if (success) {
+          if (vital) vital.hunger = Math.min(100, vital.hunger + 15);
+          if (vital) vital.mood = Math.min(100, vital.mood + 8);
+          const inventory = this.em.getComponent(playerId, 'Inventory');
+          if (inventory) inventory.items.push({ itemType: 'food', amount: 1 });
+          this.logEvent('player', '捕鱼', '你成功捕到了鱼');
+
+          if (isWinter) {
+            return `你凿开冰面，在刺骨的寒水中耐心等待。终于，鱼线猛地一沉！你用力一拉——一条肥硕的鲤鱼在冰面上翻跳着。"好运气！"你冻得直哆嗦，但心里暖洋洋的。`;
+          }
+          if (isMorning) {
+            return `清晨的河面雾气缭绕，你选了个回水湾撒下网。没过多久就感觉到有鱼入网了。收网一看——三条活蹦乱跳的鲫鱼！晨钓果然是最佳时机。`;
+          }
+          return `你在河边找了个合适的位置，耐心等待。浮漂动了动，你屏住呼吸……猛地一提竿！一条银白色的鱼在空中划出一道弧线。今晚有鱼吃了！`;
+        }
+
+        if (isWinter) {
+          return `你蹲在冰窟窿旁边等了很久，手指冻得通红，但鱼就是不咬钩。你叹了口气："天太冷了，鱼都不活动。"只好收拾东西回去。`;
+        }
+        return `你等了半天，浮漂纹丝不动。正要走的时候，浮漂突然动了一下——可惜你反应慢了半拍，鱼跑了。"下次一定……"你自言自语道。`;
+      }
+
+      case 'scavenge': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 5);
+        const found = Math.random() > 0.6;
+        if (found) {
+          const inventory = this.em.getComponent(playerId, 'Inventory');
+          if (inventory) {
+            const items = ['material', 'herbs', 'misc'];
+            const item = items[Math.floor(Math.random() * items.length)];
+            inventory.items.push({ itemType: item, amount: 1 });
+          }
+          const findDescs = [
+            `你翻遍了角落里的旧箱子，在底层摸到了一样东西——看起来还有些用处。你把它收进了背包。`,
+            `你在废墟中仔细搜寻，在倒塌的柜子下面发现了一些可以用的材料。"没白来。"你心想。`,
+            `你掀开一块破布，下面居然藏着一个小包裹。打开一看，有些有用的东西。`,
+          ];
+          return findDescs[Math.floor(Math.random() * findDescs.length)];
+        }
+        return `你翻找了半天，除了灰尘和蛛网什么也没找到。这地方大概早就被翻干净了。`;
+      }
+
+      // ════════════════════════════════════════════
       // 建筑交互
+      // ════════════════════════════════════════════
+
       case 'enter_building': {
         const targetPos = this.em.getComponent(targetId, 'Position');
         if (pos && targetPos) {
@@ -1732,105 +2050,194 @@ export class WorldEngine {
           pos.gridId = targetPos.gridId;
           pos.areaId = targetPos.areaId;
         }
-        return `你走进了${targetName}。`;
+        const building = this.em.getComponent(targetId, 'Building');
+        const bType = building?.type || 'house';
+
+        const enterDescs: Record<string, string[]> = {
+          'shop': [
+            `你推开${targetName}的门，一股陈旧木料的气味扑面而来。店内有几个人在挑东西，掌柜的正在招呼客人。`,
+            `你走进${targetName}，门口的风铃叮当作响。货架上的商品琳琅满目。`,
+          ],
+          'teahouse': [
+            `你掀开帘子走进${targetName}，茶香扑鼻。说书先生正讲到精彩处，满堂茶客屏息静听。`,
+          ],
+          'house': [
+            `你走进${targetName}，屋内安静整洁。阳光从窗户洒进来，尘埃在光柱中缓缓飘浮。`,
+          ],
+        };
+        const descs = enterDescs[bType] || [`你走进了${targetName}。`];
+        return descs[Math.floor(Math.random() * descs.length)];
       }
-      case 'buy_from_shop': {
-        const cost = 8 + Math.floor(Math.random() * 15);
-        if (!wallet || wallet.copper < cost) return '铜钱不够。';
-        wallet.copper -= cost;
-        if (vital) vital.mood = Math.min(100, vital.mood + 3);
-        return `你花了${cost}文买了些东西。`;
-      }
+
       case 'ask_around': {
         if (vital) vital.mood = Math.min(100, vital.mood + 2);
         return pickChatter();
       }
 
-      // 动物交互
-      case 'observe': {
-        return `你仔细观察了一下${targetName}。它似乎没有注意到你。`;
-      }
-      case 'hunt': {
-        const success = Math.random() > 0.5;
-        if (success) {
-          if (vital) { vital.hunger = Math.min(100, vital.hunger + 20); vital.fatigue = Math.max(0, vital.fatigue - 15); }
-          return `你费了一番功夫，成功捕获了${targetName}。`;
-        }
-        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 10);
-        return `你追了半天，${targetName}太灵活了，跑掉了。`;
-      }
-      case 'feed': {
+      case 'buy_from_shop': {
+        const cost = 8 + Math.floor(Math.random() * 15);
+        if (!wallet || wallet.copper < cost) return '铜钱不够。';
+        wallet.copper -= cost;
+        if (vital) vital.mood = Math.min(100, vital.mood + 3);
         const inventory = this.em.getComponent(playerId, 'Inventory');
-        if (inventory) {
-          const foodIdx = inventory.items.findIndex(i => i.itemType === 'food');
-          if (foodIdx >= 0) {
-            inventory.items.splice(foodIdx, 1);
-            return `你拿出一块食物喂给${targetName}。它嗅了嗅，吃了下去，看起来对你亲近了些。`;
-          }
-        }
-        return '你没有食物可以喂。';
-      }
-      case 'tame': {
-        const success = Math.random() > 0.7;
-        if (success) return `${targetName}似乎接受了你，温顺地靠近了些。驯服取得了一些进展。`;
-        return `${targetName}还是对你有些警惕，跑开了几步。你需要更多耐心。`;
+        if (inventory) inventory.items.push({ itemType: 'misc', amount: 1 });
+        return `你花了${cost}文买了些东西。掌柜的包好递给你："慢走啊，下次再来。"`;
       }
 
-      // 植物交互
-      case 'gather': {
-        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 5);
-        const inventory = this.em.getComponent(playerId, 'Inventory');
-        if (inventory) inventory.items.push({ itemType: 'herbs', amount: 1 });
-        return `你采摘了一些${targetName}的产品。`;
+      // ════════════════════════════════════════════
+      // 动物交互
+      // ════════════════════════════════════════════
+
+      case 'observe': {
+        const animalNames: Record<string, string> = {
+          '野鹿': '它正在低头吃草，耳朵不时转动，警惕地听着四周的动静。',
+          '灰兔': '它蹲在灌木丛旁，鼻子不停翕动，似乎嗅到了什么。',
+          '赤狐': '它站在岩石上，毛茸茸的尾巴在身后轻轻摆动，眼神锐利。',
+          '母鸡': '它在地上刨食，不时发出咯咯的叫声。',
+          '老牛': '它慢悠悠地咀嚼着，不时抬头看看远方，一副与世无争的样子。',
+        };
+        const desc = animalNames[targetName];
+        if (desc) return `你仔细观察了一下${targetName}。${desc}`;
+        return `你仔细观察了一下${targetName}。它似乎没有注意到你，自顾自地活动着。`;
       }
+
+      case 'feed_animal': {
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (!inventory) return '你没有食物。';
+        const foodIdx = inventory.items.findIndex(i => i.itemType === 'food');
+        if (foodIdx < 0) return '你没有食物可以喂。';
+        inventory.items.splice(foodIdx, 1);
+        if (targetMemory) {
+          targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 10;
+        }
+        return `你拿出一块食物，蹲下身子慢慢递过去。${targetName}先是警惕地退后几步，又忍不住诱惑凑上前，小心翼翼地叼走了食物。嚼了几口，它看你的眼神似乎温和了些。`;
+      }
+
+      case 'chase_away': {
+        if (targetVital) targetVital.mood = Math.max(0, targetVital.mood - 10);
+        const chaseDescs = [
+          `你拍了拍手，大声吆喝了一声。${targetName}被吓得一激灵，撒腿就跑，跑出好远才停下来回头看你。`,
+          `你捡起一颗小石子丢过去，${targetName}嗖地窜了出去。但没过一会儿，你又看到它在不远处探头探脑。`,
+          `你挥着手赶走了${targetName}。它不情不愿地走了，走之前还回头看了你一眼，似乎在说"小气鬼"。`,
+        ];
+        return chaseDescs[Math.floor(Math.random() * chaseDescs.length)];
+      }
+
+      case 'track_animal': {
+        const success = Math.random() > 0.5;
+        if (success) {
+          if (vital) vital.mood = Math.min(100, vital.mood + 5);
+          return `你悄悄跟上${targetName}，保持一定距离。它穿过灌木丛，沿着小路一直走到了河边。你发现了一条之前不知道的近路！这或许以后能派上用场。`;
+        }
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 5);
+        return `你跟着${targetName}走了几步，它突然回头看你，然后撒腿就跑，一眨眼就消失在灌木丛中。你只好作罢。`;
+      }
+
+      case 'hunt': {
+        const success = Math.random() > 0.45;
+        if (success) {
+          if (vital) { vital.hunger = Math.min(100, vital.hunger + 20); vital.fatigue = Math.max(0, vital.fatigue - 15); }
+          this.logEvent('player', '捕猎', `你捕获了${targetName}`);
+          return `你屏住呼吸，慢慢靠近……猛地出手！${targetName}来不及反应就被你抓住了。费了一番功夫，但你成功了。今晚有肉吃了。`;
+        }
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 10);
+        return `你追了半天，${targetName}太灵活了。它左拐右拐就甩掉了你，你累得气喘吁吁却两手空空。"下次一定得想个更好的办法。"`;
+      }
+
+      case 'tame': {
+        const success = Math.random() > 0.7;
+        if (success) {
+          if (targetMemory) {
+            targetMemory.impressions[playerId] = (targetMemory.impressions[playerId] || 0) + 15;
+          }
+          return `你慢慢伸出手，${targetName}犹豫了一下，最终凑上来蹭了蹭你的手心。它的毛发柔软温暖，看来已经对你有了些信任。驯服取得了进展！`;
+        }
+        return `${targetName}还是对你有些警惕，你一靠近它就跑开几步，回头用警惕的眼神看着你。你需要更多耐心和食物。`;
+      }
+
+      // ════════════════════════════════════════════
+      // 植物交互
+      // ════════════════════════════════════════════
+
       case 'chop': {
         if (vital) vital.fatigue = Math.max(0, vital.fatigue - 15);
         const inventory = this.em.getComponent(playerId, 'Inventory');
         if (inventory) inventory.items.push({ itemType: 'material', amount: 1 });
-        return `你砍伐了${targetName}，获得了一些木材。`;
-      }
-      case 'water': {
-        return `你给${targetName}浇了些水，它看起来更加精神了。`;
+        this.logEvent('player', '采集', `你砍伐了${targetName}`);
+        return `你举起斧头，对准${targetName}砍了下去。木屑纷飞，几斧下去，它轰然倒下。你把能用的木材整理好，背了起来。手臂有些酸，但收获不错。`;
       }
 
+      case 'water_plant': {
+        const growth = this.em.getComponent(targetId, 'Growth');
+        if (growth) {
+          growth.growProgress = Math.min(100, growth.growProgress + 15);
+        }
+        return `你蹲下来，用双手捧起水浇在${targetName}的根部。水珠顺着叶片滑落，它看起来更加精神了。你默默祝愿它能快些长大。`;
+      }
+
+      case 'gather': {
+        if (vital) vital.fatigue = Math.max(0, vital.fatigue - 5);
+        const inventory = this.em.getComponent(playerId, 'Inventory');
+        if (inventory) inventory.items.push({ itemType: 'herbs', amount: 1 });
+        return `你小心地从${targetName}上采摘了一些东西。叶子在指间断裂，散发出淡淡的清香。你把收获包好，放进背包。`;
+      }
+
+      // ════════════════════════════════════════════
       // 矿物交互
+      // ════════════════════════════════════════════
+
       case 'collect': {
         if (vital) vital.fatigue = Math.max(0, vital.fatigue - 10);
         const inventory = this.em.getComponent(playerId, 'Inventory');
         if (inventory) inventory.items.push({ itemType: 'material', amount: 1 });
-        return `你采集了一些${targetName}的碎片。`;
+        return `你蹲下来，在${targetName}周围仔细寻找。捡了几块品质不错的矿石碎片，掂了掂分量——还行，能换几个钱。`;
       }
+
       case 'mine': {
         if (vital) vital.fatigue = Math.max(0, vital.fatigue - 20);
         const inventory = this.em.getComponent(playerId, 'Inventory');
         if (inventory) inventory.items.push({ itemType: 'material', amount: 2 });
-        return `你努力开采${targetName}，获得了一些矿石。`;
+        return `你用尽全力敲打${targetName}，火星四溅。汗水和灰尘混在一起，但你咬着牙不停手。终于，几块矿石被你敲了下来。虽然累得够呛，但收获不少。`;
       }
 
+      // ════════════════════════════════════════════
       // 物品交互
+      // ════════════════════════════════════════════
+
       case 'pickup': {
         const inventory = this.em.getComponent(playerId, 'Inventory');
         if (inventory) {
           inventory.items.push({ itemType: 'misc', amount: 1 });
-          // 移除物品实体
           this.worldMap.removeEntity(targetId);
           this.em.destroy(targetId);
         }
-        return `你捡起了${targetName}。`;
-      }
-      case 'inspect': {
-        return `你仔细检查了一下${targetName}。看起来是个普通的东西，但保存得还算完好。`;
-      }
-      case 'use_item': {
-        if (vital) {
-          vital.mood = Math.min(100, vital.mood + 3);
-          vital.health = Math.min(100, vital.health + 5);
-        }
-        return `你使用了${targetName}。感觉好了些。`;
+        return `你弯腰捡起了${targetName}，仔细看了看，虽然不知道有什么用，但先收着总没错。你把它塞进背包。`;
       }
 
+      case 'inspect': {
+        const inspectDescs = [
+          `你仔细检查了一下${targetName}。虽然蒙了些灰尘，但保存得还算完好。也许能派上用场。`,
+          `你翻来覆去地看${targetName}。做工不算精细，但材料不错。如果找个懂行的人看看，或许能知道它的价值。`,
+          `你端详了${targetName}一会儿。看起来是被人遗落的，不知道在这里待了多久。`,
+        ];
+        return inspectDescs[Math.floor(Math.random() * inspectDescs.length)];
+      }
+
+      case 'use_item': {
+        if (vital) {
+          vital.mood = Math.min(100, vital.mood + 5);
+          vital.health = Math.min(100, vital.health + 8);
+        }
+        return `你使用了${targetName}。一股暖意涌遍全身，感觉精神好了些。"还有点用处。"你心想。`;
+      }
+
+      // 兼容旧 action ID
+      case 'trade': return this.executeEntityAction(playerId, 'trade_buy', params, vital, wallet, pos);
+      case 'feed': return this.executeEntityAction(playerId, 'feed_animal', params, vital, wallet, pos);
+      case 'water': return this.executeEntityAction(playerId, 'water_plant', params, vital, wallet, pos);
+
       default:
-        return `执行了 ${actionId}`;
+        return `你尝试做了些什么，但似乎没有效果。`;
     }
   }
 
