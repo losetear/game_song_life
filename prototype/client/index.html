@@ -4127,6 +4127,7 @@ function renderWorldStats(data) {
 
   // 更新回合事件tick显示
   if (currentEventTick === 0) currentEventTick = data.tick;
+  if (data.ticksPerDay) ticksPerDay = data.ticksPerDay;
 }
 
 async function loadTickStats(statsData) {
@@ -4194,9 +4195,11 @@ function filterByGrid(gridId) {
 }
 
 // === 回合事件 ===
+let ticksPerDay = 120; // 默认值，从stats更新
+
 function changeEventTick(delta) {
-  currentEventTick += delta;
-  if (currentEventTick < 1) currentEventTick = 1;
+  currentEventTick += delta * ticksPerDay;
+  if (currentEventTick < ticksPerDay) currentEventTick = ticksPerDay;
   loadTickEvents();
 }
 
@@ -4204,7 +4207,7 @@ async function loadTickEvents() {
   const container = document.getElementById('tick-events-container');
   const display = document.getElementById('event-tick-display');
   if (!container) return;
-  display.textContent = `T${currentEventTick}`;
+  display.textContent = `第${Math.floor(currentEventTick / ticksPerDay)}天`;
   container.innerHTML = '<div style="text-align:center;color:rgba(44,24,16,0.3);padding:20px;">加载中…</div>';
   try {
     const res = await fetch(`/api/world/events/${currentEventTick}`);
@@ -4216,24 +4219,46 @@ async function loadTickEvents() {
     }
 
     const typeConfig = {
-      weather: { icon: '🌤️', label: '天气事件' },
-      npc: { icon: '👥', label: 'NPC行动事件' },
-      player: { icon: '🧑', label: '玩家事件' },
-      economy: { icon: '💰', label: '经济事件' },
-      ecology: { icon: '🌿', label: '生态事件' },
-      propagation: { icon: '📢', label: '信息传播' },
-      move: { icon: '🚶', label: '移动事件' },
-      state: { icon: '📊', label: '状态变化' },
-      other: { icon: '📋', label: '其他事件' },
+      weather: { icon: '🌤️', label: '天气', color: '#4a90d9' },
+      economy: { icon: '💰', label: '经济', color: '#d4a017' },
+      ecology: { icon: '🌿', label: '生态', color: '#5b8c5a' },
+      player: { icon: '🧑', label: '玩家', color: '#8b4513' },
+      npc: { icon: '👥', label: 'NPC行动', color: '#6b5b73' },
+      propagation: { icon: '📢', label: '信息传播', color: '#c27c0e' },
+      state: { icon: '📊', label: '状态变化', color: '#708090' },
+      move: { icon: '🚶', label: '移动', color: '#888' },
+      other: { icon: '📋', label: '其他', color: '#999' },
     };
 
-    // 按类型分组，保持设计文档顺序
-    const typeOrder = ['weather', 'npc', 'player', 'economy', 'ecology', 'propagation', 'move', 'state', 'other'];
+    // 按类型分组，优先级排序
+    const typeOrder = ['weather', 'economy', 'ecology', 'player', 'npc', 'propagation', 'state', 'move', 'other'];
     const groups = {};
+    const importantEvents = []; // 非NPC日常事件
+    
     for (const evt of data.events) {
       const type = evt.type || 'other';
+      // 非 NPC 日常事件都是重要的
+      if (type !== 'npc' || (evt.cause && evt.cause.length > 0) || (evt.effects && evt.effects.length > 0)) {
+        importantEvents.push(evt);
+      }
       if (!groups[type]) groups[type] = [];
       groups[type].push(evt);
+    }
+    
+    // NPC 事件去重摘要：取前5条不同内容的
+    if (groups['npc'] && groups['npc'].length > 5) {
+      const seen = new Set();
+      const unique = [];
+      for (const e of groups['npc']) {
+        const key = e.message?.substring(0, 20) || '';
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(e);
+        }
+        if (unique.length >= 8) break;
+      }
+      unique.push({ type: 'npc', message: `...等共 ${groups['npc'].length} 条NPC行动`, category: 'summary' });
+      groups['npc'] = unique;
     }
 
     let html = '';
@@ -4287,8 +4312,9 @@ async function loadTickEvents() {
     }
 
     // 回合头部信息
+    const dayNum = data.day || Math.floor(currentEventTick / ticksPerDay) || '?';
     const headerHtml = `<div style="padding:6px 10px;background:rgba(44,24,16,0.04);border-radius:6px;margin-bottom:10px;font-size:12px;">
-      第${data.day || '?'}天 · ${data.shichen || '?'}时 · ${getWeatherIcon(data.weather)}${data.weather || ''} · 共 <strong>${data.events.length}</strong> 条事件
+      第${dayNum}天 · ${data.shichen || '?'}时 · ${getWeatherIcon(data.weather)}${data.weather || ''} · 共 <strong>${data.events.length}</strong> 条事件
     </div>`;
 
     container.innerHTML = headerHtml + html;

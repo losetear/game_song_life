@@ -103,6 +103,7 @@ export class GameServer {
           ecsEntities: em.entityCount,
           tick: time.tick,
           day: time.day,
+          ticksPerDay: time.ticksPerDay,
           shichen: time.shichenName,
           season: time.season,
           weather: this.engine.weather.weather,

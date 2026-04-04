@@ -15,6 +15,7 @@ export class TimeSystem {
   get day(): number { return Math.floor(this.tickCount / (this.ticksPerShichen * this.shichenPerDay)); }
   get season(): string { return SEASONS[Math.floor((this.day % 120) / 30)]; } // 30天一季
   get isDaytime(): boolean { return this.hour >= 7 && this.hour <= 19; }
+  get ticksPerDay(): number { return this.ticksPerShichen * this.shichenPerDay; }
 
   advance(): void {
     // 每次推进1天（12时辰 = 120 tick），玩家结束回合后世界推进一整天
