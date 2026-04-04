@@ -502,6 +502,31 @@ export class WorldEngine {
     return undefined;
   }
 
+  /** 获取单个组织详情（含成员信息） */
+  getFactionDetail(id: number): {
+    faction: FactionComponent;
+    memberInfo: { id: number; name: string; profession: string }[];
+  } | null {
+    const faction = this.factions.get(id);
+    if (!faction) return null;
+    const memberInfo = faction.members.map(mid => {
+      const ident = this.em.getComponent(mid, 'Identity');
+      return { id: mid, name: ident?.name || `NPC#${mid}`, profession: ident?.profession || '' };
+    });
+    return { faction, memberInfo };
+  }
+
+  /** 获取组织历史事件（与组织名相关的事件） */
+  getFactionHistory(id: number, limit: number = 10): WorldEvent[] {
+    const faction = this.factions.get(id);
+    if (!faction) return [];
+    const name = faction.name;
+    const matched = this.eventLog.filter(e =>
+      e.message.includes(name) || (e.category && e.category.includes(name))
+    );
+    return matched.slice(-limit);
+  }
+
   /** 在 Tick 中生成事件 — 基于实体状态涌现 */
   private generateTickEvents(): void {
     const worldState = this.buildWorldState();

@@ -2263,6 +2263,7 @@ body::before {
       <div class="sub-tab" onclick="switchSubTab('ecology', this)">生态</div>
       <div class="sub-tab" onclick="switchSubTab('weather', this)">天气</div>
       <div class="sub-tab" onclick="switchSubTab('propagation', this)">传播</div>
+      <div class="sub-tab" onclick="switchSubTab('factions', this)">组织</div>
       <div class="sub-tab" onclick="switchSubTab('search', this)">搜索</div>
     </div>
 
@@ -2425,7 +2426,39 @@ body::before {
       </div>
     </div>
 
-    <!-- 子面板8: 实体搜索 -->
+    <!-- 子面板8: 组织势力 -->
+    <div id="sub-factions" class="sub-panel">
+      <div class="monitor-card">
+        <div class="monitor-card-title">
+          组织势力
+          <button class="refresh-btn" onclick="loadFactions()">刷新</button>
+        </div>
+        <div class="filter-bar" style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;">
+          <input type="text" id="faction-search" placeholder="搜索组织名称..." style="flex:1;min-width:120px;padding:5px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:4px;font-size:12px;background:var(--paper-light);color:var(--ink);">
+          <select id="faction-filter-type" style="padding:5px 8px;border:1px solid rgba(44,24,16,0.15);border-radius:4px;font-size:12px;background:var(--paper-light);color:var(--ink);">
+            <option value="">全部类型</option>
+            <option value="government">政府</option>
+            <option value="military">军事</option>
+            <option value="merchant">商业</option>
+            <option value="religion">宗教</option>
+            <option value="underground">地下</option>
+            <option value="scholar">文人</option>
+          </select>
+          <button onclick="loadFactions()" style="padding:5px 12px;background:var(--gold);color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer;">搜索</button>
+        </div>
+        <div id="factions-container">加载中...</div>
+        <!-- 组织详情弹层 -->
+        <div id="faction-detail-panel" style="display:none;margin-top:10px;border-top:1px solid rgba(44,24,16,0.1);padding-top:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span id="faction-detail-title" style="font-weight:700;font-size:14px;"></span>
+            <button onclick="closeFactionDetail()" style="background:none;border:none;font-size:16px;cursor:pointer;color:rgba(44,24,16,0.4);">×</button>
+          </div>
+          <div id="faction-detail-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 子面板9: 实体搜索 -->
     <div id="sub-search" class="sub-panel">
       <div class="monitor-card">
         <div class="monitor-card-title">实体搜索</div>
@@ -4042,6 +4075,7 @@ function switchSubTab(name, el) {
     case 'ecology': loadEcologyPanel(); break;
     case 'weather': loadWeatherPanel(); break;
     case 'propagation': loadPropagationPanel(); break;
+    case 'factions': loadFactions(); break;
     case 'search': populateGridFilter(); loadEntities(); break;
   }
 }
@@ -4973,6 +5007,201 @@ async function loadPropagationPanel() {
 }
 
 // === 实体搜索 ===
+// === 组织势力面板 ===
+const FACTION_TYPE_LABELS = {
+  government: '🏛️ 政府', military: '⚔️ 军事', merchant: '💰 商业',
+  religion: '🕯️ 宗教', underground: '🗡️ 地下', scholar: '📚 文人'
+};
+const FACTION_TYPE_COLORS = {
+  government: '#8b0000', military: '#4a4a8a', merchant: '#8b6914',
+  religion: '#6a5acd', underground: '#2f4f4f', scholar: '#2e8b57'
+};
+
+async function loadFactions() {
+  const container = document.getElementById('factions-container');
+  if (!container) return;
+
+  const search = (document.getElementById('faction-search')?.value || '').trim();
+  const type = document.getElementById('faction-filter-type')?.value || '';
+
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (type) params.set('type', type);
+
+  container.innerHTML = '<div style="padding:20px;text-align:center;color:rgba(44,24,16,0.4)">加载中...</div>';
+
+  try {
+    const res = await fetch('/api/world/factions?' + params.toString());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const factions = data.factions || [];
+
+    if (factions.length === 0) {
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:rgba(44,24,16,0.4)">暂无组织数据</div>';
+      return;
+    }
+
+    container.innerHTML = factions.map(f => {
+      const label = FACTION_TYPE_LABELS[f.type] || f.type;
+      const color = FACTION_TYPE_COLORS[f.type] || '#666';
+      const moodLabel = f.mood > 70 ? '士气高昂' : f.mood > 40 ? '士气一般' : '士气低落';
+      const moodColor = f.mood > 70 ? 'var(--jade)' : f.mood > 40 ? 'var(--gold)' : 'var(--vermillion)';
+      return `
+        <div style="border:1px solid rgba(44,24,16,0.1);border-radius:8px;padding:12px;margin-bottom:10px;cursor:pointer;transition:background 0.2s;" onclick="loadFactionDetail(${f.id})" onmouseover="this.style.background='rgba(44,24,16,0.03)'" onmouseout="this.style.background='transparent'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div>
+              <span style="font-size:14px;font-weight:700;">${f.name}</span>
+              <span style="font-size:11px;color:${color};margin-left:6px;">${label}</span>
+            </div>
+            <span style="font-size:11px;color:rgba(44,24,16,0.4);">影响力 ${f.influence}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:8px;">
+            <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="color:rgba(44,24,16,0.4);font-size:10px;">金库</div>
+              <div style="font-weight:600;">${(f.treasury || 0).toLocaleString()}文</div>
+            </div>
+            <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="color:rgba(44,24,16,0.4);font-size:10px;">成员</div>
+              <div style="font-weight:600;">${f.memberCount || 0}人</div>
+            </div>
+            <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="color:rgba(44,24,16,0.4);font-size:10px;">士气</div>
+              <div style="font-weight:600;color:${moodColor};">${f.mood || 50} ${moodLabel}</div>
+            </div>
+          </div>
+          ${f.leaderName ? `<div style="font-size:11px;color:rgba(44,24,16,0.5);">首领：<strong>${f.leaderName}</strong></div>` : ''}
+          ${f.territory && f.territory.length > 0 ? `<div style="font-size:10px;color:rgba(44,24,16,0.3);margin-top:4px;">势力范围：${f.territory.join('、')}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--vermillion);">加载失败</div>';
+  }
+}
+
+async function loadFactionDetail(id) {
+  const panel = document.getElementById('faction-detail-panel');
+  const title = document.getElementById('faction-detail-title');
+  const body = document.getElementById('faction-detail-body');
+  if (!panel || !title || !body) return;
+
+  body.innerHTML = '<div style="text-align:center;color:rgba(44,24,16,0.4);padding:10px;">加载中...</div>';
+  panel.style.display = 'block';
+
+  try {
+    const [detailRes, historyRes] = await Promise.all([
+      fetch(`/api/world/factions/${id}`),
+      fetch(`/api/world/factions/${id}/history?limit=10`)
+    ]);
+    if (!detailRes.ok) throw new Error('详情加载失败');
+    const detail = await detailRes.json();
+    const historyData = historyRes.ok ? await historyRes.json() : { events: [] };
+
+    const label = FACTION_TYPE_LABELS[detail.type] || detail.type;
+    const color = FACTION_TYPE_COLORS[detail.type] || '#666';
+    title.innerHTML = `<span style="color:${color};">${label}</span> ${detail.name}`;
+
+    // 关系数据
+    const relationsHtml = detail.relations && Object.keys(detail.relations).length > 0
+      ? Object.entries(detail.relations).slice(0, 5).map(([rid, score]) => {
+          const rf = fetch('/api/world/factions').then(() => null).catch(() => null); // no-op, just show score
+          const s = score as number;
+          const sc = s > 30 ? 'var(--jade)' : s < -30 ? 'var(--vermillion)' : 'var(--gold)';
+          return `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:3px;font-size:11px;border:1px solid rgba(44,24,16,0.1);">ID#${rid} <span style="color:${sc};">${s > 0 ? '+' : ''}${s}</span></span>`;
+        }).join('')
+      : '<span style="color:rgba(44,24,16,0.3);font-size:11px;">暂无关系数据</span>';
+
+    // 成员列表
+    const membersHtml = (detail.members || []).map(m =>
+      `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:3px;font-size:11px;border:1px solid rgba(44,24,16,0.1);cursor:pointer;background:rgba(44,24,16,0.02);" onclick="showNPCInfo(${m.id})">${m.name}${m.profession ? ' · ' + m.profession : ''}</span>`
+    ).join('') || '<span style="color:rgba(44,24,16,0.3);font-size:11px;">暂无成员</span>';
+
+    // 历史事件
+    const eventsHtml = (historyData.events || []).reverse().map(e =>
+      `<div style="padding:4px 0;border-bottom:1px solid rgba(44,24,16,0.05);font-size:11px;">
+        <span style="color:rgba(44,24,16,0.3);">Tick${e.tick}</span>
+        <span style="color:${FACTION_TYPE_COLORS[detail.type] || '#666'};margin:0 4px;">[${e.type}]</span>
+        ${e.message}
+      </div>`
+    ).join('') || '<div style="color:rgba(44,24,16,0.3);font-size:11px;padding:4px 0;">暂无历史事件</div>';
+
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+        <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+          <div style="color:rgba(44,24,16,0.4);font-size:10px;">影响力</div>
+          <div style="font-weight:700;font-size:16px;">${detail.influence}</div>
+        </div>
+        <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+          <div style="color:rgba(44,24,16,0.4);font-size:10px;">金库</div>
+          <div style="font-weight:700;font-size:13px;">${(detail.treasury || 0).toLocaleString()}文</div>
+        </div>
+        <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+          <div style="color:rgba(44,24,16,0.4);font-size:10px;">士气</div>
+          <div style="font-weight:700;font-size:16px;">${detail.mood || 50}</div>
+        </div>
+        <div style="background:rgba(44,24,16,0.03);padding:6px;border-radius:4px;text-align:center;">
+          <div style="color:rgba(44,24,16,0.4);font-size:10px;">成员</div>
+          <div style="font-weight:700;font-size:16px;">${(detail.members || []).length}人</div>
+        </div>
+      </div>
+
+      ${detail.leaderName ? `<div style="font-size:12px;margin-bottom:6px;">首领：<strong>${detail.leaderName}</strong></div>` : ''}
+
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">成员列表</div>
+        <div style="display:flex;flex-wrap:wrap;">${membersHtml}</div>
+      </div>
+
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">组织关系</div>
+        <div style="display:flex;flex-wrap:wrap;">${relationsHtml}</div>
+      </div>
+
+      ${detail.territory && detail.territory.length > 0 ? `<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-bottom:8px;">控制区域：${detail.territory.join('、')}</div>` : ''}
+
+      <div>
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">最近事件</div>
+        ${eventsHtml}
+      </div>
+    `;
+  } catch (e) {
+    body.innerHTML = '<div style="text-align:center;color:var(--vermillion);font-size:12px;">加载详情失败</div>';
+  }
+}
+
+function closeFactionDetail() {
+  const panel = document.getElementById('faction-detail-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+function showNPCInfo(npcId) {
+  // 切到NPC标签并选择该NPC
+  switchSubTab('npc', document.querySelector('.sub-tab:nth-child(3)'));
+  setTimeout(() => {
+    const select = document.getElementById('npc-select');
+    if (select) {
+      // 确保NPC在列表中
+      let found = false;
+      for (const opt of select.options) {
+        if (Number(opt.value) === npcId) { found = true; break; }
+      }
+      if (!found) {
+        const opt = document.createElement('option');
+        opt.value = npcId;
+        opt.textContent = `NPC#${npcId}`;
+        select.appendChild(opt);
+      }
+      select.value = npcId;
+      loadNPCProfile();
+    }
+  }, 200);
+}
+
+// 回车键触发搜索
+document.getElementById('faction-search')?.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') loadFactions();
+});
+
 async function loadEntities() {
   const type = document.getElementById('entity-filter-type').value;
   const lod = document.getElementById('entity-filter-lod').value;

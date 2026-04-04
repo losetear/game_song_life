@@ -117,16 +117,20 @@ export class GameServer {
             prices: economyData.prices,
             recentChanges: economyData.recentChanges.slice(-5),
           },
-          factions: Array.from(this.engine.getFactions().entries()).map(([id, f]) => ({
-            id,
-            name: f.name,
-            type: f.type,
-            influence: f.influence,
-            treasury: f.treasury,
-            mood: f.mood,
-            memberCount: f.members.length,
-            territory: f.territory,
-          })),
+          factions: Array.from(this.engine.getFactions().entries()).map(([id, f]) => {
+            const leader = f.leaderId ? this.engine['em']?.getComponent(f.leaderId, 'Identity') : null;
+            const memberNames = f.members.slice(0, 5).map(mid => {
+              const ident = this.engine['em']?.getComponent(mid, 'Identity');
+              return ident?.name || `NPC#${mid}`;
+            }).filter(Boolean);
+            return {
+              id, name: f.name, type: f.type, influence: f.influence,
+              treasury: f.treasury, mood: f.mood,
+              members: f.members, memberNames,
+              leaderId: f.leaderId, leaderName: leader?.name || null,
+              territory: f.territory, relations: f.relations,
+            };
+          }),
         });
       } catch (err) {
         res.status(500).json({ error: String(err) });
@@ -419,6 +423,75 @@ export class GameServer {
       }
     });
 
+    // ── 组织势力 API ──────────────────────────────────────────
+
+    // GET /api/world/factions — 组织列表（支持搜索）
+    this.app.get('/api/world/factions', (req, res) => {
+      try {
+        const search = req.query.search as string | undefined;
+        const type = req.query.type as string | undefined;
+        const allFactions = Array.from(this.engine.getFactions().entries());
+        const filtered = allFactions.filter(([, f]) => {
+          if (search && !f.name.includes(search)) return false;
+          if (type && f.type !== type) return false;
+          return true;
+        });
+        const result = filtered.map(([id, f]) => {
+          const leader = f.leaderId ? this.engine['em']?.getComponent(f.leaderId, 'Identity') : null;
+          return {
+            id, name: f.name, type: f.type, influence: f.influence,
+            treasury: f.treasury, mood: f.mood,
+            memberCount: f.members.length,
+            leaderId: f.leaderId, leaderName: leader?.name || null,
+            territory: f.territory,
+          };
+        });
+        res.json({ total: result.length, factions: result });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/factions/:id — 组织详情
+    this.app.get('/api/world/factions/:id', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const detail = this.engine.getFactionDetail(id);
+        if (!detail) {
+          res.status(404).json({ error: 'Faction not found' });
+          return;
+        }
+        const f = detail.faction;
+        const leader = f.leaderId ? this.engine['em']?.getComponent(f.leaderId, 'Identity') : null;
+        res.json({
+          id, name: f.name, type: f.type, influence: f.influence,
+          treasury: f.treasury, mood: f.mood,
+          members: detail.memberInfo,
+          leaderId: f.leaderId, leaderName: leader?.name || null,
+          territory: f.territory, relations: f.relations,
+        });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    // GET /api/world/factions/:id/history — 组织历史事件
+    this.app.get('/api/world/factions/:id/history', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+        const faction = this.engine.getFactions().get(id);
+        if (!faction) {
+          res.status(404).json({ error: 'Faction not found' });
+          return;
+        }
+        const events = this.engine.getFactionHistory(id, limit);
+        res.json({ factionId: id, factionName: faction.name, total: events.length, events });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
     // GET /api/world/building/:id/interior — 建筑内部数据
     this.app.get('/api/world/building/:id/interior', (req, res) => {
       try {
@@ -561,6 +634,9 @@ export class GameServer {
       console.log(`   POST /api/end-turn           → 结束回合`);
       console.log(`   GET  /api/world/building/:id → 建筑详情`);
       console.log(`   GET  /api/world/building/:id/interior → 建筑内部`);
+      console.log(`   GET  /api/world/factions → 组织列表`);
+      console.log(`   GET  /api/world/factions/:id → 组织详情`);
+      console.log(`   GET  /api/world/factions/:id/history → 组织历史`);
       console.log(`   WebSocket           → 游戏交互`);
     });
   }
