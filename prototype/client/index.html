@@ -2672,6 +2672,7 @@ function switchTab(name, el) {
   if (name === 'demo' && !ws) connectWS();
   if (name === 'monitor') startMonitor();
   else stopMonitor();
+  if (name === 'god') initGodPanel();
 }
 
 // ============================================================
@@ -5554,6 +5555,241 @@ document.addEventListener('DOMContentLoaded', () => {
   loadNearbyEntities();
   loadMoveOptions();
 });
+
+// ============================================================
+// 上帝模式
+// ============================================================
+let godLogTimer = null;
+
+function initGodPanel() {
+  // 加载NPC列表
+  godLoadNpcList();
+  // 加载组织列表
+  godLoadFactions();
+  // 加载传送目标
+  godLoadGrids();
+  // 加载事件日志
+  godRefreshLog();
+}
+
+function godLoadNpcList() {
+  const select = document.getElementById('god-npc');
+  if (!select) return;
+  select.innerHTML = '<option value="">选择NPC…</option>';
+  fetch('/api/world/entities?type=npc&limit=800')
+    .then(r => r.json())
+    .then(data => {
+      const npcs = (data.entities || []).sort((a, b) => a.id - b.id);
+      for (const e of npcs) {
+        const opt = document.createElement('option');
+        opt.value = e.id;
+        opt.textContent = e.name + ' (' + e.id + ')' + (e.profession ? ' · ' + e.profession : '') + (e.gridId ? ' @ ' + (GRID_NAMES[e.gridId] || e.gridId) : '');
+        select.appendChild(opt);
+      }
+    })
+    .catch(() => {});
+}
+
+function godLoadFactions() {
+  fetch('/api/world/factions')
+    .then(r => r.json())
+    .then(data => {
+      const factions = data.factions || [];
+      for (const selId of ['god-faction1', 'god-faction2']) {
+        const sel = document.getElementById(selId);
+        if (!sel) continue;
+        sel.innerHTML = '<option value="">选择组织…</option>';
+        for (const f of factions) {
+          const opt = document.createElement('option');
+          opt.value = f.id;
+          opt.textContent = f.name + ' (' + f.type + ')';
+          sel.appendChild(opt);
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function godLoadGrids() {
+  const sel = document.getElementById('god-teleport-grid');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const grids = Object.keys(GRID_NAMES || {});
+  for (const g of grids) {
+    const opt = document.createElement('option');
+    opt.value = g;
+    opt.textContent = GRID_NAMES[g] || g;
+    sel.appendChild(opt);
+  }
+}
+
+function godShowMsg(containerId, msg, isError) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.textContent = (isError ? '❌ ' : '✅ ') + msg;
+  el.style.display = 'block';
+  el.style.color = isError ? 'var(--vermillion)' : 'var(--jade)';
+}
+
+function godAutoRefreshLog() {
+  if (godLogTimer) clearInterval(godLogTimer);
+  godRefreshLog();
+  // 30秒自动刷新
+  let count = 0;
+  godLogTimer = setInterval(() => {
+    godRefreshLog();
+    count++;
+    if (count >= 10) { clearInterval(godLogTimer); godLogTimer = null; }
+  }, 3000);
+}
+
+function godRefreshLog() {
+  const container = document.getElementById('god-event-log');
+  if (!container) return;
+  fetch('/api/world/events?count=30')
+    .then(r => r.json())
+    .then(data => {
+      const events = (data.events || []).reverse();
+      let html = '';
+      for (const e of events) {
+        const msg = typeof e === 'string' ? e : (e.message || JSON.stringify(e));
+        const type = e.type || '';
+        const cat = e.category || '';
+        const color = type === 'admin' || type === 'state' ? 'var(--vermillion)' :
+                      type === 'weather' ? 'var(--indigo)' :
+                      type === 'economy' ? 'var(--gold)' :
+                      type === 'npc' ? 'var(--jade)' : 'rgba(44,24,16,0.6)';
+        const tick = e.tick ? 'T' + e.tick + ' ' : '';
+        html += '<div style="border-bottom:1px solid rgba(44,24,16,0.06);padding:4px 0;">' +
+          '<span style="font-size:10px;color:rgba(44,24,16,0.3);">' + tick + (cat ? '[' + cat + '] ' : '') + '</span>' +
+          '<span style="color:' + color + ';">' + msg + '</span></div>';
+      }
+      container.innerHTML = html || '<div style="color:rgba(44,24,16,0.3);">暂无事件</div>';
+      container.scrollTop = container.scrollHeight;
+    })
+    .catch(() => { container.innerHTML = '<div style="color:var(--vermillion);">加载失败</div>'; });
+}
+
+function godSetWeather() {
+  const weather = document.getElementById('god-weather').value;
+  if (!weather) return;
+  fetch('/api/admin/weather', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ weather })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-weather-msg', data.message, !data.success);
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-weather-msg', err.message, true));
+}
+
+function godKillNpc() {
+  const id = parseInt(document.getElementById('god-npc').value);
+  if (!id) { godShowMsg('god-npc-msg', '请先选择NPC', true); return; }
+  if (!confirm('确认杀死此NPC？此操作不可撤销！')) return;
+  fetch('/api/admin/kill-npc', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ npcId: id })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-npc-msg', data.message, !data.success);
+    godLoadNpcList(); // 刷新NPC列表
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-npc-msg', err.message, true));
+}
+
+function godSetVital(field, value) {
+  const id = parseInt(document.getElementById('god-npc').value);
+  if (!id) { godShowMsg('god-npc-msg', '请先选择NPC', true); return; }
+  fetch('/api/admin/set-vital', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ npcId: id, field, value })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-npc-msg', data.message, !data.success);
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-npc-msg', err.message, true));
+}
+
+function godAddCopper(amount) {
+  const id = parseInt(document.getElementById('god-npc').value);
+  if (!id) { godShowMsg('god-npc-msg', '请先选择NPC', true); return; }
+  fetch('/api/admin/add-copper', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ npcId: id, amount })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-npc-msg', data.message, !data.success);
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-npc-msg', err.message, true));
+}
+
+function godTeleport() {
+  const id = parseInt(document.getElementById('god-npc').value);
+  const gridId = document.getElementById('god-teleport-grid').value;
+  if (!id) { godShowMsg('god-npc-msg', '请先选择NPC', true); return; }
+  if (!gridId) { godShowMsg('god-npc-msg', '请选择目标地点', true); return; }
+  fetch('/api/admin/teleport', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ npcId: id, gridId })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-npc-msg', data.message, !data.success);
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-npc-msg', err.message, true));
+}
+
+function godSetFactionRelation() {
+  const f1 = parseInt(document.getElementById('god-faction1').value);
+  const f2 = parseInt(document.getElementById('god-faction2').value);
+  const score = parseInt(document.getElementById('god-faction-score').value);
+  if (!f1 || !f2) { godShowMsg('god-faction-msg', '请选择两个组织', true); return; }
+  if (f1 === f2) { godShowMsg('god-faction-msg', '请选择不同的组织', true); return; }
+  fetch('/api/admin/faction-relation', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ factionId1: f1, factionId2: f2, score })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-faction-msg', data.message, !data.success);
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-faction-msg', err.message, true));
+}
+
+function godCustomEvent() {
+  const text = document.getElementById('god-event-text').value;
+  const type = document.getElementById('god-event-type').value || '自定义';
+  if (!text) { godShowMsg('god-event-msg', '请输入事件描述', true); return; }
+  fetch('/api/admin/custom-event', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ message: text, type })
+  })
+  .then(r => r.json())
+  .then(data => {
+    godShowMsg('god-event-msg', data.message, !data.success);
+    document.getElementById('god-event-text').value = '';
+    godAutoRefreshLog();
+  })
+  .catch(err => godShowMsg('god-event-msg', err.message, true));
+}
 </script>
 </body>
 </html>
