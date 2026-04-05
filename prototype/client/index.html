@@ -1896,6 +1896,18 @@ body::before {
 .npc-section-title.hist { border-left-color: var(--gold); }
 .npc-section-title.rel { border-left-color: #8b6914; }
 
+.npc-needs { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.need-bar { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.need-label { width: 32px; text-align: right; color: rgba(44,24,16,0.5); }
+.need-track { flex: 1; height: 6px; background: rgba(44,24,16,0.08); border-radius: 3px; overflow: hidden; }
+.need-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.need-value { width: 24px; font-size: 10px; color: rgba(44,24,16,0.4); }
+.npc-action-history { max-height: 200px; overflow-y: auto; }
+.action-record { padding: 4px 0; border-bottom: 1px solid rgba(44,24,16,0.05); font-size: 11px; line-height: 1.6; }
+.action-time { color: rgba(44,24,16,0.3); font-size: 10px; }
+.action-name { color: var(--indigo); font-weight: 600; }
+.action-narrative { color: rgba(44,24,16,0.6); }
+
 .npc-inventory {
   display: flex;
   flex-wrap: wrap;
@@ -2098,6 +2110,17 @@ body::before {
   color: rgba(44,24,16,0.5);
   margin: 8px 0;
 }
+/* ===== NPC 需求条 ===== */
+.npc-needs { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.need-bar { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.need-label { width: 52px; text-align: right; color: rgba(44,24,16,0.5); font-size: 10px; }
+.need-track { flex: 1; height: 6px; background: rgba(44,24,16,0.08); border-radius: 3px; overflow: hidden; }
+.need-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.need-value { width: 24px; font-size: 10px; color: rgba(44,24,16,0.4); }
+.npc-action-history { max-height: 200px; overflow-y: auto; }
+.action-record { padding: 4px 0; border-bottom: 1px solid rgba(44,24,16,0.05); font-size: 11px; line-height: 1.6; }
+.action-time { color: rgba(44,24,16,0.3); font-size: 10px; }
+.action-name { color: var(--indigo); font-weight: 600; font-size: 10px; }
 </style>
 </head>
 <body>
@@ -4599,6 +4622,95 @@ async function loadNPCProfile() {
     const copperWarn = p.wealth.copper < 20 ? ' ⚠️' : '';
     html += `<div style="margin-top:8px;font-size:13px;">铜钱: <strong style="color:var(--gold)">${p.wealth.copper}文</strong>${copperWarn} · 物品估值: <strong style="color:var(--gold)">${p.wealth.itemsValue}文</strong> · 总资产: <strong style="color:var(--gold)">${p.wealth.totalAssets}文</strong></div>`;
     html += '</div>';
+
+    // === 需求状态区（6个彩色进度条） ===
+    if (p.needs) {
+      html += '<div class="npc-section-title">需求状态</div>';
+      html += '<div class="npc-needs">';
+      const needFields = [
+        { key: 'hunger', label: '饥饿' },
+        { key: 'fatigue', label: '疲劳' },
+        { key: 'health', label: '健康' },
+        { key: 'mood', label: '心情' },
+        { key: 'safety', label: '安全' },
+        { key: 'social', label: '社交' },
+      ];
+      for (const nf of needFields) {
+        const val = Math.round(p.needs[nf.key] || 0);
+        const color = val > 70 ? '#2e8b57' : val >= 30 ? '#b8860b' : '#c23a2e';
+        html += `<div class="need-bar">
+          <span class="need-label">${nf.label}</span>
+          <div class="need-track"><div class="need-fill" style="width:${val}%;background:${color}"></div></div>
+          <span class="need-value">${val}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // === 当前状态（目标/行动） ===
+    html += '<div class="npc-section-title">当前状态</div>';
+    html += `<div style="font-size:12px;line-height:1.8;">
+      <div>🎯 目标: ${p.currentGoal || '无'}</div>
+      <div>⚡ 行动: ${p.currentAction || '空闲'}</div>
+    </div>`;
+
+    // === 行动历史时间线 ===
+    if (p.actionHistory && p.actionHistory.length > 0) {
+      html += '<div class="npc-section-title">行动记录</div>';
+      html += '<div class="npc-action-history">';
+      for (const record of p.actionHistory.slice().reverse()) {
+        html += `<div class="action-record">
+          <span class="action-time">D${record.day} ${record.shichen}</span>
+          <span class="action-name">[${record.actionId}]</span>
+          <span class="action-narrative">${record.narrative}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // 需求状态（6维需求条）
+    if (p.needs) {
+      const needItems = [
+        { label: '饥饿', value: p.needs.hunger, icon: '🍖' },
+        { label: '精力', value: p.needs.fatigue, icon: '⚡' },
+        { label: '健康', value: p.needs.health, icon: '❤️' },
+        { label: '心情', value: p.needs.mood, icon: '😊' },
+        { label: '安全', value: p.needs.safety, icon: '🛡️' },
+        { label: '社交', value: p.needs.social, icon: '👥' },
+      ];
+      html += '<div class="npc-section-title">需求状态</div><div class="npc-needs">';
+      for (const n of needItems) {
+        const val = Math.round(n.value);
+        const color = val >= 70 ? '#2e8b57' : val >= 30 ? '#b8860b' : '#c23a2e';
+        html += '<div class="need-bar">' +
+          '<span class="need-label">' + n.icon + ' ' + n.label + '</span>' +
+          '<div class="need-track"><div class="need-fill" style="width:' + val + '%;background:' + color + '"></div></div>' +
+          '<span class="need-value">' + val + '</span></div>';
+      }
+      html += '</div>';
+    }
+
+    // 当前目标/行动
+    if (p.currentGoal || p.currentAction) {
+      html += '<div class="npc-section-title">当前状态</div>' +
+        '<div style="font-size:12px;line-height:1.8;">' +
+        (p.currentGoal ? '<div>🎯 目标: <strong>' + p.currentGoal + '</strong></div>' : '') +
+        (p.currentAction ? '<div>⚡ 行动: <strong>' + p.currentAction + '</strong></div>' : '') +
+        '</div>';
+    }
+
+    // 行动历史
+    if (p.actionHistory && p.actionHistory.length > 0) {
+      html += '<div class="npc-section-title">行动记录</div><div class="npc-action-history">';
+      const history = p.actionHistory.slice().reverse();
+      for (const h of history) {
+        html += '<div class="action-record">' +
+          '<span class="action-time">D' + (h.day || '?') + ' ' + (h.shichen || '') + '</span> ' +
+          '<span class="action-name">[' + (h.actionId || h.goalId || '') + ']</span> ' +
+          '<span>' + (h.narrative || '') + '</span></div>';
+      }
+      html += '</div>';
+    }
 
     // === 家庭关系区 ===
     const fam = p.family;

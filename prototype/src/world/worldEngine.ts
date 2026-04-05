@@ -2224,21 +2224,48 @@ export class WorldEngine {
   /** L1 NPC 批量模拟 */
   private simulateL1Batch(): { total: number; highlights: string[] } {
     let actions = 0;
+    const l1Highlights: string[] = [];
+
     for (const entityId of this.l1Entities) {
       const vital = this.em.getComponent(entityId, 'Vital');
       if (!vital) continue;
-      vital.hunger = Math.max(0, vital.hunger - 5);
-      vital.fatigue = Math.min(100, vital.fatigue + 3);
 
-      // 10% 概率随机移到相邻 grid（只移动 NPC，不动其他实体）
-      const type = this.em.getType(entityId);
-      if (type === 'npc' && Math.random() < 0.1) {
-        const pos = this.em.getComponent(entityId, 'Position');
-        if (pos && !pos.gridId.startsWith('interior_')) {
-          const neighbors = MAP_CONNECTIONS[pos.gridId];
-          if (neighbors && neighbors.length > 0) {
-            const targetGrid = neighbors[Math.floor(Math.random() * neighbors.length)];
-            this.moveNPCToGrid(entityId, targetGrid);
+      // L1 NPC 需求衰减（所有 L1 NPC）
+      const needs = this.em.getComponent(entityId, 'Needs');
+      if (needs) {
+        needs.hunger = Math.max(0, needs.hunger - (3 + Math.floor(Math.random() * 3)));
+        needs.fatigue = Math.max(0, needs.fatigue - (1 + Math.floor(Math.random() * 3)));
+        needs.mood = Math.max(0, needs.mood - (1 + Math.floor(Math.random() * 2)));
+        needs.social = Math.max(0, needs.social - (1 + Math.floor(Math.random() * 2)));
+
+        // 同步到 Vital（保持兼容）
+        vital.hunger = needs.hunger;
+        vital.fatigue = needs.fatigue;
+        vital.health = needs.health;
+        vital.mood = needs.mood;
+      } else {
+        // 没有 NeedsComponent 的旧 L1 用简单衰减
+        vital.hunger = Math.max(0, vital.hunger - 5);
+        vital.fatigue = Math.min(100, vital.fatigue + 3);
+      }
+
+      // 有 NeedsComponent 的 L1 NPC → 简化决策引擎
+      if (needs) {
+        const result = this.simulateL1Decision(entityId, needs, vital);
+        if (result) {
+          l1Highlights.push(result.narrative);
+        }
+      } else {
+        // fallback: 10% 概率随机移到相邻 grid
+        const type = this.em.getType(entityId);
+        if (type === 'npc' && Math.random() < 0.1) {
+          const pos = this.em.getComponent(entityId, 'Position');
+          if (pos && !pos.gridId.startsWith('interior_')) {
+            const neighbors = MAP_CONNECTIONS[pos.gridId];
+            if (neighbors && neighbors.length > 0) {
+              const targetGrid = neighbors[Math.floor(Math.random() * neighbors.length)];
+              this.moveNPCToGrid(entityId, targetGrid);
+            }
           }
         }
       }
@@ -2251,6 +2278,8 @@ export class WorldEngine {
     const npcCount = this.l1Entities.length;
     const highlights: string[] = [];
     if (npcCount > 0) {
+      // 将决策引擎产出的亮点纳入
+      highlights.push(...l1Highlights.slice(0, 5));
       const summaries = [
         `城中有${Math.min(npcCount, Math.floor(npcCount * 0.3))}人在忙碌地干活。`,
         `街上来来往往${Math.floor(npcCount * 0.1)}个行人。`,
@@ -2261,6 +2290,88 @@ export class WorldEngine {
       highlights.push(summary);
     }
     return { total: actions, highlights };
+  }
+
+  /** L1 NPC 简化决策引擎（只取最紧急需求，一句话叙事） */
+  private simulateL1Decision(entityId: number, needs: NeedsComponent, vital: VitalComponent): { narrative: string } | null {
+    const identity = this.em.getComponent(entityId, 'Identity');
+    const name = identity?.name || '某人';
+    const profession = identity?.profession || 'merchant';
+    const wallet = this.em.getComponent(entityId, 'Wallet');
+    const pos = this.em.getComponent(entityId, 'Position');
+    const copper = wallet?.copper ?? 0;
+    const gridId = pos?.gridId || 'center_street';
+
+    // 检查家庭成员是否在附近
+    const familyNearby = this.isFamilyNearby(entityId, identity);
+    const nearNpcCount = this.worldMap.getEntitiesInGrid(gridId).length;
+    const inv = this.em.getComponent(entityId, 'Inventory');
+
+    const ctx = {
+      needs,
+      npcName: name,
+      profession,
+      personality: identity?.personality || [],
+      factionRole: identity?.factionRole,
+      copper,
+      currentGrid: gridId,
+      weather: this.weather.weather,
+      shichen: this.time.shichenName,
+      day: this.time.day,
+      tick: this.time.tick,
+      factionId: identity?.factionId,
+      familyNearby,
+      inventory: inv?.items || [],
+      nearNpcCount,
+    } as DecisionContext;
+
+    // 调用决策引擎
+    const decision = decide(ctx);
+    if (!decision) return null;
+
+    // 应用效果到 NeedsComponent
+    for (const [key, value] of Object.entries(decision.effects)) {
+      if (key in needs) {
+        (needs as any)[key] = Math.max(0, Math.min(100, (needs as any)[key] + value));
+      }
+    }
+    // 同步到 Vital
+    vital.hunger = needs.hunger;
+    vital.fatigue = needs.fatigue;
+    vital.health = needs.health;
+    vital.mood = needs.mood;
+
+    // 铜钱效果
+    if (decision.effects.copper !== undefined && wallet) {
+      wallet.copper = Math.max(0, wallet.copper + decision.effects.copper);
+    }
+
+    // 移动 NPC
+    const targetGrid = this.getTargetGridForAction(entityId, decision.actionId);
+    this.moveNPCToGrid(entityId, targetGrid);
+
+    // 记录行动到 ActionStateComponent（只保留最近5条）
+    const actionState = this.em.getComponent(entityId, 'ActionState');
+    if (actionState) {
+      actionState.currentGoal = decision.goalId;
+      actionState.currentAction = decision.actionId;
+      actionState.lastActionTurn = this.time.tick;
+
+      const record = {
+        turn: this.time.tick,
+        day: this.time.day,
+        shichen: this.time.shichenName,
+        goalId: decision.goalId,
+        actionId: decision.actionId,
+        narrative: decision.narrative,
+      } as ActionRecord;
+      actionState.actionHistory.push(record);
+      if (actionState.actionHistory.length > 5) {
+        actionState.actionHistory.shift();
+      }
+    }
+
+    return { narrative: `${name}${decision.narrative}` };
   }
 
   /** NPC 移动到指定 grid */
@@ -3619,6 +3730,15 @@ export class WorldEngine {
       const ai = this.em.getComponent(entityId, 'AI');
       if (!ai || ai.aiLevel !== 1) continue;
 
+      // 有需求组件 → 用简化决策引擎（需求衰减由 simulateL1Batch 处理）
+      const needs = this.em.getComponent(entityId, 'Needs') as NeedsComponent | undefined;
+      const vital = this.em.getComponent(entityId, 'Vital');
+      if (needs && vital) {
+        this.simulateL1Decision(entityId, needs, vital);
+        continue;
+      }
+
+      // fallback: 行为树
       const identity = this.em.getComponent(entityId, 'Identity');
       const profession = identity?.profession || 'merchant';
       const tree = PROFESSION_TREES[profession] || PROFESSION_TREES['merchant'];
@@ -3627,6 +3747,7 @@ export class WorldEngine {
       executeTree(tree, ctx);
     }
   }
+
 
   /** 构建行为树上下文 */
   private buildBTContext(entityId: number): BTContext {

@@ -592,6 +592,19 @@ export class GameServer {
             }),
           } : null,
           history: history.slice(-20).reverse(),
+          // NPC行动历史（来自决策引擎）
+          actionHistory: (() => {
+            const actionState = em.getComponent(id, 'ActionState') as any;
+            return actionState?.actionHistory?.slice(-10) || [];
+          })(),
+          currentGoal: (() => {
+            const actionState = em.getComponent(id, 'ActionState') as any;
+            return actionState?.currentGoal || null;
+          })(),
+          currentAction: (() => {
+            const actionState = em.getComponent(id, 'ActionState') as any;
+            return actionState?.currentAction || null;
+          })(),
         });
       } catch (err) {
         res.status(500).json({ error: String(err) });
