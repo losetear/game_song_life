@@ -136,6 +136,22 @@ export class WeatherSystem {
     }
   }
 
+  /** 强制设置天气（上帝模式） */
+  forceWeather(weather: WeatherType): void {
+    this.state.current = weather;
+    // 更新连续计数
+    if (weather === '暴雨' || weather === '大暴雨') {
+      this.state.consecutiveRain++;
+      this.state.consecutiveSun = 0;
+    } else if (weather === '晴') {
+      this.state.consecutiveSun++;
+      this.state.consecutiveRain = 0;
+    } else {
+      this.state.consecutiveRain = 0;
+      this.state.consecutiveSun = 0;
+    }
+  }
+
   getState(): WeatherState {
     return { ...this.state, history: [...this.state.history], historyDetail: [...this.state.historyDetail] };
   }

@@ -736,6 +736,100 @@ export class GameServer {
         res.status(500).json({ error: String(err) });
       }
     });
+
+    // ── 上帝模式 / Admin API ──────────────────────────────────
+
+    // POST /api/admin/weather — 强制天气变更
+    this.app.post('/api/admin/weather', (req, res) => {
+      try {
+        const { weather } = req.body;
+        if (!weather) { res.status(400).json({ success: false, message: '缺少weather参数' }); return; }
+        this.engine.forceWeather(weather);
+        res.json({ success: true, message: `天气已变更为：${weather}` });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // POST /api/admin/kill-npc — 杀死NPC
+    this.app.post('/api/admin/kill-npc', (req, res) => {
+      try {
+        const { npcId } = req.body;
+        if (!npcId) { res.status(400).json({ success: false, message: '缺少npcId参数' }); return; }
+        const result = this.engine.killNpc(parseInt(npcId));
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // POST /api/admin/set-vital — 修改NPC属性
+    this.app.post('/api/admin/set-vital', (req, res) => {
+      try {
+        const { npcId, field, value } = req.body;
+        if (!npcId || !field || value === undefined) {
+          res.status(400).json({ success: false, message: '缺少参数(npcId, field, value)' }); return;
+        }
+        const ok = this.engine.setNpcVital(parseInt(npcId), field, parseFloat(value));
+        res.json({ success: ok, message: ok ? `NPC#${npcId}.${field} = ${value}` : '操作失败，NPC不存在或属性无效' });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // POST /api/admin/add-copper — 增减NPC铜钱
+    this.app.post('/api/admin/add-copper', (req, res) => {
+      try {
+        const { npcId, amount } = req.body;
+        if (!npcId || amount === undefined) {
+          res.status(400).json({ success: false, message: '缺少参数(npcId, amount)' }); return;
+        }
+        const ok = this.engine.addNpcCopper(parseInt(npcId), parseInt(amount));
+        res.json({ success: ok, message: ok ? `NPC#${npcId}铜钱${parseInt(amount) >= 0 ? '+' : ''}${amount}` : '操作失败' });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // POST /api/admin/teleport — 传送NPC
+    this.app.post('/api/admin/teleport', (req, res) => {
+      try {
+        const { npcId, gridId } = req.body;
+        if (!npcId || !gridId) {
+          res.status(400).json({ success: false, message: '缺少参数(npcId, gridId)' }); return;
+        }
+        const ok = this.engine.teleportNpc(parseInt(npcId), gridId);
+        res.json({ success: ok, message: ok ? `NPC#${npcId}已传送至${gridId}` : '传送失败' });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // POST /api/admin/faction-relation — 设置组织关系
+    this.app.post('/api/admin/faction-relation', (req, res) => {
+      try {
+        const { factionId1, factionId2, score } = req.body;
+        if (!factionId1 || !factionId2 || score === undefined) {
+          res.status(400).json({ success: false, message: '缺少参数(factionId1, factionId2, score)' }); return;
+        }
+        const ok = this.engine.setFactionRelation(parseInt(factionId1), parseInt(factionId2), parseInt(score));
+        res.json({ success: ok, message: ok ? '关系已更新' : '组织不存在' });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // POST /api/admin/custom-event — 自定义事件
+    this.app.post('/api/admin/custom-event', (req, res) => {
+      try {
+        const { message, type } = req.body;
+        if (!message) { res.status(400).json({ success: false, message: '缺少message参数' }); return; }
+        this.engine.addCustomEvent(message, type || '自定义');
+        res.json({ success: true, message: '事件已写入' });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
   }
 
   private setupWebSocket(): void {
@@ -853,6 +947,13 @@ export class GameServer {
       console.log(`   GET  /api/world/factions → 组织列表`);
       console.log(`   GET  /api/world/factions/:id → 组织详情`);
       console.log(`   GET  /api/world/factions/:id/history → 组织历史`);
+      console.log(`   POST /api/admin/weather   → 上帝模式·天气`);
+      console.log(`   POST /api/admin/kill-npc  → 上帝模式·杀NPC`);
+      console.log(`   POST /api/admin/set-vital → 上帝模式·改属性`);
+      console.log(`   POST /api/admin/add-copper → 上帝模式·给钱`);
+      console.log(`   POST /api/admin/teleport  → 上帝模式·传送`);
+      console.log(`   POST /api/admin/faction-relation → 上帝模式·组织关系`);
+      console.log(`   POST /api/admin/custom-event → 上帝模式·自定义事件`);
       console.log(`   WebSocket           → 游戏交互`);
     });
   }

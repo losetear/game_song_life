@@ -2123,6 +2123,9 @@ body::before {
   <div class="tab" data-tab="about" onclick="switchTab('about', this)">
     <span class="tab-icon">📖</span>架构
   </div>
+  <div class="tab" data-tab="god" onclick="switchTab('god', this)">
+    <span class="tab-icon">⚡</span>上帝模式
+  </div>
 </div>
 
 <div class="content">
@@ -2530,6 +2533,101 @@ body::before {
     <div style="margin-top:16px">
       <div class="section-title">实体规模</div>
       <div class="breakdown-card" id="entity-breakdown"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 上帝模式面板 ============ -->
+<div id="god-panel" class="panel">
+  <div class="monitor-section">
+    <div class="section-title" style="margin-bottom:16px">⚡ 上帝模式 — 世界操控</div>
+
+    <!-- 天气控制 -->
+    <div class="monitor-card" style="margin-bottom:12px">
+      <div class="monitor-card-title">🌦️ 天气控制</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        <select id="god-weather" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:13px;background:var(--paper-dark);color:var(--ink)">
+          <option value="晴">☀️ 晴</option>
+          <option value="多云">⛅ 多云</option>
+          <option value="小雨">🌧️ 小雨</option>
+          <option value="暴雨">⛈️ 暴雨</option>
+          <option value="大暴雨">🌊 大暴雨</option>
+          <option value="雪">❄️ 雪</option>
+        </select>
+        <button onclick="godSetWeather()" style="padding:6px 16px;border:none;border-radius:6px;background:var(--indigo);color:white;font-size:13px;font-weight:700;cursor:pointer">变更天气</button>
+      </div>
+      <div id="god-weather-msg" style="margin-top:6px;font-size:12px;color:var(--jade);display:none"></div>
+    </div>
+
+    <!-- NPC操控 -->
+    <div class="monitor-card" style="margin-bottom:12px">
+      <div class="monitor-card-title">👤 NPC操控</div>
+      <div style="margin-top:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="god-npc" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:13px;background:var(--paper-dark);color:var(--ink)">
+            <option value="">-- 加载中... --</option>
+          </select>
+          <button onclick="godLoadNpcList()" style="padding:6px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;background:var(--paper-dark);font-size:12px;cursor:pointer;color:var(--ink)">刷新列表</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button onclick="godKillNpc()" style="padding:5px 12px;border:none;border-radius:6px;background:var(--vermillion);color:white;font-size:12px;font-weight:700;cursor:pointer">💀 杀死</button>
+          <button onclick="godSetVital('health',100)" style="padding:5px 12px;border:none;border-radius:6px;background:var(--jade);color:white;font-size:12px;font-weight:700;cursor:pointer">❤️ 治愈</button>
+          <button onclick="godSetVital('health',10)" style="padding:5px 12px;border:none;border-radius:6px;background:#b8860b;color:white;font-size:12px;font-weight:700;cursor:pointer">🤕 重伤</button>
+          <button onclick="godSetVital('mood',100)" style="padding:5px 12px;border:none;border-radius:6px;background:#3a4f7a;color:white;font-size:12px;font-weight:700;cursor:pointer">😊 满心情</button>
+          <button onclick="godSetVital('hunger',100)" style="padding:5px 12px;border:none;border-radius:6px;background:#6b5b3a;color:white;font-size:12px;font-weight:700;cursor:pointer">🍖 喂饱</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">
+          <button onclick="godAddCopper(500)" style="padding:5px 12px;border:none;border-radius:6px;background:var(--gold);color:white;font-size:12px;font-weight:700;cursor:pointer">🪙 +500文</button>
+          <button onclick="godAddCopper(-500)" style="padding:5px 12px;border:none;border-radius:6px;background:#8b4513;color:white;font-size:12px;font-weight:700;cursor:pointer">💸 -500文</button>
+          <span style="font-size:11px;color:rgba(44,24,16,0.4)">|</span>
+          <label style="font-size:12px;color:rgba(44,24,16,0.6)">传送至:</label>
+          <select id="god-teleport-grid" style="padding:4px 8px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:12px;background:var(--paper-dark);color:var(--ink)"></select>
+          <button onclick="godTeleport()" style="padding:5px 12px;border:none;border-radius:6px;background:var(--indigo);color:white;font-size:12px;font-weight:700;cursor:pointer">传送</button>
+        </div>
+      </div>
+      <div id="god-npc-msg" style="margin-top:6px;font-size:12px;color:var(--jade);display:none"></div>
+    </div>
+
+    <!-- 组织操控 -->
+    <div class="monitor-card" style="margin-bottom:12px">
+      <div class="monitor-card-title">🏛️ 组织操控</div>
+      <div style="margin-top:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="god-faction1" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:13px;background:var(--paper-dark);color:var(--ink)">
+            <option value="">-- 组织A --</option>
+          </select>
+          <span style="font-size:13px;color:rgba(44,24,16,0.4)">⇄</span>
+          <select id="god-faction2" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:13px;background:var(--paper-dark);color:var(--ink)">
+            <option value="">-- 组织B --</option>
+          </select>
+        </div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="font-size:12px;color:rgba(44,24,16,0.6)">关系值:</label>
+          <input type="range" id="god-faction-score" min="-100" max="100" value="0" style="flex:1;min-width:100px;accent-color:var(--vermillion)" oninput="document.getElementById('god-faction-score-val').textContent=this.value">
+          <span id="god-faction-score-val" style="font-size:13px;font-weight:700;min-width:30px;text-align:center">0</span>
+          <button onclick="godSetFactionRelation()" style="padding:5px 12px;border:none;border-radius:6px;background:var(--vermillion);color:white;font-size:12px;font-weight:700;cursor:pointer">设置关系</button>
+        </div>
+      </div>
+      <div id="god-faction-msg" style="margin-top:6px;font-size:12px;color:var(--jade);display:none"></div>
+    </div>
+
+    <!-- 自定义事件 -->
+    <div class="monitor-card" style="margin-bottom:12px">
+      <div class="monitor-card-title">📜 自定义事件</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        <input type="text" id="god-event-text" placeholder="输入事件描述…" style="flex:1;min-width:180px;padding:6px 10px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:13px;background:var(--paper-dark);color:var(--ink)">
+        <input type="text" id="god-event-type" placeholder="类型" value="自定义" style="width:60px;padding:6px 8px;border:1px solid rgba(44,24,16,0.15);border-radius:6px;font-size:12px;background:var(--paper-dark);color:var(--ink);text-align:center">
+        <button onclick="godCustomEvent()" style="padding:6px 16px;border:none;border-radius:6px;background:var(--gold);color:white;font-size:13px;font-weight:700;cursor:pointer">触发事件</button>
+      </div>
+      <div id="god-event-msg" style="margin-top:6px;font-size:12px;color:var(--jade);display:none"></div>
+    </div>
+
+    <!-- 事件涌现日志 -->
+    <div class="monitor-card">
+      <div class="monitor-card-title">📋 事件涌现日志 <span style="font-size:11px;color:rgba(44,24,16,0.4);font-weight:400">（最近30条）</span></div>
+      <div id="god-event-log" style="margin-top:8px;max-height:400px;overflow-y:auto;font-size:12px;line-height:1.8">
+        <div style="color:rgba(44,24,16,0.35);text-align:center;padding:20px">执行操作后自动刷新…</div>
+      </div>
     </div>
   </div>
 </div>

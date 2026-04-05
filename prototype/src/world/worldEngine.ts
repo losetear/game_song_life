@@ -3478,4 +3478,148 @@ export class WorldEngine {
       currentGrid: pos?.gridId ?? '',
     };
   }
+
+  // === 上帝模式 — 世界操控方法 ===
+
+  /** 强制天气变更 */
+  forceWeather(weather: string): void {
+    this.weather.forceWeather(weather as any);
+    this.logEvent('weather', '天气', `天降异象，天气突变为：${weather}！`);
+  }
+
+  /** 杀死NPC并触发级联事件 */
+  killNpc(npcId: number): { success: boolean, message: string, events: string[] } {
+    const events: string[] = [];
+
+    if (!this.em.isAlive(npcId) || this.em.getType(npcId) !== 'npc') {
+      return { success: false, message: 'NPC不存在或已死亡', events: [] };
+    }
+
+    const identity = this.em.getComponent(npcId, 'Identity');
+    const name = identity?.name || `NPC#${npcId}`;
+    const factionInfo = this.getNpcFaction(npcId);
+
+    // 如果是组织首领，触发继任危机
+    if (factionInfo && factionInfo.role === 'leader') {
+      const faction = this.factions.get(factionInfo.id);
+      if (faction) {
+        events.push(`${faction.name}首领${name}(${identity?.profession})遇害！组织陷入混乱！`);
+        faction.mood = Math.max(0, faction.mood - 30);
+
+        // 组织成员反应
+        for (const mid of faction.members) {
+          if (!this.em.isAlive(mid)) continue;
+          const mVital = this.em.getComponent(mid, 'Vital');
+          if (mVital) mVital.mood = Math.max(0, mVital.mood - 15);
+        }
+
+        // 继任：选择与已故首领印象分最高的成员
+        let bestSuccessor = -1;
+        let bestScore = -Infinity;
+        for (const mid of faction.members) {
+          if (!this.em.isAlive(mid) || mid === npcId) continue;
+          const rel = this.em.getComponent(mid, 'Relations');
+          const score = rel?.relations?.[npcId] || 0;
+          if (score > bestScore) { bestScore = score; bestSuccessor = mid; }
+        }
+
+        if (bestSuccessor > 0) {
+          faction.leaderId = bestSuccessor;
+          const successorName = this.em.getComponent(bestSuccessor, 'Identity')?.name || '某人';
+          events.push(`${successorName}接任${faction.name}首领！`);
+          faction.mood = Math.min(100, faction.mood + 10);
+        } else {
+          faction.leaderId = 0;
+          events.push(`${faction.name}群龙无首！`);
+        }
+
+        // 从成员列表移除
+        faction.members = faction.members.filter(m => m !== npcId);
+      }
+    } else if (factionInfo) {
+      // 普通成员被杀
+      const faction = this.factions.get(factionInfo.id);
+      if (faction) {
+        faction.members = faction.members.filter(m => m !== npcId);
+        events.push(`${faction.name}成员${name}遇害。同袍们悲愤不已。`);
+        faction.mood = Math.max(0, faction.mood - 10);
+      }
+    }
+
+    // 家庭成员反应
+    if (identity) {
+      const spouseId = identity.spouseId;
+      if (spouseId && this.em.isAlive(spouseId)) {
+        const spouseVital = this.em.getComponent(spouseId, 'Vital');
+        if (spouseVital) { spouseVital.mood = Math.max(0, spouseVital.mood - 30); }
+        const spouseName = this.em.getComponent(spouseId, 'Identity')?.name || '配偶';
+        events.push(`${spouseName}得知${name}的死讯，悲痛欲绝。`);
+      }
+      for (const cid of (identity.childIds || [])) {
+        if (this.em.isAlive(cid)) {
+          const cVital = this.em.getComponent(cid, 'Vital');
+          if (cVital) { cVital.mood = Math.max(0, cVital.mood - 20); }
+        }
+      }
+    }
+
+    this.em.destroy(npcId);
+    this.worldMap.removeEntity(npcId);
+    events.push(`${name}被杀死了。`);
+
+    for (const evt of events) {
+      this.logEvent('state', '干预', evt);
+    }
+    return { success: true, message: events.join('\n'), events };
+  }
+
+  /** 修改NPC生命属性 */
+  setNpcVital(npcId: number, field: string, value: number): boolean {
+    if (!this.em.isAlive(npcId)) return false;
+    const vital = this.em.getComponent(npcId, 'Vital');
+    if (!vital || !(field in vital)) return false;
+    (vital as any)[field] = value;
+    this.logEvent('state', '干预', `NPC#${npcId}属性${field}被设为${value}`);
+    return true;
+  }
+
+  /** 增减NPC铜钱 */
+  addNpcCopper(npcId: number, amount: number): boolean {
+    if (!this.em.isAlive(npcId)) return false;
+    const wallet = this.em.getComponent(npcId, 'Wallet');
+    if (!wallet) return false;
+    wallet.copper = Math.max(0, wallet.copper + amount);
+    const name = this.em.getComponent(npcId, 'Identity')?.name || `NPC#${npcId}`;
+    this.logEvent('state', '干预', `${name}铜钱${amount >= 0 ? '增加' : '减少'}${Math.abs(amount)}`);
+    return true;
+  }
+
+  /** 传送NPC */
+  teleportNpc(npcId: number, gridId: string): boolean {
+    if (!this.em.isAlive(npcId)) return false;
+    const pos = this.em.getComponent(npcId, 'Position');
+    if (!pos) return false;
+    this.worldMap.removeEntity(npcId);
+    pos.gridId = gridId;
+    this.worldMap.addEntity(npcId, gridId);
+    const name = this.em.getComponent(npcId, 'Identity')?.name || `NPC#${npcId}`;
+    this.logEvent('move', '干预', `${name}被传送至${gridId}`);
+    return true;
+  }
+
+  /** 设置组织间关系 */
+  setFactionRelation(factionId1: number, factionId2: number, score: number): boolean {
+    const f1 = this.factions.get(factionId1);
+    const f2 = this.factions.get(factionId2);
+    if (!f1 || !f2) return false;
+    f1.relations[factionId2] = score;
+    f2.relations[factionId1] = score;
+    this.logEvent('state', '外交', `${f1.name}与${f2.name}关系变为${score}`);
+    return true;
+  }
+
+  /** 添加自定义事件 */
+  addCustomEvent(message: string, type: string): void {
+    this.logEvent('state', type, message);
+  }
 }
