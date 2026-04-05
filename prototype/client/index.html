@@ -3608,11 +3608,31 @@ function loadEntityActions(entityId) {
     if (entity.ownerName) desc += ` · 主人: ${entity.ownerName}`;
   }
   if (entity.description) desc = entity.description;
+  // NPC 组织信息追加到描述
+  if (entity.factionName) {
+    const roleLabel = entity.factionRole === 'leader' ? '首领' : '成员';
+    desc += ` · ${entity.factionName}（${roleLabel}）`;
+  }
   document.getElementById('detail-desc').textContent = desc;
 
   // Build stats
   const statsEl = document.getElementById('detail-stats');
   let statsHtml = '';
+  // NPC 组织标签（带颜色，可点击跳转监控面板）
+  if (entity.factionName) {
+    const factionColors = {
+      government: '#8b0000', military: '#4a4a8a', merchant: '#8b6914',
+      religion: '#6a5acd', underground: '#2f4f4f', scholar: '#2e8b57'
+    };
+    const factionLabels = {
+      government: '政府', military: '军事', merchant: '商业',
+      religion: '宗教', underground: '地下', scholar: '文人'
+    };
+    const fColor = factionColors[entity.factionType] || '#666';
+    const fLabel = factionLabels[entity.factionType] || '组织';
+    const fRoleLabel = entity.factionRole === 'leader' ? '首领' : '成员';
+    statsHtml += `<div class="entity-stat" style="cursor:pointer;background:${fColor}15;color:${fColor};border:1px solid ${fColor}40;font-weight:600;" onclick="jumpToFactionDetail(${entity.factionId})" title="点击查看组织详情">${fLabel} · ${entity.factionName}（${fRoleLabel}）</div>`;
+  }
   if (entity.vital) {
     if (entity.vital.hunger !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">🍖</span>${Math.round(entity.vital.hunger)}</div>`;
     if (entity.vital.health !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">❤️</span>${Math.round(entity.vital.health)}</div>`;
@@ -4426,6 +4446,7 @@ async function loadNPCProfile() {
           <div class="npc-name">${name}</div>
           <div class="npc-profession">${prof} · ID:${id} · ${GRID_NAMES[entity.Position?.gridId] || entity.Position?.gridId || '—'}</div>
           <div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:2px;">年龄: ${age} · 性格: ${personality.join(', ')} · LOD: L${ai.aiLevel ?? '?'} ${ai.aiLevel === 0 ? '(核心NPC, GOAP驱动)' : ai.aiLevel === 1 ? '(行为树)' : '(统计模拟)'}</div>
+          ${entity.factionName ? `<div style="font-size:12px;margin-top:3px;">所属组织: <span style="cursor:pointer;color:${FACTION_TYPE_COLORS[entity.factionType] || '#8b7355'};font-weight:600;" onclick="switchSubTab('faction',document.querySelector('.sub-tab:nth-child(5)'));setTimeout(()=>loadFactionDetail(${entity.factionId}),200)">${FACTION_TYPE_LABELS[entity.factionType] || '🏛️'} ${entity.factionName}</span> <span style="font-size:10px;color:rgba(44,24,16,0.4)">(${entity.factionRole === 'leader' ? '首领' : '成员'})</span></div>` : ''}
         </div>
       </div>`;
 
@@ -5077,6 +5098,14 @@ async function loadFactions() {
   } catch (e) {
     container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--vermillion);">加载失败</div>';
   }
+}
+
+/** 从游戏面板跳转到监控面板查看组织详情 */
+function jumpToFactionDetail(factionId) {
+  // 切换到监控面板
+  switchTab('monitor', null);
+  // 等待面板切换后加载组织详情
+  setTimeout(() => loadFactionDetail(factionId), 100);
 }
 
 async function loadFactionDetail(id) {

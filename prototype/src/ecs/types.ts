@@ -19,6 +19,8 @@ export interface IdentityComponent {
   profession: string;
   age: number;
   personality: string[];
+  factionId?: number;        // 所属组织实体 ID
+  factionRole?: 'leader' | 'member';  // 组织角色
 }
 
 export interface WalletComponent {

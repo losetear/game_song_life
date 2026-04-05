@@ -76,6 +76,8 @@ export function generateFactions(
 
   // 分配 L0 leader 的使用记录
   const usedL0 = new Set<number>();
+  // 分配 L1 member 的使用记录（避免同一NPC加入多个组织）
+  const usedL1 = new Set<number>();
 
   for (const def of FACTION_DEFS) {
     const id = em.create(EntityType.FACTION);
@@ -91,17 +93,28 @@ export function generateFactions(
         break;
       }
     }
-    if (leaderId === 0 && candidates.length > 0) {
-      leaderId = candidates[0]; // fallback: reuse
+    // fallback: 从所有 L0 NPC 中找未使用的
+    if (leaderId === 0) {
+      for (const c of l0Ids) {
+        if (!usedL0.has(c)) {
+          leaderId = c;
+          usedL0.add(c);
+          break;
+        }
+      }
     }
 
-    // 分配 3-5 个 L1 NPC 作 members
+    // 分配 3-5 个 L1 NPC 作 members（避免复用）
     const memberCandidates = l1ByProf[prof] || l1Ids.filter(mid => em.getType(mid) === 'npc');
     const memberCount = 3 + Math.floor(Math.random() * 3); // 3-5
     const members: number[] = [];
     const shuffled = [...memberCandidates].sort(() => Math.random() - 0.5);
-    for (let i = 0; i < Math.min(memberCount, shuffled.length); i++) {
-      members.push(shuffled[i]);
+    for (const mid of shuffled) {
+      if (members.length >= memberCount) break;
+      if (!usedL1.has(mid)) {
+        members.push(mid);
+        usedL1.add(mid);
+      }
     }
 
     const faction: FactionComponent = {
@@ -118,6 +131,24 @@ export function generateFactions(
 
     em.addComponent(id, 'Faction', faction);
     factions.push({ id, faction });
+
+    // 回写 NPC 的 Identity：设置 factionId 和 factionRole
+    // leader
+    if (leaderId > 0) {
+      const leaderIdentity = em.getComponent(leaderId, 'Identity');
+      if (leaderIdentity) {
+        leaderIdentity.factionId = id;
+        leaderIdentity.factionRole = 'leader';
+      }
+    }
+    // members
+    for (const mid of members) {
+      const memberIdentity = em.getComponent(mid, 'Identity');
+      if (memberIdentity) {
+        memberIdentity.factionId = id;
+        memberIdentity.factionRole = 'member';
+      }
+    }
   }
 
   // 初始化组织间关系

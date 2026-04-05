@@ -246,7 +246,23 @@ export class GameServer {
         // 获取 Grid 信息
         const gridId = this.engine.worldMap.getEntityGrid(id);
 
-        res.json({ id, ...exported, gridId });
+        // 如果是 NPC，附加组织信息（从 faction map 反查，不依赖 Identity.factionId）
+        const entityType = em.getType(id);
+        let factionInfo: Record<string, any> = {};
+        if (entityType === 'npc') {
+          const fInfo = this.engine.getNpcFaction(id);
+          if (fInfo) {
+            const faction = this.engine.getFactions().get(fInfo.id);
+            factionInfo = {
+              factionId: fInfo.id,
+              factionName: fInfo.name,
+              factionRole: fInfo.role,
+              factionType: faction?.type || null,
+            };
+          }
+        }
+
+        res.json({ id, ...exported, gridId, ...factionInfo });
       } catch (err) {
         res.status(500).json({ error: String(err) });
       }

@@ -45,8 +45,20 @@ const SKILL_MAP: Record<string, string> = {
   '农夫': '种植知识', '渔夫': '捕鱼技法', '木匠': '木工手艺',
 };
 
+/** 判断玩家与目标是否同组织 */
+function isSameFaction(ctx: InteractionContext): boolean {
+  return ctx.player.factionId != null && ctx.player.factionId === ctx.target.identity?.factionId;
+}
+
+/** 判断玩家与目标是否敌对组织（需外部 faction relations 支持，此处简化：不同组织即可能敌对） */
+function isRivalFaction(ctx: InteractionContext): boolean {
+  return ctx.player.factionId != null
+    && ctx.target.identity?.factionId != null
+    && ctx.player.factionId !== ctx.target.identity.factionId;
+}
+
 // ============================================================
-// 涌现规则定义（31条）
+// 涌现规则定义（38条）
 // ============================================================
 
 export const EMERGENCE_RULES: ActionRule[] = [
@@ -57,7 +69,14 @@ export const EMERGENCE_RULES: ActionRule[] = [
   {
     id: 'talk_to', name: '攀谈', icon: '💬', apCost: 1,
     shouldAppear: (ctx) => ctx.target.type === 'npc',
-    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      // 敌对组织可能拒绝攀谈
+      if (isRivalFaction(ctx) && getImpression(ctx) < -30) {
+        return { met: false, reason: '对方因组织敌意拒绝与你交谈' };
+      }
+      return { met: true, reason: '' };
+    },
     describeEffects: (ctx) => {
       const name = ctx.target.identity?.name || '对方';
       const v = ctx.target.vital;
@@ -108,9 +127,16 @@ export const EMERGENCE_RULES: ActionRule[] = [
         message += `\n\n外面雨声如注，${name}搓着手说："这鬼天气，哪儿也去不了。"`;
       }
 
+      // 组织加成：同组织好感度变化 +50%
+      let impressionGain = randInt(1, 5);
+      if (isSameFaction(ctx)) {
+        impressionGain = Math.ceil(impressionGain * 1.5);
+        message += `\n\n${name}认出了你的身份，语气格外亲切："自己人，不必客气。"`;
+      }
+
       return {
         success: true, message,
-        impressionChange: randInt(1, 5),
+        impressionChange: impressionGain,
         moodChange: 2,
       };
     },
@@ -126,7 +152,9 @@ export const EMERGENCE_RULES: ActionRule[] = [
     },
     canExecute: (ctx) => {
       if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
-      if (getImpression(ctx) < -10) return { met: false, reason: '对方不想理你' };
+      // 同组织降低好感度门槛
+      const threshold = isSameFaction(ctx) ? -30 : -10;
+      if (getImpression(ctx) < threshold) return { met: false, reason: '对方不想理你' };
       return { met: true, reason: '' };
     },
     describeEffects: (ctx) => {
@@ -137,7 +165,9 @@ export const EMERGENCE_RULES: ActionRule[] = [
     execute: (ctx) => {
       const name = ctx.target.identity?.name || '对方';
       const events = ctx.target.memory?.recentEvents || [];
-      const impression = getImpression(ctx);
+      // 同组织NPC降低分享门槛
+      const impressionBonus = isSameFaction(ctx) ? 20 : 0;
+      const impression = getImpression(ctx) + impressionBonus;
 
       if (events.length === 0) {
         return { success: true, message: `${name}想了想："最近没什么特别的事。"`, impressionChange: 1 };
@@ -185,8 +215,15 @@ export const EMERGENCE_RULES: ActionRule[] = [
     execute: (ctx) => {
       const name = ctx.target.identity?.name || '商贩';
       const copper = ctx.player.wallet.copper;
-      const price = randInt(5, Math.min(50, copper));
-      const items = ['一袋粗粮', '几尺麻布', '一包药材', '一捆柴火', '一壶浊酒', '几个炊饼'];
+      let price = randInt(5, Math.min(50, copper));
+      // 同组织打8折
+      if (isSameFaction(ctx)) {
+        price = Math.max(1, Math.floor(price * 0.8));
+      }
+      // 商业类型组织商品更丰富
+      const baseItems = ['一袋粗粮', '几尺麻布', '一包药材', '一捆柴火', '一壶浊酒', '几个炊饼'];
+      const extraItems = ['一匹丝绸', '上等宣纸', '精致陶器', '铜镜', '香囊', '雕花木梳'];
+      const items = [...baseItems, ...extraItems];
       const item = pick(items);
 
       const messages = [
@@ -195,8 +232,13 @@ export const EMERGENCE_RULES: ActionRule[] = [
         `${name}麻利地包好${item}递给你："承惠${price}文。"你付了钱，感觉还算公道。`,
       ];
 
+      let msg = pick(messages);
+      if (isSameFaction(ctx)) {
+        msg += `\n\n${name}压低声音："自己人，给你算便宜了。"`;
+      }
+
       return {
-        success: true, message: pick(messages),
+        success: true, message: msg,
         copperChange: -price,
         itemsGained: [{ itemType: 'goods', amount: 1 }],
         impressionChange: 2,
@@ -222,7 +264,11 @@ export const EMERGENCE_RULES: ActionRule[] = [
     execute: (ctx) => {
       const name = ctx.target.identity?.name || '商贩';
       const item = ctx.player.inventory.items[0];
-      const price = randInt(3, 30);
+      let price = randInt(3, 30);
+      // 同组织收购价更高（+20%）
+      if (isSameFaction(ctx)) {
+        price = Math.ceil(price * 1.2);
+      }
       const personality = ctx.target.identity?.personality || [];
 
       let message = '';
@@ -230,6 +276,9 @@ export const EMERGENCE_RULES: ActionRule[] = [
         message = `${name}翻看了一下你的${item.itemType}，挑剔地摇摇头："成色一般，${price}文，不能再多了。"你心里知道他压了价，但也不好反驳。`;
       } else {
         message = `${name}看了看你的${item.itemType}，点了点头："还行，给你${price}文。"你收了铜板，交易完成。`;
+      }
+      if (isSameFaction(ctx)) {
+        message += `\n\n${name}低声说："自家兄弟，我多给了些，别跟外人说。"`;
       }
 
       return {
@@ -490,6 +539,8 @@ export const EMERGENCE_RULES: ActionRule[] = [
     shouldAppear: (ctx) => {
       if (ctx.target.type !== 'npc') return false;
       const mood = ctx.target.vital?.mood ?? 50;
+      // 敌对组织间更容易出现挑衅选项
+      if (isRivalFaction(ctx)) return mood < 30 ? Math.random() < 0.6 : Math.random() < 0.35;
       return mood < 30 ? Math.random() < 0.4 : Math.random() < 0.2;
     },
     canExecute: (ctx) => ctx.player.ap < 2 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
@@ -506,6 +557,8 @@ export const EMERGENCE_RULES: ActionRule[] = [
 
       const isBrave = personality.includes('勇敢') || personality.includes('刚烈');
       const isTimid = personality.includes('胆小');
+      // 敌对组织间冲突概率更高
+      const conflictBoost = isRivalFaction(ctx) ? 0.25 : 0;
 
       if (isTimid) {
         return {
@@ -515,13 +568,17 @@ export const EMERGENCE_RULES: ActionRule[] = [
         };
       }
 
-      if (isBrave || Math.random() < 0.5) {
+      if (isBrave || Math.random() < (0.5 + conflictBoost)) {
+        let conflictMsg = pick([
+          `${name}被你一激，顿时火冒三丈："你说什么？！"他撸起袖子就要动手。周围的人赶紧拉开，但你的嘴角还是挨了一拳。鼻血直流。`,
+          `你挑衅的话刚出口，${name}一脚就踹了过来！"啪"的一声，你被打翻在地。他冷笑道："不长眼的东西。"`,
+        ]);
+        if (isRivalFaction(ctx)) {
+          conflictMsg += `\n\n旁边有人低声议论："这两个组织的恩怨可不是一天两天了..."`;
+        }
         return {
           success: true,
-          message: pick([
-            `${name}被你一激，顿时火冒三丈："你说什么？！"他撸起袖子就要动手。周围的人赶紧拉开，但你的嘴角还是挨了一拳。鼻血直流。`,
-            `你挑衅的话刚出口，${name}一脚就踹了过来！"啪"的一声，你被打翻在地。他冷笑道："不长眼的东西。"`,
-          ]),
+          message: conflictMsg,
           impressionChange: -20, healthChange: -randInt(5, 15), moodChange: -15,
         };
       }
@@ -944,6 +1001,251 @@ export const EMERGENCE_RULES: ActionRule[] = [
       ]),
       moodChange: 1,
     }),
+  },
+
+  // ═══ 组织涌现规则（5条） ═══
+
+  // 31. 组织认同
+  {
+    id: 'faction_ally', name: '同袍情谊', icon: '🤝', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const tFactionId = ctx.target.identity?.factionId;
+      const pFactionId = ctx.player.factionId;
+      return pFactionId != null && tFactionId != null && pFactionId === tFactionId;
+    },
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `与${name}叙同袍之情，增进彼此信赖`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const messages = [
+        `${name}认出了你，眼中闪过一丝亲切："自家兄弟，不必多礼！"你们相视而笑，一股暖意涌上心头。`,
+        `你朝${name}点了点头，他立刻会意，低声道："在这儿遇见自己人，真好。"`,
+        `${name}拍了拍你的肩膀："同门之谊，比金子还珍贵。"两人相谈甚欢。`,
+      ];
+      return {
+        success: true, message: pick(messages),
+        impressionChange: randInt(3, 8),
+        moodChange: 3,
+      };
+    },
+  },
+
+  // 32. 组织对立
+  {
+    id: 'faction_rival', name: '警惕对峙', icon: '⚠️', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const tFactionId = ctx.target.identity?.factionId;
+      const pFactionId = ctx.player.factionId;
+      // 只在分属不同组织时出现（敌对判断在 canExecute 中细化）
+      return pFactionId != null && tFactionId != null && pFactionId !== tFactionId;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `${name}的组织与你的组织不和，需要警惕`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const messages = [
+        `你察觉到${name}身上的组织标记，心中警觉。他似乎也注意到了你，目光中带着几分戒备。两人擦肩而过，空气中弥漫着紧张的气息。`,
+        `${name}打量了你一眼，嘴角微微抽动。你心知肚明——你们分属不同的势力。虽然暂时相安无事，但谁也不敢掉以轻心。`,
+        `"哼。"${name}从牙缝里挤出一个字，故意避开你的目光。你知道他认出了你的身份。在汴京的街头上，双方都克制着没有发作。`,
+      ];
+      return {
+        success: true, message: pick(messages),
+        impressionChange: randInt(-5, -1),
+        moodChange: -3,
+      };
+    },
+  },
+
+  // 33. 组织俸禄
+  {
+    id: 'faction_salary', name: '领取俸禄', icon: '💰', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 只有对方是组织成员时才出现（通过对方获取俸禄信息）
+      return ctx.target.identity?.factionId != null && ctx.target.identity?.factionRole === 'leader';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      const pFactionId = ctx.player.factionId;
+      const tFactionId = ctx.target.identity?.factionId;
+      if (pFactionId == null || tFactionId == null || pFactionId !== tFactionId) {
+        return { met: false, reason: '你不在对方组织中' };
+      }
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '首领';
+      return `向${name}领取本月俸禄`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '首领';
+      const salary = randInt(10, 50);
+      const messages = [
+        `${name}点了点头，从箱中取出一袋铜板递给你："这是你本月的份，收好了。"你接过俸禄，心中安定。`,
+        `"俸禄到了。"${name}把几串铜钱放到桌上，"不多，但也不至于饿着。好好干。"`,
+      ];
+      return {
+        success: true, message: pick(messages),
+        copperChange: salary,
+        impressionChange: 2,
+        moodChange: 5,
+      };
+    },
+  },
+
+  // 34. 势力巡逻
+  {
+    id: 'faction_patrol', name: '巡逻报告', icon: '🗺️', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const tFactionId = ctx.target.identity?.factionId;
+      const pFactionId = ctx.player.factionId;
+      if (pFactionId == null || tFactionId == null || pFactionId !== tFactionId) return false;
+      // 同组织，且在组织领地内（简化判断：在同一区域即可）
+      return true;
+    },
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `与${name}交换巡逻情报`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const reports = [
+        `${name}低声汇报："一切正常，东边有几个生面孔，不过看起来像是行商的。"你点了点头。`,
+        `${name}凑近说道："码头上来了几条船，货物不少。另外，西边的巷子里似乎有人鬼鬼祟祟的，我已让人盯着了。"`,
+        `"这片区域还算太平，"${name}环顾四周，"不过最近城里的暗流不少，大人您多加小心。"`,
+      ];
+      return {
+        success: true, message: pick(reports),
+        impressionChange: 2,
+        moodChange: 2,
+      };
+    },
+  },
+
+  // 35. 组织招募
+  {
+    id: 'faction_recruit', name: '招募引荐', icon: '📜', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 玩家无组织，对方有组织
+      const pFactionId = ctx.player.factionId;
+      const tFactionId = ctx.target.identity?.factionId;
+      return pFactionId == null && tFactionId != null;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (getImpression(ctx) < 20) return { met: false, reason: '好感度不够' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `请${name}引荐加入其组织`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const impression = getImpression(ctx);
+      const accept = impression > 50 ? 0.7 : 0.3;
+
+      if (Math.random() < accept) {
+        return {
+          success: true,
+          message: `${name}打量了你一番，点了点头："你这人还算可靠，我替你引荐一下。不过能不能留下，还得看上面的意思。"他写了一封推荐信交给你。`,
+          impressionChange: randInt(5, 10),
+          moodChange: 5,
+        };
+      }
+      return {
+        success: true,
+        message: `${name}犹豫了一下："这个...我也做不了主。你先在旁边多露露脸，等有机会了我再帮你说话。"他看起来有些为难。`,
+        impressionChange: 1,
+      };
+    },
+  },
+
+  // 36. 组织任务
+  {
+    id: 'faction_quest', name: '组织委托', icon: '📜', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 只有属于同一组织的 NPC 且对方是 leader 时才出现
+      if (ctx.player.factionId == null) return false;
+      return ctx.target.identity?.factionId === ctx.player.factionId
+        && ctx.target.identity?.factionRole === 'leader';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (getImpression(ctx) < 10) return { met: false, reason: '与首领不够熟络' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '首领';
+      return `向${name}请求一份组织委托任务`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '首领';
+      const quests = [
+        { desc: '送一封密信到城南', reward: randInt(15, 30) },
+        { desc: '收集三份情报', reward: randInt(20, 40) },
+        { desc: '在集市上打探竞争对手的动向', reward: randInt(10, 25) },
+        { desc: '护送一批货物到码头', reward: randInt(25, 50) },
+        { desc: '调查最近城内的异常事件', reward: randInt(20, 45) },
+      ];
+      const quest = pick(quests);
+
+      return {
+        success: true,
+        message: `${name}点了点头："正好有件事需要人手——${quest.desc}。你若办妥了，赏${quest.reward}文。"你领了令牌，心中暗暗盘算着如何完成。`,
+        copperChange: quest.reward,
+        impressionChange: randInt(5, 10),
+        moodChange: 5,
+      };
+    },
+  },
+
+  // 37. 缴纳会费
+  {
+    id: 'faction_dues', name: '缴纳会费', icon: '🏛️', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 玩家属于某组织，且对方是同组织的首领
+      if (ctx.player.factionId == null) return false;
+      return ctx.target.identity?.factionId === ctx.player.factionId
+        && ctx.target.identity?.factionRole === 'leader';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 20) return { met: false, reason: '铜钱不足（至少需20文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '首领';
+      return `向${name}缴纳组织会费，提升组织影响力（20~50文）`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '首领';
+      const dues = Math.min(randInt(20, 50), ctx.player.wallet.copper);
+
+      return {
+        success: true,
+        message: `你从钱袋中取出${dues}文，恭敬地呈给${name}。他点了点头，将铜钱收入公账："忠心可嘉。组织不会忘记你的贡献。"你的付出为组织增添了几分实力。`,
+        copperChange: -dues,
+        impressionChange: randInt(3, 8),
+        moodChange: 3,
+      };
+    },
   },
 ];
 

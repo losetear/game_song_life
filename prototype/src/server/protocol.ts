@@ -11,13 +11,15 @@ export interface InteractionContext {
     apMax: number;
     position: { gridId: string; areaId: string };
     memory: { recentEvents: { content: string; tick: number }[]; impressions: Record<string, number> };
+    factionId?: number;
+    factionRole?: 'leader' | 'member';
   };
   target: {
     id: number;
     type: string;
     vital: { hunger: number; fatigue: number; health: number; mood: number } | null;
     wallet: { copper: number } | null;
-    identity: { name: string; profession: string; age: number; personality: string[] } | null;
+    identity: { name: string; profession: string; age: number; personality: string[]; factionId?: number; factionRole?: 'leader' | 'member' } | null;
     position: { gridId: string; areaId: string } | null;
     ai: { goals: string[]; currentPlan: string[]; planCooldown: number; aiLevel: 0 | 1 | 2 } | null;
     memory: { recentEvents: { content: string; tick: number }[]; impressions: Record<string, number> } | null;

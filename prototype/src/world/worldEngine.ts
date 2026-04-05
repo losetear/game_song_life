@@ -494,6 +494,19 @@ export class WorldEngine {
     return this.factions;
   }
 
+  /** 根据 NPC ID 查找其所属组织 */
+  getNpcFaction(npcId: number): { id: number; name: string; role: string } | null {
+    for (const [factionId, faction] of this.factions) {
+      if (faction.leaderId === npcId) {
+        return { id: factionId, name: faction.name, role: 'leader' };
+      }
+      if (faction.members.includes(npcId)) {
+        return { id: factionId, name: faction.name, role: 'member' };
+      }
+    }
+    return null;
+  }
+
   /** 按名称查找组织 */
   getFactionByName(name: string): FactionComponent | undefined {
     for (const f of this.factions.values()) {
@@ -1255,6 +1268,17 @@ export class WorldEngine {
         entity.vital = vital ? { hunger: vital.hunger, fatigue: vital.fatigue, health: vital.health, mood: vital.mood } : undefined;
         entity.personality = identity?.personality || [];
         entity.wallet = wallet ? { copper: wallet.copper } : undefined;
+        // 组织信息 — 从 factions Map 反查（不依赖 Identity.factionId）
+        const npcFaction = this.getNpcFaction(id);
+        if (npcFaction) {
+          const faction = this.factions.get(npcFaction.id);
+          if (faction) {
+            entity.factionId = npcFaction.id;
+            entity.factionName = npcFaction.name;
+            entity.factionType = faction.type;
+            entity.factionRole = npcFaction.role;
+          }
+        }
       }
       // 建筑特有信息
       else if (type === 'building') {
@@ -1303,6 +1327,7 @@ export class WorldEngine {
     const playerAP = this.getPlayerAP(playerId);
     const playerPos = this.em.getComponent(playerId, 'Position');
     const playerMemory = this.em.getComponent(playerId, 'Memory');
+    const playerIdComp = this.em.getComponent(playerId, 'Identity');
 
     const targetType = this.em.getType(targetId);
     const targetVital = this.em.getComponent(targetId, 'Vital');
@@ -1351,13 +1376,15 @@ export class WorldEngine {
           recentEvents: playerMemory?.recentEvents || [],
           impressions: playerMemory?.impressions || {},
         },
+        factionId: this.getNpcFaction(playerId)?.id,
+        factionRole: this.getNpcFaction(playerId)?.role as 'leader' | 'member' | undefined,
       },
       target: {
         id: targetId,
         type: targetType || 'unknown',
         vital: targetVital ? { hunger: targetVital.hunger, fatigue: targetVital.fatigue, health: targetVital.health, mood: targetVital.mood } : null,
         wallet: targetWallet ? { copper: targetWallet.copper } : null,
-        identity: targetIdentity ? { name: targetIdentity.name, profession: targetIdentity.profession, age: targetIdentity.age, personality: targetIdentity.personality } : null,
+        identity: targetIdentity ? { name: targetIdentity.name, profession: targetIdentity.profession, age: targetIdentity.age, personality: targetIdentity.personality, factionId: this.getNpcFaction(targetId)?.id, factionRole: this.getNpcFaction(targetId)?.role as 'leader' | 'member' | undefined } : null,
         position: targetPos ? { gridId: targetPos.gridId, areaId: targetPos.areaId } : null,
         ai: targetAI ? { goals: targetAI.goals, currentPlan: targetAI.currentPlan, planCooldown: targetAI.planCooldown, aiLevel: targetAI.aiLevel } : null,
         memory: targetMemory ? { recentEvents: targetMemory.recentEvents, impressions: targetMemory.impressions } : null,
