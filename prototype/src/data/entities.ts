@@ -8,7 +8,7 @@ import { getAnimalType } from './animalTemplates';
 import { getPlantType } from './plantTemplates';
 import { CITY_GRIDS, FARM_GRIDS, MOUNTAIN_GRIDS, RIVER_GRIDS, ALL_GRID_IDS } from './areaDefs';
 import { BUILDING_TEMPLATES, BUILDING_TYPE_LIST, SPECIAL_BUILDING_TYPES, getBuildingName, getBuildingDescription, getBuildingRooms, getBuildingOpenHours } from './buildingTemplates';
-import { FactionComponent, FamilyComponent } from '../ecs/types';
+import { FactionComponent, FamilyComponent, NeedsComponent, ActionStateComponent } from '../ecs/types';
 
 // === 12 个预设组织 ===
 const FACTION_DEFS = [
@@ -217,6 +217,28 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
     em.addComponent(id, 'Memory', { recentEvents: [], impressions: {} });
     em.addComponent(id, 'Relations', { relations: {} });
 
+    // 需求组件（模拟人生式需求驱动）
+    const needs: NeedsComponent = {
+      hunger: 70 + Math.floor(Math.random() * 25),
+      fatigue: 70 + Math.floor(Math.random() * 25),
+      health: 80 + Math.floor(Math.random() * 20),
+      mood: 60 + Math.floor(Math.random() * 30),
+      safety: 70 + Math.floor(Math.random() * 25),
+      social: 50 + Math.floor(Math.random() * 30),
+    };
+    em.addComponent(id, 'Needs', needs);
+
+    // 行动状态组件
+    const actionState: ActionStateComponent = {
+      currentGoal: null,
+      currentAction: null,
+      actionQueue: [],
+      availableActions: [],
+      lastActionTurn: 0,
+      actionHistory: [],
+    };
+    em.addComponent(id, 'ActionState', actionState);
+
     worldMap.addEntity(id, gridId);
     l0Ids.push(id);
     breakdown.npc++;
@@ -235,6 +257,28 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
     em.addComponent(id, 'Wallet', { copper: 10 + Math.floor(Math.random() * 50) });
     em.addComponent(id, 'Inventory', { items: [] });
     em.addComponent(id, 'AI', { goals: [], currentPlan: [], planCooldown: 0, aiLevel: 1 });
+
+    // 需求组件（L1 NPC 也使用新决策系统）
+    const needs: NeedsComponent = {
+      hunger: 60 + Math.floor(Math.random() * 30),
+      fatigue: 55 + Math.floor(Math.random() * 35),
+      health: 70 + Math.floor(Math.random() * 25),
+      mood: 50 + Math.floor(Math.random() * 35),
+      safety: 55 + Math.floor(Math.random() * 30),
+      social: 45 + Math.floor(Math.random() * 35),
+    };
+    em.addComponent(id, 'Needs', needs);
+
+    // 行动状态组件
+    const actionState: ActionStateComponent = {
+      currentGoal: null,
+      currentAction: null,
+      actionQueue: [],
+      availableActions: [],
+      lastActionTurn: 0,
+      actionHistory: [],
+    };
+    em.addComponent(id, 'ActionState', actionState);
 
     worldMap.addEntity(id, gridId);
     l1Ids.push(id);

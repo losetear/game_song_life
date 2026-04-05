@@ -16,7 +16,8 @@ import { PerceptionSystem } from './perceptionSystem';
 import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
-import { VitalComponent, WalletComponent, PositionComponent } from '../ecs/types';
+import { VitalComponent, WalletComponent, PositionComponent, NeedsComponent, ActionStateComponent, ActionRecord } from '../ecs/types';
+import { decide, DecisionContext, DecisionResult } from '../ai/decisionEngine';
 import { InteractionContext } from '../server/protocol';
 import { getEmergentActions, executeEmergentAction } from './emergenceRules';
 import { MAP_CONNECTIONS, GRID_NAMES, GRID_ICONS } from './mapData';
@@ -1843,13 +1844,186 @@ export class WorldEngine {
     return { npcActions: this.lastTickEvents, priceChanges, causalEvents, l0Actions, l1Summary, majorEvents, weatherChange, enrichedPriceChanges };
   }
 
-  /** L0 NPC 单个行动模拟（状态驱动决策） */
+  /** L0 NPC 单个行动模拟（需求驱动决策引擎 / 旧GOAP fallback） */
   private simulateL0Action(entityId: number): L0ActionResult {
     const vital = this.em.getComponent(entityId, 'Vital');
     const wallet = this.em.getComponent(entityId, 'Wallet');
     const identity = this.em.getComponent(entityId, 'Identity');
     if (!vital || !identity) return { npcName: '某人', action: '', result: '', majorEvents: [] };
 
+    // 检查是否有新的需求组件 → 使用决策引擎
+    const needs = this.em.getComponent(entityId, 'Needs');
+    if (needs) {
+      return this.simulateL0DecisionEngine(entityId, needs, vital, wallet ?? null, identity);
+    }
+
+    // fallback: 旧的 GOAP 决策
+    return this.simulateL0Legacy(entityId, vital, wallet ?? null, identity);
+  }
+
+  /** 新决策引擎驱动的 L0 NPC 行动 */
+  private simulateL0DecisionEngine(
+    entityId: number,
+    needs: NeedsComponent,
+    vital: VitalComponent,
+    wallet: WalletComponent | null,
+    identity: { name: string; profession: string; personality: string[]; factionRole?: string; factionId?: number; spouseId?: number; parentIds?: number[]; childIds?: number[] },
+  ): L0ActionResult {
+    const name = identity.name;
+    const pos = this.em.getComponent(entityId, 'Position');
+    const copper = wallet?.copper ?? 0;
+
+    // 需求衰减：每回合自然下降
+    needs.hunger = Math.max(0, needs.hunger - (3 + Math.floor(Math.random() * 3)));
+    needs.fatigue = Math.max(0, needs.fatigue - (1 + Math.floor(Math.random() * 3)));
+    needs.mood = Math.max(0, needs.mood - (1 + Math.floor(Math.random() * 2)));
+    needs.social = Math.max(0, needs.social - (1 + Math.floor(Math.random() * 2)));
+    needs.safety = Math.max(0, needs.safety - (0 + Math.floor(Math.random() * 1)));
+
+    // 检查家庭成员是否在附近
+    const familyNearby = this.isFamilyNearby(entityId, identity);
+
+    // 检查附近NPC数量
+    const gridId = pos?.gridId || 'center_street';
+    const nearNpcCount = this.worldMap.getEntitiesInGrid(gridId).length;
+
+    // 构建决策上下文
+    const inv = this.em.getComponent(entityId, 'Inventory');
+    const ctx: DecisionContext = {
+      needs,
+      npcName: name,
+      profession: identity.profession,
+      personality: identity.personality,
+      factionRole: identity.factionRole,
+      copper,
+      currentGrid: gridId,
+      weather: this.weather.weather,
+      shichen: this.time.shichenName,
+      day: this.time.day,
+      tick: this.time.tick,
+      factionId: identity.factionId,
+      familyNearby,
+      inventory: inv?.items || [],
+      nearNpcCount,
+    };
+
+    // 调用决策引擎
+    const decision = decide(ctx);
+
+    if (!decision) {
+      // 决策引擎返回空 → 用兜底
+      return this.simulateL0Legacy(entityId, vital, wallet, identity as any);
+    }
+
+    // 记录决策前的状态
+    const stateBefore = { hunger: vital.hunger, fatigue: vital.fatigue, copper, mood: vital.mood ?? 50 };
+
+    // 应用效果到 NeedsComponent
+    for (const [key, value] of Object.entries(decision.effects)) {
+      if (key in needs) {
+        (needs as any)[key] = Math.max(0, Math.min(100, (needs as any)[key] + value));
+      }
+    }
+
+    // 同步 NeedsComponent 到 VitalComponent（保持兼容）
+    vital.hunger = needs.hunger;
+    vital.fatigue = needs.fatigue;
+    vital.health = needs.health;
+    vital.mood = needs.mood;
+
+    // 铜钱效果
+    if (decision.effects.copper !== undefined && wallet) {
+      wallet.copper = Math.max(0, wallet.copper + decision.effects.copper);
+    }
+
+    // 记录行动到 ActionStateComponent
+    const actionState = this.em.getComponent(entityId, 'ActionState');
+    if (actionState) {
+      actionState.currentGoal = decision.goalId;
+      actionState.currentAction = decision.actionId;
+      actionState.lastActionTurn = this.time.tick;
+
+      const record: ActionRecord = {
+        turn: this.time.tick,
+        day: this.time.day,
+        shichen: this.time.shichenName,
+        goalId: decision.goalId,
+        actionId: decision.actionId,
+        narrative: decision.narrative,
+      };
+      actionState.actionHistory.push(record);
+      if (actionState.actionHistory.length > 50) {
+        actionState.actionHistory.shift();
+      }
+    }
+
+    // 根据行动类型移动 NPC
+    const targetGrid = this.getTargetGridForAction(entityId, decision.actionId);
+    this.moveNPCToGrid(entityId, targetGrid);
+
+    // 记录叙事事件
+    this.logEvent('npc', 'decision_engine', decision.narrative);
+
+    // 记录NPC行为历史
+    const stateAfter = {
+      hunger: vital.hunger,
+      fatigue: vital.fatigue,
+      copper: wallet?.copper ?? copper,
+      mood: vital.mood ?? 50,
+    };
+    if (!this.npcHistory.has(entityId)) {
+      this.npcHistory.set(entityId, []);
+    }
+    const hist = this.npcHistory.get(entityId)!;
+    hist.push({
+      tick: this.time.tick,
+      shichen: this.time.shichenName,
+      action: decision.actionId,
+      description: decision.narrative,
+      result: '成功',
+      cause: decision.goalName,
+      stateBefore,
+      stateAfter,
+    });
+    if (hist.length > 50) hist.shift();
+
+    // 检查重大事件
+    const majorEvents: MajorEvent[] = [];
+    if (needs.hunger < 15) {
+      majorEvents.push({ type: 'npc', title: `${name}快要饿死了`, detail: `${name}已经饿了好几天了，面色蜡黄。`, impact: 'critical' });
+    } else if (needs.hunger < 30) {
+      majorEvents.push({ type: 'npc', title: `${name}正在挨饿`, detail: `${name}没钱吃饭，饿着肚子干活。`, impact: 'important' });
+    }
+    if (needs.mood < 20) {
+      majorEvents.push({ type: 'npc', title: `${name}心情极差`, detail: `${name}整日愁眉苦脸。`, impact: 'important' });
+    }
+    if (needs.health <= 0) {
+      majorEvents.push({ type: 'npc', title: `${name}倒下了`, detail: `${name}的健康状况急剧恶化。`, impact: 'critical' });
+    }
+
+    return { npcName: name, action: decision.actionId, result: decision.narrative, majorEvents };
+  }
+
+  /** 检查家庭成员是否在附近 */
+  private isFamilyNearby(entityId: number, identity: any): boolean {
+    const pos = this.em.getComponent(entityId, 'Position');
+    if (!pos) return false;
+    const gridId = pos.gridId;
+    const familyIds = [
+      identity.spouseId,
+      ...(identity.parentIds || []),
+      ...(identity.childIds || []),
+      ...(identity.siblingIds || []),
+    ].filter(Boolean);
+    for (const fid of familyIds) {
+      const fpos = this.em.getComponent(fid, 'Position');
+      if (fpos && fpos.gridId === gridId) return true;
+    }
+    return false;
+  }
+
+  /** 旧的 L0 NPC 行动模拟（GOAP fallback） */
+  private simulateL0Legacy(entityId: number, vital: VitalComponent, wallet: WalletComponent | null, identity: any): L0ActionResult {
     const name = identity.name;
     const hunger = vital.hunger;
     const fatigue = vital.fatigue;

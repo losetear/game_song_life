@@ -52,6 +52,35 @@ export interface AIComponent {
   aiLevel: 0 | 1 | 2; // 0=GOAP, 1=行为树, 2=统计
 }
 
+// NPC 需求组件（模拟人生式需求驱动）
+export interface NeedsComponent {
+  hunger: number;    // 0~100
+  fatigue: number;   // 0~100 (100=精力充沛)
+  health: number;    // 0~100
+  mood: number;      // 0~100
+  safety: number;    // 0~100
+  social: number;    // 0~100
+}
+
+// NPC 行动状态组件
+export interface ActionStateComponent {
+  currentGoal: string | null;
+  currentAction: string | null;
+  actionQueue: string[];
+  availableActions: string[];
+  lastActionTurn: number;
+  actionHistory: ActionRecord[];
+}
+
+export interface ActionRecord {
+  turn: number;
+  day: number;
+  shichen: string;
+  goalId: string;
+  actionId: string;
+  narrative: string;
+}
+
 export interface MemoryComponent {
   recentEvents: { content: string; tick: number }[];
   impressions: Record<string, number>; // targetId → 好感度
@@ -124,6 +153,8 @@ export type ComponentTypeMap = {
   Interactable: InteractableComponent;
   Faction: FactionComponent;
   Family: FamilyComponent;
+  Needs: NeedsComponent;
+  ActionState: ActionStateComponent;
 };
 
 export type ComponentName = keyof ComponentTypeMap;

@@ -532,6 +532,17 @@ export class GameServer {
             health: Math.round(vital.health),
             mood: Math.round(vital.mood),
           } : null,
+          needs: (() => {
+            const n = em.getComponent(id, 'Needs') as any;
+            return n ? {
+              hunger: Math.round(n.hunger),
+              fatigue: Math.round(n.fatigue),
+              health: Math.round(n.health),
+              mood: Math.round(n.mood),
+              safety: Math.round(n.safety),
+              social: Math.round(n.social),
+            } : null;
+          })(),
           wealth: {
             copper: wallet?.copper || 0,
             items: items.map(i => ({ itemType: i.itemType, amount: i.amount, value: (ITEM_VALUES[i.itemType] || 10) * i.amount })),
