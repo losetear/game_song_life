@@ -21,6 +21,20 @@ export interface IdentityComponent {
   personality: string[];
   factionId?: number;        // 所属组织实体 ID
   factionRole?: 'leader' | 'member';  // 组织角色
+  homeId?: number;           // 住所建筑ID
+  workplaceId?: number;      // 工作地点建筑ID
+  spouseId?: number;         // 配偶NPC ID
+  parentIds?: number[];      // 父母NPC ID列表
+  childIds?: number[];       // 子女NPC ID列表
+  siblingIds?: number[];     // 兄弟姐妹NPC ID列表
+}
+
+export interface FamilyComponent {
+  familyName: string;        // 姓氏
+  familyId: number;          // 家族ID
+  headId: number;            // 家长NPC ID
+  members: number[];         // 家族成员NPC ID列表
+  generation: number;        // 第几代
 }
 
 export interface WalletComponent {
@@ -109,6 +123,7 @@ export type ComponentTypeMap = {
   ActionPoints: ActionPointsComponent;
   Interactable: InteractableComponent;
   Faction: FactionComponent;
+  Family: FamilyComponent;
 };
 
 export type ComponentName = keyof ComponentTypeMap;

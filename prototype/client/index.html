@@ -2373,6 +2373,7 @@ body::before {
       <div class="monitor-card">
         <div class="monitor-card-title">NPC档案</div>
         <div class="filter-bar">
+          <input type="text" id="npc-search" placeholder="搜索NPC姓名..." oninput="filterNPCList()" class="filter-input" style="flex:1;min-width:0;">
           <select class="filter-select" id="npc-select" onchange="loadNPCProfile()">
             <option value="">选择NPC…</option>
           </select>
@@ -4393,24 +4394,56 @@ function expandEventGroup(btn, total) {
 }
 
 // === NPC 档案 ===
+let allNpcOptions: {id: number, name: string, text: string}[] = []; // 缓存所有NPC选项
+
 async function loadNPCList() {
   const select = document.getElementById('npc-select');
-  if (select.options.length > 1) return; // 已加载
+  if (select.options.length > 1 && allNpcOptions.length > 0) return; // 已加载
   try {
-    const res = await fetch('/api/world/entities?type=npc&lod=0&limit=50');
+    const res = await fetch('/api/world/entities?type=npc&limit=800');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    allNpcOptions = [];
     for (const e of data.entities) {
       if (e.name) {
-        const opt = document.createElement('option');
-        opt.value = e.id;
-        opt.textContent = `${e.name} (${e.id})`;
-        select.appendChild(opt);
+        allNpcOptions.push({ id: e.id, name: e.name, text: `${e.name} (${e.id}) L${e.lod}` });
       }
     }
+    // 排序：L0在前，然后按ID
+    allNpcOptions.sort((a, b) => {
+      const aLod = a.text.includes('L0') ? 0 : a.text.includes('L1') ? 1 : 2;
+      const bLod = b.text.includes('L0') ? 0 : b.text.includes('L1') ? 1 : 2;
+      if (aLod !== bLod) return aLod - bLod;
+      return a.id - b.id;
+    });
+    renderNPCOptions(allNpcOptions);
   } catch (err) {
     // ignore
   }
+}
+
+function renderNPCOptions(options) {
+  const select = document.getElementById('npc-select');
+  const currentVal = select.value;
+  // 清空并重新填充
+  select.innerHTML = '<option value="">选择NPC…</option>';
+  for (const opt of options) {
+    const el = document.createElement('option');
+    el.value = opt.id;
+    el.textContent = opt.text;
+    select.appendChild(el);
+  }
+  if (currentVal) select.value = currentVal;
+}
+
+function filterNPCList() {
+  const keyword = (document.getElementById('npc-search').value || '').trim();
+  if (!keyword) {
+    renderNPCOptions(allNpcOptions);
+    return;
+  }
+  const filtered = allNpcOptions.filter(o => o.name.includes(keyword));
+  renderNPCOptions(filtered);
 }
 
 async function loadNPCProfile() {
@@ -4419,24 +4452,14 @@ async function loadNPCProfile() {
   if (!id) { container.innerHTML = '<div style="text-align:center;color:rgba(44,24,16,0.3);">请选择NPC</div>'; return; }
   container.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(44,24,16,0.3);">加载中…</div>';
   try {
-    const [entityRes, historyRes, relationsRes] = await Promise.all([
-      fetch(`/api/world/entity/${id}`),
-      fetch(`/api/world/npc/${id}/history`),
-      fetch(`/api/world/npc/${id}/relations`),
-    ]);
-    const entity = await entityRes.json();
-    const history = await historyRes.json();
-    const relations = await relationsRes.json();
+    const res = await fetch(`/api/world/npc/${id}/profile`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const p = await res.json();
 
-    const name = entity.Identity?.name || '未知';
-    const prof = entity.Identity?.profession || '—';
-    const age = entity.Identity?.age || '—';
-    const personality = entity.Identity?.personality || [];
-    const vital = entity.Vital || {};
-    const wallet = entity.Wallet || {};
-    const inventory = entity.Inventory || {};
-    const ai = entity.AI || {};
-    const memory = entity.Memory || {};
+    const name = p.basic.name;
+    const prof = p.basic.profession || '—';
+    const age = p.basic.age || '—';
+    const personality = p.basic.personality || [];
 
     // 基本信息
     let html = `<div class="npc-card">
@@ -4444,93 +4467,168 @@ async function loadNPCProfile() {
         <div class="npc-avatar">${name[0]}</div>
         <div class="npc-info">
           <div class="npc-name">${name}</div>
-          <div class="npc-profession">${prof} · ID:${id} · ${GRID_NAMES[entity.Position?.gridId] || entity.Position?.gridId || '—'}</div>
-          <div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:2px;">年龄: ${age} · 性格: ${personality.join(', ')} · LOD: L${ai.aiLevel ?? '?'} ${ai.aiLevel === 0 ? '(核心NPC, GOAP驱动)' : ai.aiLevel === 1 ? '(行为树)' : '(统计模拟)'}</div>
-          ${entity.factionName ? `<div style="font-size:12px;margin-top:3px;">所属组织: <span style="cursor:pointer;color:${FACTION_TYPE_COLORS[entity.factionType] || '#8b7355'};font-weight:600;" onclick="switchSubTab('faction',document.querySelector('.sub-tab:nth-child(5)'));setTimeout(()=>loadFactionDetail(${entity.factionId}),200)">${FACTION_TYPE_LABELS[entity.factionType] || '🏛️'} ${entity.factionName}</span> <span style="font-size:10px;color:rgba(44,24,16,0.4)">(${entity.factionRole === 'leader' ? '首领' : '成员'})</span></div>` : ''}
+          <div class="npc-profession">${prof} · ID:${id} · ${GRID_NAMES[p.basic.gridId] || p.basic.gridId || '—'}</div>
+          <div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:2px;">年龄: ${age} · 性格: ${personality.join(', ')} · LOD: L${p.ai?.aiLevel ?? '?'} ${p.ai?.aiLevel === 0 ? '(核心NPC, GOAP驱动)' : p.ai?.aiLevel === 1 ? '(行为树)' : '(统计模拟)'}</div>
+          ${p.organization ? `<div style="font-size:12px;margin-top:3px;">所属组织: <span style="cursor:pointer;color:${FACTION_TYPE_COLORS[p.organization.factionType] || '#8b7355'};font-weight:600;" onclick="switchSubTab('faction',document.querySelector('.sub-tab:nth-child(5)'));setTimeout(()=>loadFactionDetail(${p.organization.factionId}),200)">${FACTION_TYPE_LABELS[p.organization.factionType] || '🏛️'} ${p.organization.factionName}</span> <span style="font-size:10px;color:rgba(44,24,16,0.4)">(${p.organization.factionRole === 'leader' ? '首领' : '成员'})</span></div>` : ''}
         </div>
       </div>`;
 
     // 状态条
-    const stats = [
-      { label: '饱腹', value: vital.hunger ?? 0, invert: false },
-      { label: '疲劳', value: vital.fatigue ?? 0, invert: true },
-      { label: '健康', value: vital.health ?? 0, invert: false },
-      { label: '心情', value: vital.mood ?? 0, invert: false },
-    ];
-    for (const s of stats) {
-      const val = Math.round(s.value);
-      const color = s.invert
-        ? (val < 30 ? 'var(--jade)' : val < 70 ? 'var(--gold)' : 'var(--vermillion)')
-        : (val >= 70 ? 'var(--jade)' : val >= 40 ? 'var(--gold)' : 'var(--vermillion)');
-      const warning = s.invert
-        ? (val >= 80 ? ' ⚠️' : '')
-        : (val < 30 ? ' ⚠️' : '');
-      html += `<div class="stat-bar-wrap">
-        <div class="stat-bar-label"><span>${s.label}${warning}</span><span>${val}/100</span></div>
-        <div class="stat-bar"><div class="stat-bar-fill" style="width:${val}%;background:${color}"></div></div>
-      </div>`;
+    if (p.vital) {
+      const stats = [
+        { label: '饱腹', value: p.vital.hunger, invert: false },
+        { label: '疲劳', value: p.vital.fatigue, invert: true },
+        { label: '健康', value: p.vital.health, invert: false },
+        { label: '心情', value: p.vital.mood, invert: false },
+      ];
+      for (const s of stats) {
+        const val = Math.round(s.value);
+        const color = s.invert
+          ? (val < 30 ? 'var(--jade)' : val < 70 ? 'var(--gold)' : 'var(--vermillion)')
+          : (val >= 70 ? 'var(--jade)' : val >= 40 ? 'var(--gold)' : 'var(--vermillion)');
+        const warning = s.invert
+          ? (val >= 80 ? ' ⚠️' : '')
+          : (val < 30 ? ' ⚠️' : '');
+        html += `<div class="stat-bar-wrap">
+          <div class="stat-bar-label"><span>${s.label}${warning}</span><span>${val}/100</span></div>
+          <div class="stat-bar"><div class="stat-bar-fill" style="width:${val}%;background:${color}"></div></div>
+        </div>`;
+      }
     }
-    const copperWarn = (wallet.copper ?? 0) < 20 ? ' ⚠️' : '';
-    html += `<div style="margin-top:8px;font-size:13px;">铜钱: <strong style="color:var(--gold)">${wallet.copper ?? 0}文</strong>${copperWarn}</div>`;
+
+    // 资产汇总
+    const copperWarn = p.wealth.copper < 20 ? ' ⚠️' : '';
+    html += `<div style="margin-top:8px;font-size:13px;">铜钱: <strong style="color:var(--gold)">${p.wealth.copper}文</strong>${copperWarn} · 物品估值: <strong style="color:var(--gold)">${p.wealth.itemsValue}文</strong> · 总资产: <strong style="color:var(--gold)">${p.wealth.totalAssets}文</strong></div>`;
     html += '</div>';
 
-    // 背包物品
-    html += '<div class="npc-section-title inv">背包</div>';
-    const items = inventory.items || [];
-    if (items.length > 0) {
+    // === 家庭关系区 ===
+    const fam = p.family;
+    if (fam.spouse || fam.parents.length > 0 || fam.children.length > 0 || fam.siblings.length > 0 || fam.allMembers.length > 0) {
+      html += '<div class="npc-section-title" style="border-left:3px solid #e85d4e;padding-left:8px;">家庭关系</div>';
+      html += '<div style="font-size:12px;line-height:2;">';
+      if (fam.familyName) {
+        html += `<div>家族: <strong style="color:var(--vermillion)">${fam.familyName}家</strong>`;
+        if (fam.familyHead) html += ` · 家长: <span style="cursor:pointer;color:var(--indigo);text-decoration:underline;" onclick="showNPCInfo(${fam.familyHead.id})">${fam.familyHead.name}</span>`;
+        html += '</div>';
+      }
+      if (fam.spouse) {
+        html += `<div>配偶: <span style="cursor:pointer;color:var(--vermillion);font-weight:600;text-decoration:underline;" onclick="showNPCInfo(${fam.spouse.id})">${fam.spouse.name}</span></div>`;
+      }
+      if (fam.parents.length > 0) {
+        html += `<div>父母: ${fam.parents.map(pt => `<span style="cursor:pointer;color:var(--indigo);text-decoration:underline;" onclick="showNPCInfo(${pt.id})">${pt.name}</span>`).join('、')}</div>`;
+      }
+      if (fam.children.length > 0) {
+        html += `<div>子女: ${fam.children.map(ct => `<span style="cursor:pointer;color:var(--indigo);text-decoration:underline;" onclick="showNPCInfo(${ct.id})">${ct.name}</span>`).join('、')}</div>`;
+      }
+      if (fam.siblings.length > 0) {
+        html += `<div>兄弟姐妹: ${fam.siblings.map(st => `<span style="cursor:pointer;color:var(--indigo);text-decoration:underline;" onclick="showNPCInfo(${st.id})">${st.name}</span>`).join('、')}</div>`;
+      }
+      if (fam.allMembers.length > 1) {
+        html += `<div style="font-size:11px;color:rgba(44,24,16,0.4);">全部家族成员(${fam.allMembers.length}人): ${fam.allMembers.map(m => `<span style="cursor:pointer;text-decoration:underline;" onclick="showNPCInfo(${m.id})">${m.name}</span>`).join('、')}</div>`;
+      }
+      html += '</div>';
+    }
+
+    // === 房产信息区 ===
+    if (p.home || p.workplace || p.property.length > 0) {
+      html += '<div class="npc-section-title" style="border-left:3px solid #b8860b;padding-left:8px;">房产信息</div>';
+      html += '<div style="font-size:12px;line-height:2;">';
+      if (p.home) {
+        html += `<div>住所: <strong>${p.home.buildingName}</strong> (${p.home.buildingType}) · ${GRID_NAMES[p.home.gridId] || p.home.gridId || '—'}</div>`;
+      }
+      if (p.workplace) {
+        html += `<div>工作地点: <strong>${p.workplace.buildingName}</strong> (${p.workplace.buildingType}) · ${GRID_NAMES[p.workplace.gridId] || p.workplace.gridId || '—'}</div>`;
+      }
+      if (p.property.length > 0) {
+        html += '<div style="margin-top:4px;font-size:11px;color:rgba(44,24,16,0.4);">拥有房产:</div>';
+        for (const prop of p.property) {
+          html += `<div style="padding-left:8px;">· ${prop.buildingName} (${prop.buildingType}) · ${GRID_NAMES[prop.gridId] || prop.gridId || '—'}</div>`;
+        }
+      }
+      html += '</div>';
+    }
+
+    // === 资产信息区 ===
+    html += '<div class="npc-section-title inv">背包与资产</div>';
+    const wealthItems = p.wealth.items || [];
+    if (wealthItems.length > 0) {
       html += '<div class="npc-inventory">';
-      for (const item of items) {
+      for (const item of wealthItems) {
         const itemName = ITEM_NAMES[item.itemType] || item.itemType;
-        html += `<span class="inv-item">${itemName}×${item.amount}</span>`;
+        html += `<span class="inv-item">${itemName}×${item.amount} <span style="font-size:10px;color:rgba(44,24,16,0.4)">(${item.value}文)</span></span>`;
       }
       html += '</div>';
     } else {
       html += '<div style="font-size:12px;color:rgba(44,24,16,0.35);">空空如也</div>';
     }
 
+    // === 组织信息区 ===
+    if (p.organization) {
+      html += '<div class="npc-section-title" style="border-left:3px solid #3a4f7a;padding-left:8px;">组织信息</div>';
+      const org = p.organization;
+      html += '<div style="font-size:12px;line-height:2;">';
+      html += `<div>组织: <strong style="color:${FACTION_TYPE_COLORS[org.factionType] || '#8b7355'}">${FACTION_TYPE_LABELS[org.factionType] || '🏛️'} ${org.factionName}</strong> · 角色: ${org.factionRole === 'leader' ? '首领' : '成员'}</div>`;
+      // 上级
+      if (org.factionRole !== 'leader' && org.leaderName) {
+        html += `<div>上级: <span style="cursor:pointer;color:var(--indigo);text-decoration:underline;" onclick="showNPCInfo(${org.leaderId})">${org.leaderName}</span></div>`;
+      }
+      // 组织成员
+      const otherMembers = org.factionMembers.filter(m => m.id !== Number(id));
+      if (otherMembers.length > 0) {
+        html += `<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-top:4px;">组织中其他成员(${otherMembers.length}人):</div>`;
+        html += '<div style="padding-left:8px;">';
+        for (const m of otherMembers.slice(0, 20)) {
+          html += `<span style="cursor:pointer;color:var(--indigo);text-decoration:underline;margin-right:8px;" onclick="showNPCInfo(${m.id})">${m.name}${m.role === 'leader' ? '(首领)' : ''}</span>`;
+        }
+        if (otherMembers.length > 20) html += `<span style="color:rgba(44,24,16,0.3);">等${otherMembers.length}人</span>`;
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
     // AI 状态
-    html += '<div class="npc-section-title ai">AI 状态</div>';
-    const goals = ai.goals || [];
-    const plan = ai.currentPlan || [];
-    html += `<div class="npc-ai-state">
-      <div>当前目标: <span class="npc-ai-goal">${goals.length > 0 ? goals.join(', ') : '无'}</span></div>
-      <div>当前计划: ${plan.length > 0 ? plan.join(' → ') : '无计划'}</div>
-      <div>冷却: ${ai.planCooldown ?? 0}</div>
-    </div>`;
+    if (p.ai) {
+      html += '<div class="npc-section-title ai">AI 状态</div>';
+      html += `<div class="npc-ai-state">
+        <div>当前目标: <span class="npc-ai-goal">${p.ai.goals.length > 0 ? p.ai.goals.join(', ') : '无'}</span></div>
+        <div>当前计划: ${p.ai.plan.length > 0 ? p.ai.plan.join(' → ') : '无计划'}</div>
+      </div>`;
+    }
 
     // 记忆
-    html += '<div class="npc-section-title mem">记忆</div>';
-    const recentEvents = memory.recentEvents || [];
-    const impressions = memory.impressions || {};
-    if (recentEvents.length > 0) {
-      html += '<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-bottom:4px;">最近事件:</div>';
-      html += '<div class="npc-memory-list">';
-      for (const e of recentEvents.slice(-10).reverse()) {
-        html += `<div class="npc-memory-item">${typeof e === 'string' ? e : JSON.stringify(e)}</div>`;
+    if (p.memory) {
+      html += '<div class="npc-section-title mem">记忆</div>';
+      const recentEvents = p.memory.recentEvents || [];
+      const impressions = p.memory.impressions || [];
+      if (recentEvents.length > 0) {
+        html += '<div style="font-size:11px;color:rgba(44,24,16,0.4);margin-bottom:4px;">最近事件:</div>';
+        html += '<div class="npc-memory-list">';
+        for (const e of recentEvents.slice(-10).reverse()) {
+          html += `<div class="npc-memory-item">${typeof e === 'string' ? e : (e.content || JSON.stringify(e))}</div>`;
+        }
+        html += '</div>';
       }
-      html += '</div>';
-    }
-    const impEntries = Object.entries(impressions);
-    if (impEntries.length > 0) {
-      html += '<div style="font-size:11px;color:rgba(44,24,16,0.4);margin:8px 0 4px;">印象:</div>';
-      html += '<div>';
-      for (const [target, score] of impEntries) {
-        const scoreColor = score > 0 ? 'var(--jade)' : score < 0 ? 'var(--vermillion)' : 'rgba(44,24,16,0.5)';
-        html += `<span class="npc-impression-item">${target} <span style="color:${scoreColor};font-weight:700">${score > 0 ? '+' : ''}${score}</span></span>`;
+      if (impressions.length > 0) {
+        html += '<div style="font-size:11px;color:rgba(44,24,16,0.4);margin:8px 0 4px;">印象:</div>';
+        html += '<div>';
+        for (const imp of impressions) {
+          const score = imp.score;
+          const scoreColor = score > 0 ? 'var(--jade)' : score < 0 ? 'var(--vermillion)' : 'rgba(44,24,16,0.5)';
+          html += `<span class="npc-impression-item"><span style="cursor:pointer;text-decoration:underline;" onclick="showNPCInfo(${imp.targetId})">${imp.targetName}</span> <span style="color:${scoreColor};font-weight:700">${score > 0 ? '+' : ''}${score}</span></span>`;
+        }
+        html += '</div>';
       }
-      html += '</div>';
-    }
-    if (recentEvents.length === 0 && impEntries.length === 0) {
-      html += '<div style="font-size:12px;color:rgba(44,24,16,0.35);">暂无记忆</div>';
+      if (recentEvents.length === 0 && impressions.length === 0) {
+        html += '<div style="font-size:12px;color:rgba(44,24,16,0.35);">暂无记忆</div>';
+      }
     }
 
     // 完整经历
-    if (history.history && history.history.length > 0) {
+    if (p.history && p.history.length > 0) {
       html += '<div class="npc-section-title hist">完整经历</div>';
       const showCount = 5;
-      const allHistory = history.history;
       html += '<div class="timeline" id="npc-history-timeline">';
-      for (const h of allHistory.slice(-showCount).reverse()) {
+      for (const h of p.history.slice(0, showCount)) {
         html += `<div class="timeline-item">
           <div class="tick-label">第${h.day || '?'}天 T${h.tick} ${h.shichen}</div>
           <div class="action-desc">${h.description || h.action}</div>
@@ -4539,26 +4637,23 @@ async function loadNPCProfile() {
         </div>`;
       }
       html += '</div>';
-      if (allHistory.length > showCount) {
-        html += `<div class="npc-history-toggle" onclick="expandNPCHistory(this, '${id}', ${showCount})">展开查看全部 ${allHistory.length} 条记录 ▼</div>`;
+      if (p.history.length > showCount) {
+        html += `<div class="npc-history-toggle" onclick="expandNPCHistory(this, '${id}', ${showCount})">展开查看全部 ${p.history.length} 条记录 ▼</div>`;
       }
     } else {
       html += '<div style="margin-top:12px;font-size:12px;color:rgba(44,24,16,0.4);">暂无行为历史</div>';
     }
 
-    // 关系图谱 (SVG)
-    if (relations.relations && relations.relations.length > 0) {
+    // 关系图谱
+    if (p.relations && p.relations.length > 0) {
       html += '<div class="npc-section-title rel">关系图谱</div>';
       html += '<div style="font-size:12px;line-height:2;">';
-      for (const r of relations.relations) {
+      for (const r of p.relations) {
         const scoreColor = r.score > 0 ? 'var(--jade)' : r.score < 0 ? 'var(--vermillion)' : 'rgba(44,24,16,0.5)';
-        const relLabel = r.score > 20 ? '友好' : r.score > 0 ? '略好' : r.score > -20 ? '冷淡' : '敌对';
-        html += `<span style="margin-right:12px;">${r.targetName} <span style="color:${scoreColor};font-weight:700">${r.score > 0 ? '+' : ''}${r.score}</span> <span style="font-size:10px;color:rgba(44,24,16,0.3)">(${relLabel})</span></span>`;
+        html += `<span style="margin-right:12px;"><span style="cursor:pointer;text-decoration:underline;" onclick="showNPCInfo(${r.targetId})">${r.targetName}</span> <span style="color:${scoreColor};font-weight:700">${r.score > 0 ? '+' : ''}${r.score}</span> <span style="font-size:10px;color:rgba(44,24,16,0.3)">(${r.label})</span></span>`;
       }
       html += '</div>';
-
-      // SVG关系图
-      html += renderRelationSVG(name, relations.relations);
+      html += renderRelationSVG(name, p.relations);
     }
 
     container.innerHTML = html;

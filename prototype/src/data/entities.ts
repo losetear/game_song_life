@@ -8,7 +8,7 @@ import { getAnimalType } from './animalTemplates';
 import { getPlantType } from './plantTemplates';
 import { CITY_GRIDS, FARM_GRIDS, MOUNTAIN_GRIDS, RIVER_GRIDS, ALL_GRID_IDS } from './areaDefs';
 import { BUILDING_TEMPLATES, BUILDING_TYPE_LIST, SPECIAL_BUILDING_TYPES, getBuildingName, getBuildingDescription, getBuildingRooms, getBuildingOpenHours } from './buildingTemplates';
-import { FactionComponent } from '../ecs/types';
+import { FactionComponent, FamilyComponent } from '../ecs/types';
 
 // === 12 个预设组织 ===
 const FACTION_DEFS = [
@@ -244,6 +244,135 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
   // L2: 300 统计 NPC（不创建实体，只在 RegionSim 中统计）
   breakdown.npc += 300;
 
+  // === 家庭关系生成 ===
+  // 同姓L0 NPC归入同一家族，L1 NPC部分分配到L0家族
+
+  // 收集L0 NPC姓氏
+  const familyNameToL0Ids: Map<string, number[]> = new Map();
+  for (const id of l0Ids) {
+    const identity = em.getComponent(id, 'Identity');
+    if (!identity) continue;
+    const familyName = identity.name[0]; // 取第一个字作为姓
+    if (!familyNameToL0Ids.has(familyName)) familyNameToL0Ids.set(familyName, []);
+    familyNameToL0Ids.get(familyName)!.push(id);
+  }
+
+  // 为每个家族创建 FamilyComponent 并设置 siblingIds
+  let familyIdCounter = 1;
+
+  for (const [familyName, memberIds] of familyNameToL0Ids) {
+    const familyComp: FamilyComponent = {
+      familyName,
+      familyId: familyIdCounter,
+      headId: memberIds[0], // 第一个成员为家长
+      members: [...memberIds],
+      generation: 1,
+    };
+
+    // 为同家族成员设置 siblingIds
+    if (memberIds.length > 1) {
+      for (const mid of memberIds) {
+        const identity = em.getComponent(mid, 'Identity');
+        if (identity) {
+          identity.siblingIds = memberIds.filter(sid => sid !== mid);
+        }
+      }
+    }
+
+    // 为每个家族成员创建 Family 实体
+    const familyEntityId = em.create(EntityType.FACTION); // 复用 FACTION 类型作为家族实体载体
+    em.addComponent(familyEntityId, 'Family', familyComp);
+    familyIdCounter++;
+  }
+
+  // 随机配对L0配偶（不同姓氏之间）
+  const allL0Shuffled = [...l0Ids].sort(() => Math.random() - 0.5);
+  const paired = new Set<number>();
+  for (let i = 0; i < allL0Shuffled.length - 1; i++) {
+    const a = allL0Shuffled[i];
+    if (paired.has(a)) continue;
+    const idA = em.getComponent(a, 'Identity');
+    if (!idA) continue;
+
+    // 找不同姓的未配对NPC
+    for (let j = i + 1; j < allL0Shuffled.length; j++) {
+      const b = allL0Shuffled[j];
+      if (paired.has(b)) continue;
+      const idB = em.getComponent(b, 'Identity');
+      if (!idB) continue;
+      if (idA.name[0] === idB.name[0]) continue; // 同姓不配
+
+      // 配对
+      idA.spouseId = b;
+      idB.spouseId = a;
+      paired.add(a);
+      paired.add(b);
+      break;
+    }
+  }
+
+  // 为部分L1 NPC分配到L0家族（作为子女）
+  const l1NpcIds = l1Ids.filter(id => em.getType(id) === 'npc');
+  const l1Shuffled = [...l1NpcIds].sort(() => Math.random() - 0.5);
+  let childAssignCount = 0;
+  const maxChildAssign = Math.min(l1Shuffled.length, l0Ids.length * 3); // 每个L0最多3个L1子女
+
+  for (const childId of l1Shuffled) {
+    if (childAssignCount >= maxChildAssign) break;
+    const childIdentity = em.getComponent(childId, 'Identity');
+    if (!childIdentity) continue;
+
+    // 随机选一个L0 NPC作为父/母
+    const parentIdx = Math.floor(Math.random() * l0Ids.length);
+    const parentId = l0Ids[parentIdx];
+    const parentIdentity = em.getComponent(parentId, 'Identity');
+    if (!parentIdentity) continue;
+
+    // 设置parent-child关系
+    childIdentity.parentIds = [parentId];
+    if (parentIdentity.spouseId) {
+      childIdentity.parentIds.push(parentIdentity.spouseId);
+    }
+
+    // 反向设置子女
+    if (!parentIdentity.childIds) parentIdentity.childIds = [];
+    parentIdentity.childIds.push(childId);
+    if (parentIdentity.spouseId) {
+      const spouseIdentity = em.getComponent(parentIdentity.spouseId, 'Identity');
+      if (spouseIdentity) {
+        if (!spouseIdentity.childIds) spouseIdentity.childIds = [];
+        spouseIdentity.childIds.push(childId);
+      }
+    }
+
+    // 加入家族
+    const parentFamilyName = parentIdentity.name[0];
+    const parentFamilyEntry = familyNameToL0Ids.get(parentFamilyName);
+    if (parentFamilyEntry) {
+      childIdentity.siblingIds = parentFamilyEntry
+        .filter(sid => sid !== parentId)
+        .concat(parentIdentity.childIds?.filter(cid => cid !== childId) || []);
+    }
+
+    childAssignCount++;
+  }
+
+  // 为剩余未分配家庭的L1 NPC创建简单的兄弟姐妹关系
+  const assignedL1 = new Set(l1Shuffled.slice(0, childAssignCount));
+  const unassignedL1 = l1NpcIds.filter(id => !assignedL1.has(id));
+  // 每2-3个未分配的L1 NPC结为一组兄弟姐妹
+  for (let i = 0; i < unassignedL1.length;) {
+    const groupSize = 2 + Math.floor(Math.random() * 2); // 2-3
+    const group = unassignedL1.slice(i, i + groupSize);
+    for (const gid of group) {
+      const identity = em.getComponent(gid, 'Identity');
+      if (identity) {
+        identity.siblingIds = group.filter(sid => sid !== gid);
+      }
+    }
+    i += groupSize;
+  }
+
   // === 动物: 1,200 ===
   // L1: 200 家畜
   for (let i = 0; i < 200; i++) {
@@ -374,7 +503,7 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
       // 给 NPC 设置 homeId
       const identity = em.getComponent(allNpcIds[i], 'Identity');
       if (identity) {
-        (identity as any).homeId = buildingId;
+        identity.homeId = buildingId;
       }
     }
   }
@@ -398,7 +527,7 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
       if (!b || b.type !== preferredType) continue;
       const bpos = em.getComponent(bid, 'Position');
       if (bpos && bpos.gridId === npcGrid) {
-        (identity as any).workplaceId = bid;
+        identity.workplaceId = bid;
         if (b.ownerId === 0) b.ownerId = npcId;
         assigned = true;
         break;
@@ -409,7 +538,7 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
       for (const bid of buildingIds) {
         const b = em.getComponent(bid, 'Building');
         if (!b || b.type !== preferredType) continue;
-        (identity as any).workplaceId = bid;
+        identity.workplaceId = bid;
         if (b.ownerId === 0) b.ownerId = npcId;
         break;
       }

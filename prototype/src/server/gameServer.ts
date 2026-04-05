@@ -388,6 +388,205 @@ export class GameServer {
       }
     });
 
+    // GET /api/world/npc/:id/profile — NPC完整档案
+    this.app.get('/api/world/npc/:id/profile', (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const em = this.engine.em;
+
+        if (!em.isAlive(id) || em.getType(id) !== 'npc') {
+          res.status(404).json({ error: 'NPC not found' });
+          return;
+        }
+
+        const identity = em.getComponent(id, 'Identity');
+        if (!identity) {
+          res.status(404).json({ error: 'NPC has no identity' });
+          return;
+        }
+
+        const pos = em.getComponent(id, 'Position');
+        const vital = em.getComponent(id, 'Vital');
+        const wallet = em.getComponent(id, 'Wallet');
+        const inventory = em.getComponent(id, 'Inventory');
+        const ai = em.getComponent(id, 'AI');
+        const memory = em.getComponent(id, 'Memory');
+
+        // 物品估值
+        const ITEM_VALUES: Record<string, number> = {
+          food: 5, goods: 20, herb: 15, herbs: 15, tool: 30, book: 50, luxury: 100,
+          material: 10, cloth: 15, cargo: 8,
+        };
+        const items = inventory?.items || [];
+        let itemsValue = 0;
+        for (const item of items) {
+          itemsValue += (ITEM_VALUES[item.itemType] || 10) * item.amount;
+        }
+        const totalAssets = (wallet?.copper || 0) + itemsValue;
+
+        // 家庭信息
+        const spouseIdentity = identity.spouseId ? em.getComponent(identity.spouseId, 'Identity') : null;
+        const parents = (identity.parentIds || []).map(pid => {
+          const p = em.getComponent(pid, 'Identity');
+          return { id: pid, name: p?.name || '未知' };
+        });
+        const children = (identity.childIds || []).map(cid => {
+          const c = em.getComponent(cid, 'Identity');
+          return { id: cid, name: c?.name || '未知' };
+        });
+        const siblings = (identity.siblingIds || []).map(sid => {
+          const s = em.getComponent(sid, 'Identity');
+          return { id: sid, name: s?.name || '未知' };
+        });
+
+        // 家族信息（查找 Family 组件中包含该NPC的家族）
+        let family: Record<string, any> | null = null;
+        const allEntities = em.allEntities();
+        for (const eid of allEntities) {
+          const famComp = em.getComponent(eid, 'Family') as any;
+          if (famComp && famComp.members && famComp.members.includes(id)) {
+            const allMembers = famComp.members.map((mid: number) => {
+              const m = em.getComponent(mid, 'Identity');
+              return { id: mid, name: m?.name || '未知' };
+            });
+            family = {
+              familyName: famComp.familyName,
+              familyId: famComp.familyId,
+              headId: famComp.headId,
+              headName: em.getComponent(famComp.headId, 'Identity')?.name || '未知',
+              generation: famComp.generation,
+              allMembers,
+            };
+            break;
+          }
+        }
+
+        // 房产信息（遍历建筑找 ownerId=该NPC 的建筑列表）
+        const property: Record<string, any>[] = [];
+        const homeBuilding = identity.homeId ? em.getComponent(identity.homeId, 'Building') : null;
+        const homePosition = identity.homeId ? em.getComponent(identity.homeId, 'Position') : null;
+        const workplaceBuilding = identity.workplaceId ? em.getComponent(identity.workplaceId, 'Building') : null;
+        const workplacePosition = identity.workplaceId ? em.getComponent(identity.workplaceId, 'Position') : null;
+
+        for (const eid of allEntities) {
+          const building = em.getComponent(eid, 'Building');
+          if (!building) continue;
+          if (building.ownerId === id) {
+            const bpos = em.getComponent(eid, 'Position');
+            const bExt = building as any;
+            property.push({
+              buildingId: eid,
+              buildingName: bExt.name || building.type,
+              buildingType: building.type,
+              gridId: bpos?.gridId || '',
+            });
+          }
+        }
+
+        // 组织信息
+        const factionInfo = this.engine.getNpcFaction(id);
+        let organization: Record<string, any> | null = null;
+        if (factionInfo) {
+          const faction = this.engine.getFactions().get(factionInfo.id);
+          if (faction) {
+            const memberList = faction.members.map(mid => {
+              const m = em.getComponent(mid, 'Identity');
+              return { id: mid, name: m?.name || '未知', role: 'member' as string };
+            });
+            // 加上 leader
+            if (faction.leaderId) {
+              const leaderName = em.getComponent(faction.leaderId, 'Identity')?.name || '未知';
+              memberList.unshift({ id: faction.leaderId, name: leaderName, role: 'leader' });
+            }
+            organization = {
+              factionId: factionInfo.id,
+              factionName: factionInfo.name,
+              factionType: faction.type,
+              factionRole: factionInfo.role,
+              factionMembers: memberList,
+              leaderId: faction.leaderId,
+              leaderName: faction.leaderId ? em.getComponent(faction.leaderId, 'Identity')?.name || '未知' : null,
+            };
+          }
+        }
+
+        // 关系
+        const relations = this.engine.getNPCRelations(id);
+
+        // 历史
+        const history = this.engine.getNPCHistory(id);
+
+        res.json({
+          basic: {
+            id,
+            name: identity.name,
+            profession: identity.profession,
+            age: identity.age,
+            personality: identity.personality,
+            gridId: pos?.gridId || '',
+            areaId: pos?.areaId || '',
+          },
+          vital: vital ? {
+            hunger: Math.round(vital.hunger),
+            fatigue: Math.round(vital.fatigue),
+            health: Math.round(vital.health),
+            mood: Math.round(vital.mood),
+          } : null,
+          wealth: {
+            copper: wallet?.copper || 0,
+            items: items.map(i => ({ itemType: i.itemType, amount: i.amount, value: (ITEM_VALUES[i.itemType] || 10) * i.amount })),
+            itemsValue,
+            totalAssets,
+          },
+          family: {
+            familyName: family?.familyName || identity.name[0],
+            familyId: family?.familyId || null,
+            familyHead: family ? { id: family.headId, name: family.headName } : null,
+            spouse: identity.spouseId ? { id: identity.spouseId, name: spouseIdentity?.name || '未知' } : null,
+            parents,
+            children,
+            siblings,
+            allMembers: family?.allMembers || [],
+          },
+          property,
+          home: identity.homeId ? {
+            buildingId: identity.homeId,
+            buildingName: (homeBuilding as any)?.name || homeBuilding?.type || '民居',
+            buildingType: homeBuilding?.type || 'house',
+            gridId: homePosition?.gridId || '',
+          } : null,
+          workplace: identity.workplaceId ? {
+            buildingId: identity.workplaceId,
+            buildingName: (workplaceBuilding as any)?.name || workplaceBuilding?.type || '',
+            buildingType: workplaceBuilding?.type || '',
+            gridId: workplacePosition?.gridId || '',
+          } : null,
+          organization,
+          relations: relations.map(r => ({
+            targetId: r.targetId,
+            targetName: r.targetName,
+            score: r.score,
+            label: r.score > 20 ? '友好' : r.score > 0 ? '略好' : r.score > -20 ? '冷淡' : '敌对',
+          })),
+          ai: ai ? {
+            goals: ai.goals,
+            plan: ai.currentPlan,
+            aiLevel: ai.aiLevel,
+          } : null,
+          memory: memory ? {
+            recentEvents: memory.recentEvents.slice(-10),
+            impressions: Object.entries(memory.impressions).map(([tid, score]) => {
+              const tIdentity = em.getComponent(Number(tid), 'Identity');
+              return { targetId: Number(tid), targetName: tIdentity?.name || '未知', score: score as number };
+            }),
+          } : null,
+          history: history.slice(-20).reverse(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
     // GET /api/world/nearby — 获取玩家当前位置周围实体
     this.app.get('/api/world/nearby', (_req, res) => {
       try {
@@ -644,6 +843,7 @@ export class GameServer {
       console.log(`   GET  /api/world/propagation → 传播链`);
       console.log(`   GET  /api/world/npc/:id/history → NPC历史`);
       console.log(`   GET  /api/world/npc/:id/relations → NPC关系`);
+      console.log(`   GET  /api/world/npc/:id/profile   → NPC完整档案`);
       console.log(`   GET  /api/world/nearby       → 周围实体`);
       console.log(`   GET  /api/world/move-options → 移动选项`);
       console.log(`   GET  /api/world/entity/:id/actions → 实体行为`);
