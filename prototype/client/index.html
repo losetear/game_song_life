@@ -4394,7 +4394,7 @@ function expandEventGroup(btn, total) {
 }
 
 // === NPC 档案 ===
-let allNpcOptions: {id: number, name: string, text: string}[] = []; // 缓存所有NPC选项
+let allNpcOptions = []; // 缓存所有NPC选项
 
 async function loadNPCList() {
   const select = document.getElementById('npc-select');
@@ -4669,7 +4669,7 @@ function renderRelationSVG(centerName, relations) {
   if (n === 0) return '';
   const radius = Math.min(70, 40 + n * 8);
 
-  let svg = `<svg class="relation-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  let svg = '<svg class="relation-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
 
   // Lines
   for (let i = 0; i < n; i++) {
@@ -4679,12 +4679,12 @@ function renderRelationSVG(centerName, relations) {
     const r = relations[i];
     const lineColor = r.score > 0 ? '#2e8b57' : r.score < 0 ? '#c23a2e' : '#999';
     const dashArray = Math.abs(r.score) < 10 ? '4,4' : 'none';
-    svg += `<line x1="${cx}" y1="${cy}" x2="${tx}" y2="${ty}" stroke="${lineColor}" stroke-width="${Math.min(4, Math.abs(r.score) / 10 + 1)}" stroke-dasharray="${dashArray}" opacity="0.6"/>`;
+    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + tx + '" y2="' + ty + '" stroke="' + lineColor + '" stroke-width="' + Math.min(4, Math.abs(r.score) / 10 + 1) + '" stroke-dasharray="' + dashArray + '" opacity="0.6"/>';
   }
 
   // Center node
-  svg += `<circle cx="${cx}" cy="${cy}" r="18" fill="#c23a2e" opacity="0.8"/>`;
-  svg += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="white" font-size="12" font-weight="700" font-family="Noto Serif SC,serif">${centerName[0]}</text>`;
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="18" fill="#c23a2e" opacity="0.8"/>';
+  svg += '<text x="' + cx + '" y="' + (cy + 5) + '" text-anchor="middle" fill="white" font-size="12" font-weight="700" font-family="Noto Serif SC,serif">' + centerName[0] + '</text>';
 
   // Target nodes
   for (let i = 0; i < n; i++) {
@@ -4693,9 +4693,10 @@ function renderRelationSVG(centerName, relations) {
     const ty = cy + radius * Math.sin(angle);
     const r = relations[i];
     const nodeColor = r.score > 0 ? '#2e8b57' : r.score < 0 ? '#c23a2e' : '#8b7355';
-    svg += `<circle cx="${tx}" cy="${ty}" r="14" fill="${nodeColor}" opacity="0.7"/>`;
-    svg += `<text x="${tx}" y="${ty + 4}" text-anchor="middle" fill="white" font-size="10" font-weight="700" font-family="Noto Serif SC,serif">${(r.targetName || '?')[0]}</text>`;
-    svg += `<text x="${tx}" y="${ty + 22}" text-anchor="middle" fill="rgba(44,24,16,0.5)" font-size="9" font-family="Noto Sans SC,sans-serif">${r.targetName} ${r.score > 0 ? '+' : ''}${r.score}</text>`;
+    const initial = (r.targetName || '?')[0];
+    svg += '<circle cx="' + tx + '" cy="' + ty + '" r="14" fill="' + nodeColor + '" opacity="0.7"/>';
+    svg += '<text x="' + tx + '" y="' + (ty + 4) + '" text-anchor="middle" fill="white" font-size="10" font-weight="700" font-family="Noto Serif SC,serif">' + initial + '</text>';
+    svg += '<text x="' + tx + '" y="' + (ty + 22) + '" text-anchor="middle" fill="rgba(44,24,16,0.5)" font-size="9" font-family="Noto Sans SC,sans-serif">' + r.targetName + ' ' + (r.score > 0 ? '+' : '') + r.score + '</text>';
   }
 
   svg += '</svg>';
