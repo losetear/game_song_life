@@ -13,6 +13,11 @@ export interface InteractionContext {
     memory: { recentEvents: { content: string; tick: number }[]; impressions: Record<string, number> };
     factionId?: number;
     factionRole?: 'leader' | 'member';
+    factionType?: string;          // 组织类型 (government/military/merchant/religion/underground/scholar)
+    profession?: string;           // 玩家职业
+    personality?: string[];        // 玩家性格
+    familyMembers?: number[];      // 家庭成员ID列表（含配偶/父母/子女/兄弟姐妹）
+    spouseId?: number;             // 配偶ID
   };
   target: {
     id: number;
@@ -20,6 +25,8 @@ export interface InteractionContext {
     vital: { hunger: number; fatigue: number; health: number; mood: number } | null;
     wallet: { copper: number } | null;
     identity: { name: string; profession: string; age: number; personality: string[]; factionId?: number; factionRole?: 'leader' | 'member' } | null;
+    homeId?: number;               // 住所建筑ID
+    workplaceId?: number;          // 工作地点ID
     position: { gridId: string; areaId: string } | null;
     ai: { goals: string[]; currentPlan: string[]; planCooldown: number; aiLevel: 0 | 1 | 2 } | null;
     memory: { recentEvents: { content: string; tick: number }[]; impressions: Record<string, number> } | null;

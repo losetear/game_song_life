@@ -29,6 +29,30 @@ function isDoctor(profession: string): boolean {
   return ['doctor', '大夫', '药铺伙计', '药师'].includes(profession);
 }
 
+function isGuard(profession: string): boolean {
+  return ['guard', '捕快', '衙役', '守卫', '军官', '校尉'].includes(profession);
+}
+
+function isRogue(profession: string): boolean {
+  return ['rogue', '盗贼', '飞贼', '小偷', '暗探'].includes(profession);
+}
+
+function isBlacksmith(profession: string): boolean {
+  return ['blacksmith', '铁匠', '铁匠铺'].includes(profession);
+}
+
+function isFarmer(profession: string): boolean {
+  return ['farmer', '农夫', '农民', '佃户'].includes(profession);
+}
+
+function isHunter(profession: string): boolean {
+  return ['hunter', '猎户', '猎人'].includes(profession);
+}
+
+function isTeacher(profession: string): boolean {
+  return ['teacher', 'scholar', '先生', '书生', '教书先生', '学者'].includes(profession);
+}
+
 function isSkillTeacher(profession: string): boolean {
   return ['doctor', 'hunter', 'blacksmith', 'farmer', 'fisherman', 'carpenter',
     '大夫', '猎户', '铁匠', '农夫', '渔夫', '木匠'].includes(profession);
@@ -58,7 +82,7 @@ function isRivalFaction(ctx: InteractionContext): boolean {
 }
 
 // ============================================================
-// 涌现规则定义（38条）
+// 涌现规则定义（57条）
 // ============================================================
 
 export const EMERGENCE_RULES: ActionRule[] = [
@@ -89,6 +113,7 @@ export const EMERGENCE_RULES: ActionRule[] = [
       const name = ctx.target.identity?.name || '对方';
       const mood = ctx.target.vital?.mood ?? 50;
       const personality = ctx.target.identity?.personality || [];
+      const profession = ctx.target.identity?.profession || '';
       let message = '';
 
       if (mood > 70) {
@@ -109,6 +134,27 @@ export const EMERGENCE_RULES: ActionRule[] = [
           `${name}叹了口气："你要是说不了什么好事，就别来烦我。"`,
           `${name}白了你一眼："没心情，走开。"`,
         ]);
+      }
+
+      // 根据职业追加专属话题
+      if (isGuard(profession)) {
+        message += `\n\n${name}压低声音："最近城里不太平，巡逻的时候多留个心眼。前天东市那边闹了贼。"`;
+      } else if (isMerchant(profession)) {
+        message += `\n\n${name}掰着手指头："南边的丝绸涨了三成，粮食倒是稳住了。做买卖嘛，消息最重要。"`;
+      } else if (isDoctor(profession)) {
+        message += `\n\n${name}打量了你的面色："气色还行，不过别熬夜。最近换季，风寒的人不少，注意保暖。"`;
+      } else if (isRogue(profession)) {
+        message += `\n\n${name}嘿嘿一笑，凑近你耳边："听说城东那个大户最近在找一批丢失的货物...你懂的。"`;
+      } else if (isFarmer(profession)) {
+        const seasonChat = ctx.world.season === '春' ? '今年春雨来得及时，秧苗长势喜人' :
+          ctx.world.season === '夏' ? '这大太阳烤得庄稼都快蔫了，就盼着下场透雨' :
+          ctx.world.season === '秋' ? '秋收在即，看这架势是个丰收年' :
+          '冬天地里没什么活，就窝在家里修补农具';
+        message += `\n\n${name}聊起农事来滔滔不绝："${seasonChat}。"`;
+      } else if (isBlacksmith(profession)) {
+        message += `\n\n${name}拍着砧板："最近铁料不好买，不过我这手艺还在。你的刀要是钝了，拿过来我给你磨磨。"`;
+      } else if (isHunter(profession)) {
+        message += `\n\n${name}擦了擦弓弦："后山那头野猪又出现了，好几户人家的篱笆都给拱坏了。"`;
       }
 
       // 根据性格追加
@@ -215,16 +261,27 @@ export const EMERGENCE_RULES: ActionRule[] = [
     execute: (ctx) => {
       const name = ctx.target.identity?.name || '商贩';
       const copper = ctx.player.wallet.copper;
+      const targetCopper = ctx.target.wallet?.copper ?? 50;
+
+      // 根据玩家财富和商人财富决定商品档次
+      const isRichMerchant = targetCopper >= 100;
       let price = randInt(5, Math.min(50, copper));
+
       // 同组织打8折
       if (isSameFaction(ctx)) {
         price = Math.max(1, Math.floor(price * 0.8));
       }
-      // 商业类型组织商品更丰富
+
+      // 基础商品 vs 高档商品
       const baseItems = ['一袋粗粮', '几尺麻布', '一包药材', '一捆柴火', '一壶浊酒', '几个炊饼'];
-      const extraItems = ['一匹丝绸', '上等宣纸', '精致陶器', '铜镜', '香囊', '雕花木梳'];
-      const items = [...baseItems, ...extraItems];
+      const luxuryItems = ['一匹丝绸', '上等宣纸', '精致陶器', '铜镜', '香囊', '雕花木梳'];
+      const items = isRichMerchant ? [...baseItems, ...luxuryItems] : baseItems;
       const item = pick(items);
+
+      // 财富限制：穷人只能买低价物品
+      if (copper < 20 && price > 15) {
+        price = randInt(3, Math.min(15, copper));
+      }
 
       const messages = [
         `${name}从柜台后取出${item}："${price}文，童叟无欺。"你掏出铜板，对方满意地收了。`,
@@ -235,6 +292,9 @@ export const EMERGENCE_RULES: ActionRule[] = [
       let msg = pick(messages);
       if (isSameFaction(ctx)) {
         msg += `\n\n${name}压低声音："自己人，给你算便宜了。"`;
+      }
+      if (isRichMerchant) {
+        msg += `\n\n${name}得意地说："我这儿的货，别家可找不着。好东西都是南边运来的。"`;
       }
 
       return {
@@ -268,6 +328,11 @@ export const EMERGENCE_RULES: ActionRule[] = [
       // 同组织收购价更高（+20%）
       if (isSameFaction(ctx)) {
         price = Math.ceil(price * 1.2);
+      }
+      // 职业商人给出更高收购价（+15%）
+      const profession = ctx.target.identity?.profession || '';
+      if (isMerchant(profession)) {
+        price = Math.ceil(price * 1.15);
       }
       const personality = ctx.target.identity?.personality || [];
 
@@ -401,21 +466,48 @@ export const EMERGENCE_RULES: ActionRule[] = [
       const name = ctx.target.identity?.name || '对方';
       const targetCopper = ctx.target.wallet?.copper ?? 0;
       const nearby = nearbyRelevantCount(ctx.world.nearbyEntities);
-      const personality = ctx.target.identity?.personality || [];
+      const targetPersonality = ctx.target.identity?.personality || [];
+      const targetProfession = ctx.target.identity?.profession || '';
+      const playerProfession = ctx.player.profession || '';
+      const playerPersonality = ctx.player.personality || [];
 
-      // 成功率基于周围人数和NPC警觉性
+      // 成功率基于周围人数、NPC警觉性、职业和性格
       let successChance = 0.6 - nearby * 0.1;
-      if (personality.includes('精明') || personality.includes('狡猾')) successChance -= 0.2;
-      if (personality.includes('胆小')) successChance += 0.1;
+      if (targetPersonality.includes('精明') || targetPersonality.includes('狡猾')) successChance -= 0.2;
+      if (targetPersonality.includes('胆小')) successChance += 0.1;
+
+      // 玩家是rogue时成功率更高
+      if (isRogue(playerProfession)) successChance += 0.2;
+
+      // 目标是guard/军官时更难成功
+      if (isGuard(targetProfession)) successChance -= 0.25;
+
+      // 玩家性格影响：狡猾/精明性格成功率+20%
+      if (playerPersonality.includes('狡猾') || playerPersonality.includes('精明')) successChance += 0.2;
+
       const success = Math.random() < successChance;
 
       if (success) {
-        const stolen = randInt(1, Math.min(targetCopper, 50));
+        // rogue偷窃数量更多
+        const maxSteal = isRogue(playerProfession) ? Math.min(targetCopper, 80) : Math.min(targetCopper, 50);
+        const stolen = randInt(1, maxSteal);
+
+        let msg = `你的手悄无声息地伸向${name}的腰包——摸到了几枚铜板！${stolen}文到手。你不动声色地收回手，心跳如鼓。`;
+        if (isRogue(playerProfession)) {
+          msg += `\n\n你的手法干净利落，这是多年的老本行。`;
+        }
+
+        // 善良/正直性格偷窃后有愧疚debuff
+        let moodChange = -3;
+        if (playerPersonality.includes('善良') || playerPersonality.includes('正直')) {
+          moodChange = -13; // 额外-10愧疚
+          msg += `\n\n得手后你心里却有些不安，那枚铜钱在口袋里仿佛发烫...`;
+        }
+
         return {
-          success: true,
-          message: `你的手悄无声息地伸向${name}的腰包——摸到了几枚铜板！${stolen}文到手。你不动声色地收回手，心跳如鼓。`,
+          success: true, message: msg,
           copperChange: stolen,
-          moodChange: -3,
+          moodChange,
         };
       }
 
@@ -426,9 +518,14 @@ export const EMERGENCE_RULES: ActionRule[] = [
         `"干什么呢！"${name}猛地转身，差点撞到你伸出的手。你干笑了两声："没什么，没什么..."赶紧退开。`,
       ];
 
+      let failMsg = pick(failMessages);
+      if (isGuard(targetProfession)) {
+        failMsg += `\n\n${name}眼中精光一闪："贼手伸到我面前来了？跟我走一趟！"你的心一下子凉了半截。`;
+      }
+
       return {
         success: false,
-        message: pick(failMessages),
+        message: failMsg,
         impressionChange: randInt(-15, -5),
         moodChange: -10,
       };
@@ -505,30 +602,52 @@ export const EMERGENCE_RULES: ActionRule[] = [
     id: 'heal', name: '求医', icon: '💊', apCost: 2,
     shouldAppear: (ctx) => {
       if (ctx.target.type !== 'npc') return false;
-      return isDoctor(ctx.target.identity?.profession || '') && ctx.player.vital.health < 60;
+      const profession = ctx.target.identity?.profession || '';
+      // 大夫：玩家健康<60时出现
+      if (isDoctor(profession)) return ctx.player.vital.health < 60;
+      // 非大夫：玩家健康<50时，任何人可能帮忙包扎
+      return ctx.player.vital.health < 50;
     },
     canExecute: (ctx) => {
       if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
       if (ctx.player.vital.health >= 60) return { met: false, reason: '你身体无恙' };
-      if (ctx.player.wallet.copper < 20) return { met: false, reason: '诊金不够（需20文）' };
+      const profession = ctx.target.identity?.profession || '';
+      const cost = isDoctor(profession) ? 20 : 5;
+      if (ctx.player.wallet.copper < cost) return { met: false, reason: `诊金不够（需${cost}文）` };
       return { met: true, reason: '' };
     },
-    describeEffects: (ctx) => `请${ctx.target.identity?.name || '大夫'}为你诊治（诊金20文）`,
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const profession = ctx.target.identity?.profession || '';
+      if (isDoctor(profession)) return `请${name}为你诊治（诊金20文）`;
+      return `请${name}帮你简单包扎（花费5文）`;
+    },
     execute: (ctx) => {
-      const name = ctx.target.identity?.name || '大夫';
-      const health = ctx.player.vital.health;
+      const name = ctx.target.identity?.name || '对方';
+      const profession = ctx.target.identity?.profession || '';
+      const isDoc = isDoctor(profession);
 
-      const messages = [
-        `${name}让你伸出舌头，又搭了搭你的脉。"嗯..."他沉吟片刻，开了副药方。"按方服用，三日后便有起色。"你付了20文诊金，心里踏实了不少。`,
-        `${name}仔细检查了你的面色和脉象，写了张药方递给你："最近劳累过度，气血不顺。这副药煎水服下，注意休息。"你感激地付了诊金。`,
-        `"气色不好啊。"${name}摇着头说，"让我给你瞧瞧。"一番望闻问切之后，他开了药方，叮嘱道："忌辛辣，早入睡。"`,
-      ];
+      if (isDoc) {
+        const messages = [
+          `${name}让你伸出舌头，又搭了搭你的脉。"嗯..."他沉吟片刻，开了副药方。"按方服用，三日后便有起色。"你付了20文诊金，心里踏实了不少。`,
+          `${name}仔细检查了你的面色和脉象，写了张药方递给你："最近劳累过度，气血不顺。这副药煎水服下，注意休息。"你感激地付了诊金。`,
+          `"气色不好啊。"${name}摇着头说，"让我给你瞧瞧。"一番望闻问切之后，他开了药方，叮嘱道："忌辛辣，早入睡。"`,
+        ];
+        return {
+          success: true, message: pick(messages),
+          copperChange: -20,
+          healthChange: randInt(10, 20),
+          impressionChange: 2,
+        };
+      }
 
+      // 非大夫的简单包扎
       return {
-        success: true, message: pick(messages),
-        copperChange: -20,
-        healthChange: randInt(10, 20),
-        impressionChange: 2,
+        success: true,
+        message: `${name}虽然不是大夫，但看你伤得不轻，从包袱里翻出一块干净的布条。"忍着点。"他笨手笨脚地帮你包扎了一番。虽然不专业，但好歹止了血。"还是去找个正经大夫看看吧。"他关切地说。`,
+        copperChange: -5,
+        healthChange: randInt(3, 8),
+        impressionChange: 3,
       };
     },
   },
@@ -553,10 +672,13 @@ export const EMERGENCE_RULES: ActionRule[] = [
     execute: (ctx) => {
       const name = ctx.target.identity?.name || '对方';
       const mood = ctx.target.vital?.mood ?? 50;
-      const personality = ctx.target.identity?.personality || [];
+      const targetPersonality = ctx.target.identity?.personality || [];
+      const playerPersonality = ctx.player.personality || [];
 
-      const isBrave = personality.includes('勇敢') || personality.includes('刚烈');
-      const isTimid = personality.includes('胆小');
+      const isBrave = targetPersonality.includes('勇敢') || targetPersonality.includes('刚烈');
+      const isTimid = targetPersonality.includes('胆小');
+      const playerBrave = playerPersonality.includes('勇敢') || playerPersonality.includes('刚烈');
+      const playerTimid = playerPersonality.includes('胆小');
       // 敌对组织间冲突概率更高
       const conflictBoost = isRivalFaction(ctx) ? 0.25 : 0;
 
@@ -576,10 +698,21 @@ export const EMERGENCE_RULES: ActionRule[] = [
         if (isRivalFaction(ctx)) {
           conflictMsg += `\n\n旁边有人低声议论："这两个组织的恩怨可不是一天两天了..."`;
         }
+        // 勇敢/刚烈性格：挑衅成功后热血上头，心情反而+5
+        let playerMoodChange = -15;
+        if (playerBrave) {
+          playerMoodChange = -10; // 虽然挨打了但心里爽
+          conflictMsg += `\n\n你抹了一把嘴角的血，心中反而热血沸腾——这才像话！`;
+        }
+        // 胆小性格：被反击后额外心情-5
+        if (playerTimid) {
+          playerMoodChange -= 5;
+          conflictMsg += `\n\n你吓得两腿发软，这才意识到自己惹了不该惹的人。`;
+        }
         return {
           success: true,
           message: conflictMsg,
-          impressionChange: -20, healthChange: -randInt(5, 15), moodChange: -15,
+          impressionChange: -20, healthChange: -randInt(5, 15), moodChange: playerMoodChange,
         };
       }
 
@@ -1243,6 +1376,766 @@ export const EMERGENCE_RULES: ActionRule[] = [
         message: `你从钱袋中取出${dues}文，恭敬地呈给${name}。他点了点头，将铜钱收入公账："忠心可嘉。组织不会忘记你的贡献。"你的付出为组织增添了几分实力。`,
         copperChange: -dues,
         impressionChange: randInt(3, 8),
+        moodChange: 3,
+      };
+    },
+  },
+
+  // ═══ 职业专属规则（9条） ═══
+
+  // 38. 巡逻同行
+  {
+    id: 'guard_patrol', name: '巡逻同行', icon: '🛡️', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const playerProf = ctx.player.profession || '';
+      const targetProf = ctx.target.identity?.profession || '';
+      // 玩家是guard/军事组织成员，或目标NPC是guard
+      return isGuard(playerProf) || isGuard(targetProf)
+        || ctx.player.factionType === 'military';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `与${name}一起巡逻，获取安全情报`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const intel = pick([
+        `${name}带你走了一圈，低声说："西边巷子里最近有生面孔出没，不太对劲。"你记在了心里。`,
+        `"跟我来。"${name}领你巡视了一圈，指着一处墙角："那里有人翻墙的痕迹，已经让人盯上了。"`,
+        `${name}边走边说："最近码头上来的陌生人不少，我让人盯着呢。你要是发现什么，记得报我。"`,
+      ]);
+      return {
+        success: true, message: intel,
+        impressionChange: randInt(2, 5),
+        moodChange: 3,
+      };
+    },
+  },
+
+  // 39. 黑市交易
+  {
+    id: 'black_market', name: '黑市交易', icon: '🕴', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const playerProf = ctx.player.profession || '';
+      const targetProf = ctx.target.identity?.profession || '';
+      return isRogue(playerProf) || isRogue(targetProf);
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 15) return { met: false, reason: '铜钱不够（至少15文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '在黑市购买情报或非法物品',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const copper = ctx.player.wallet.copper;
+      const price = randInt(15, Math.min(60, copper));
+      const goods = pick([
+        { item: '一封密信，上面写着某位大户人家的动向', type: 'intel' },
+        { item: '一小瓶粉末，据说能让人昏睡不醒', type: 'poison' },
+        { item: '一枚不知来路的玉佩，成色上佳', type: 'loot' },
+        { item: '一张城防布局草图，标注了几个暗哨的位置', type: 'intel' },
+      ]);
+
+      return {
+        success: true,
+        message: `${name}左右看了看，从怀里掏出${goods.item}。"${price}文，概不还价。"你迅速掏出铜板，东西到手。${name}嘱咐道："别说是从我这里拿的。"`,
+        copperChange: -price,
+        itemsGained: [{ itemType: goods.type, amount: 1 }],
+        impressionChange: randInt(3, 8),
+        moodChange: -2,
+      };
+    },
+  },
+
+  // 40. 铁匠锻造
+  {
+    id: 'blacksmith_craft', name: '铁匠锻造', icon: '🔨', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      return isBlacksmith(ctx.target.identity?.profession || '');
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 30) return { met: false, reason: '铜钱不够（至少30文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '请铁匠修理或升级武器装备（30~80文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '铁匠';
+      const price = randInt(30, Math.min(80, ctx.player.wallet.copper));
+      const service = pick([
+        `你把钝了的刀递过去。${name}接过来打量了一眼，架到砧板上叮叮当当一阵锤打。火星飞溅中，刀刃重新泛起寒光。"${price}文，试试。"你挥了两下，手感好了许多。`,
+        `${name}看了看你的装备，皱了皱眉："该修了。"他麻利地换了条新刀柄，又加固了护甲的铆钉。${price}文花得值。`,
+        `"要淬火？"${name}把烧红的铁件浸入水中，"嗤——"一声白汽升腾。他擦了擦汗："${price}文。这把家伙现在比原来还利索。"`,
+      ]);
+
+      return {
+        success: true, message: service,
+        copperChange: -price,
+        impressionChange: randInt(2, 5),
+        moodChange: 3,
+      };
+    },
+  },
+
+  // 41. 奢侈品交易
+  {
+    id: 'luxury_deal', name: '奢侈品交易', icon: '💎', apCost: 3,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      if (!isMerchant(ctx.target.identity?.profession || '')) return false;
+      return ctx.player.wallet.copper >= 100;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 3) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 50) return { met: false, reason: '铜钱不够（至少50文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '购买高端稀有商品（50~200文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '大商人';
+      const price = randInt(50, Math.min(200, ctx.player.wallet.copper));
+      const item = pick([
+        '一匹上好的蜀锦，手感如丝般顺滑',
+        '一套精致的文房四宝，笔架是翡翠的',
+        '一坛窖藏二十年的女儿红',
+        '一把精钢折扇，扇骨刻着名家字迹',
+        '一块和田玉佩，温润通透',
+      ]);
+
+      return {
+        success: true,
+        message: `${name}从里间取出一个锦盒，小心翼翼地打开——${item}。"这可是我从南边特意带回来的，${price}文，识货的人自然知道它的价值。"你爽快地付了钱，心中暗喜。`,
+        copperChange: -price,
+        itemsGained: [{ itemType: 'luxury', amount: 1 }],
+        impressionChange: randInt(3, 8),
+        moodChange: 5,
+      };
+    },
+  },
+
+  // 42. 农活
+  {
+    id: 'farm_work', name: '帮农干活', icon: '🌾', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      return isFarmer(ctx.target.identity?.profession || '');
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.vital.fatigue < 20) return { met: false, reason: '太累了' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const seasonBonus = ctx.world.season === '春' || ctx.world.season === '夏';
+      return `帮农夫干活赚铜钱${seasonBonus ? '（当季收益更高）' : ''}`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '农夫';
+      const season = ctx.world.season;
+      // 春天/夏天收益更高
+      const basePay = randInt(10, 30);
+      const pay = (season === '春' || season === '夏') ? Math.ceil(basePay * 1.5) : basePay;
+
+      const tasks = season === '春' ? '你跟着他插秧、挑水，泥巴糊了一腿' :
+        season === '夏' ? '烈日下你帮忙锄草、浇水，汗如雨下' :
+        season === '秋' ? '你帮着收割、打谷，忙得腰都直不起来' :
+        '冬天没什么农活，你帮他修了修篱笆、翻了翻土';
+
+      return {
+        success: true,
+        message: `${name}见你愿意帮忙，高兴地说："来得正好！"${tasks}。干完活，${name}从怀里掏出${pay}文递给你："辛苦了，这是你的工钱。"你擦了把汗，心里踏实。`,
+        copperChange: pay,
+        impressionChange: randInt(5, 10),
+        fatigueChange: -15,
+        moodChange: 3,
+      };
+    },
+  },
+
+  // 43. 授课学习
+  {
+    id: 'teach', name: '授课学习', icon: '📚', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      return isTeacher(ctx.target.identity?.profession || '');
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 10) return { met: false, reason: '学费不够（至少10文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '向先生学习知识技能（10~40文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '先生';
+      const fee = randInt(10, Math.min(40, ctx.player.wallet.copper));
+      const subject = pick([
+        { topic: '《论语》大义', desc: '你跟着诵读了几段，对为人处世有了新的领悟。' },
+        { topic: '算术之法', desc: '先生教了你几招心算口诀，你试了试，果然快了不少。' },
+        { topic: '书法基础', desc: '你握着笔，在宣纸上歪歪扭扭写了几行字，先生直摇头，但也耐心纠正了你的姿势。' },
+        { topic: '历史典故', desc: '先生讲了一段前朝旧事，你听得入神，感叹兴亡无常。' },
+      ]);
+
+      return {
+        success: true,
+        message: `${name}清了清嗓子："今日讲${subject.topic}。"束脩${fee}文，不算多。${subject.desc}"回去好好揣摩，"他叮嘱道。`,
+        copperChange: -fee,
+        impressionChange: randInt(2, 5),
+        moodChange: 5,
+      };
+    },
+  },
+
+  // 44. 狩猎指导
+  {
+    id: 'hunt_guide', name: '狩猎指导', icon: '🏹', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      return isHunter(ctx.target.identity?.profession || '');
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 20) return { met: false, reason: '铜钱不够（至少20文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '向猎户学习狩猎技巧（20~50文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '猎户';
+      const fee = randInt(20, Math.min(50, ctx.player.wallet.copper));
+      const lesson = pick([
+        `${name}教你辨认地上的足迹："看，这爪印深浅不一，是只瘸腿的野兔。"他又教你如何设置陷阱，如何顺风接近猎物。你认真记下每一个要点。`,
+        `"打猎最要紧的是耐心和安静。"${name}示范了正确的拉弓姿势，又教你怎么从风向判断猎物的位置。你试了几次，虽然射术还差得远，但已经入了门。`,
+        `${name}带你到了一处灌木丛前，蹲下身指了指地上的痕迹："看到没？新鲜粪便，毛发还在枝叶上。"他传授你追踪的要诀，你恍然大悟。`,
+      ]);
+
+      return {
+        success: true, message: lesson,
+        copperChange: -fee,
+        itemsGained: [{ itemType: 'hunting_tool', amount: 1 }],
+        impressionChange: randInt(3, 8),
+        moodChange: 5,
+      };
+    },
+  },
+
+  // 45. 贿赂
+  {
+    id: 'bribe', name: '贿赂', icon: '💰', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const targetProf = ctx.target.identity?.profession || '';
+      // 目标是guard/官方人员
+      return isGuard(targetProf) || ctx.target.identity?.factionRole === 'leader';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 50) return { met: false, reason: '铜钱不够（至少50文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '花钱买通关节，获取通行便利（50~100文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const bribe = randInt(50, Math.min(100, ctx.player.wallet.copper));
+      const targetPersonality = ctx.target.identity?.personality || [];
+
+      // 善良/正直性格的人可能拒绝
+      if (targetPersonality.includes('正直') || targetPersonality.includes('善良')) {
+        if (Math.random() < 0.5) {
+          return {
+            success: false,
+            message: `你悄悄把铜板往${name}手里塞，他猛地把你的手推了回来。"你在干什么？！"${name}压低声音，眼神锐利，"收回去，否则我不客气了。"你讪讪地缩回了手。`,
+            impressionChange: randInt(-15, -5),
+            moodChange: -5,
+          };
+        }
+      }
+
+      return {
+        success: true,
+        message: `你趁人不注意，将${bribe}文铜钱悄悄塞到${name}手中。他飞快地收进了袖子里，面上不动声色："放心，这一带的事我说了算。有什么需要帮忙的尽管来。"你心中暗暗松了口气。`,
+        copperChange: -bribe,
+        impressionChange: randInt(5, 12),
+        moodChange: -2,
+      };
+    },
+  },
+
+  // 46. 占卜
+  {
+    id: 'fortune_telling', name: '占卜', icon: '🔮', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 目标NPC的身份暗示宗教相关（简化：目标是religion类型组织成员或职业是宗教相关）
+      const profession = ctx.target.identity?.profession || '';
+      return ctx.target.identity?.factionId != null
+        || ['道士', '和尚', '尼姑', '算命先生', '庙祝'].includes(profession);
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 10) return { met: false, reason: '铜钱不够（至少10文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '请人占卜运势（10~30文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '道长';
+      const fee = randInt(10, Math.min(30, ctx.player.wallet.copper));
+      const fortune = pick([
+        { text: '大吉', detail: `${name}掐指一算，微微点头："近期运势大吉，诸事顺遂。但切记不可骄纵，福兮祸所伏。"你听了心中欢喜，但还是记下了他的告诫。`, moodChange: 8 },
+        { text: '中吉', detail: `${name}看了你的面相，沉吟道："近期有小波折，但无大碍。遇事三思而后行，自可逢凶化吉。"你若有所思地点了点头。`, moodChange: 3 },
+        { text: '小凶', detail: `${name}皱了皱眉："最近恐怕有些不顺。出门多留个心眼，钱财之事格外谨慎。"你心里咯噔一下，但安慰自己：宁可信其有。`, moodChange: -3 },
+        { text: '大凶', detail: `${name}脸色一变，低声说："大凶之兆...近期恐有血光之灾。切记：勿涉险地，勿近水火。"他的话让你后背发凉。`, moodChange: -8 },
+      ]);
+
+      return {
+        success: true,
+        message: fortune.detail + `\n\n你付了${fee}文的卦金。`,
+        copperChange: -fee,
+        impressionChange: randInt(2, 5),
+        moodChange: fortune.moodChange,
+      };
+    },
+  },
+
+  // ═══ 家庭相关规则（3条） ═══
+
+  // 47. 家宴
+  {
+    id: 'family_feast', name: '家宴', icon: '🍲', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const familyMembers = ctx.player.familyMembers || [];
+      if (familyMembers.length === 0) return false;
+      // 目标是家庭成员
+      return familyMembers.includes(ctx.target.id);
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 10) return { met: false, reason: '铜钱不够（至少10文办家宴）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '家人';
+      return `与${name}共进家宴，增进亲情`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '家人';
+      const cost = randInt(10, 30);
+      const relation = ctx.target.id === ctx.player.spouseId ? '配偶' : '家人';
+
+      const feastMsg = relation === '配偶'
+        ? `你和${name}围坐桌前，几盘家常菜，一壶温酒。烛光摇曳中，你们聊着日常琐事，格外温馨。${name}给你夹了块肉："多吃点，瘦了。"你心中一暖。`
+        : `${name}见到你张罗饭菜，忙过来帮忙。不多时几道菜摆上了桌，虽然不是什么山珍海味，但一家人坐在一起，格外踏实。${name}笑着说："这才是过日子的样子。"`;
+
+      return {
+        success: true,
+        message: feastMsg + `\n\n家宴花费${cost}文，但一家人在一起的时光是钱买不来的。`,
+        copperChange: -cost,
+        impressionChange: randInt(10, 20),
+        moodChange: 10,
+      };
+    },
+  },
+
+  // 48. 家族传承
+  {
+    id: 'family_legacy', name: '家族传承', icon: '📜', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      const familyMembers = ctx.player.familyMembers || [];
+      if (familyMembers.length === 0) return false;
+      // 目标是家庭成员中的子女（年龄较轻，简化判断年龄<30）
+      return familyMembers.includes(ctx.target.id)
+        && (ctx.target.identity?.age ?? 99) < 30;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '孩子';
+      return `传授经验和技艺给${name}`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '孩子';
+      const profession = ctx.player.profession || '';
+      const teaching = profession
+        ? `你把多年${profession}的经验倾囊相授，${name}听得认真，不时点头。`
+        : `你把自己的人生阅历讲给${name}听，他似懂非懂，但记在了心里。`;
+
+      return {
+        success: true,
+        message: `${teaching}\n\n"记住，"你语重心长地说，"做人做事，要踏踏实实。"${name}乖巧地点了点头："我记住了。"看着他的眼神，你觉得这份传承比什么都重要。`,
+        impressionChange: randInt(8, 15),
+        moodChange: 8,
+      };
+    },
+  },
+
+  // 49. 家庭援助
+  {
+    id: 'family_aid', name: '家庭援助', icon: '🆘', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 玩家健康<30或铜钱<10，且附近有家庭成员
+      const familyMembers = ctx.player.familyMembers || [];
+      if (familyMembers.length === 0) return false;
+      if (ctx.player.vital.health >= 30 && ctx.player.wallet.copper >= 10) return false;
+      return familyMembers.includes(ctx.target.id);
+    },
+    canExecute: (ctx) => ctx.player.ap < 1 ? { met: false, reason: '行动点不足' } : { met: true, reason: '' },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '家人';
+      return `向${name}求助`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '家人';
+      const isHealthCrisis = ctx.player.vital.health < 30;
+      const isBroke = ctx.player.wallet.copper < 10;
+
+      if (isHealthCrisis) {
+        return {
+          success: true,
+          message: `${name}看你脸色苍白，急了："你怎么了？快坐下歇歇！"他忙前忙后，给你端水、找药。"别硬撑着，"他忧心忡忡地说，"家里有我呢。"`,
+          healthChange: randInt(5, 15),
+          impressionChange: randInt(5, 12),
+          moodChange: 5,
+        };
+      }
+
+      // 没钱的情况
+      const aid = randInt(5, 20);
+      return {
+        success: true,
+        message: `${name}看出你的窘迫，从钱袋里掏出${aid}文塞到你手里："拿着，一家人不说两家话。"你想推辞，但他硬是塞给了你。"等你宽裕了再说。"`,
+        copperChange: aid,
+        impressionChange: randInt(5, 10),
+        moodChange: 5,
+      };
+    },
+  },
+
+  // ═══ 组织首领专属规则（5条） ═══
+
+  // 50. 下令
+  {
+    id: 'faction_order', name: '下达命令', icon: '📢', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      if (ctx.player.factionRole !== 'leader') return false;
+      return ctx.player.factionId != null
+        && ctx.target.identity?.factionId === ctx.player.factionId
+        && ctx.target.identity?.factionRole !== 'leader';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '下属';
+      return `向${name}下达命令`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '下属';
+      const impression = getImpression(ctx);
+      const orders = pick([
+        '去巡逻一圈，注意可疑人物',
+        '去打探一下竞争对手的动向',
+        '去城门口接应一批货物',
+        '去盯着某某，有任何异动立即汇报',
+      ]);
+
+      // 下属好感度影响执行效果
+      if (impression >= 40) {
+        return {
+          success: true,
+          message: `你唤来${name}，低声交代："${orders}。"${name}抱拳道："属下领命，定不辱使命。"他干脆利落地转身离去，你满意地点了点头。`,
+          impressionChange: randInt(2, 5),
+          moodChange: 3,
+        };
+      }
+
+      return {
+        success: true,
+        message: `你命令${name}："${orders}。"他犹豫了一下，嘟囔着应了一声。虽然答应了，但看起来不太情愿。你得想想怎么提升他的忠心了。`,
+        impressionChange: -2,
+        moodChange: -2,
+      };
+    },
+  },
+
+  // 51. 召集会议
+  {
+    id: 'faction_meeting', name: '召集会议', icon: '🏛', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.player.factionRole !== 'leader') return false;
+      if (ctx.player.factionId == null) return false;
+      // 附近有>=2个同组织成员
+      const sameFactionCount = ctx.world.nearbyEntities.filter(e => {
+        // 通过target检查不太方便，简化处理：附近NPC数量>=2即可
+        return e.type === 'npc';
+      }).length;
+      return sameFactionCount >= 2;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '召集组织成员开会，提升整体士气',
+    execute: (ctx) => {
+      return {
+        success: true,
+        message: pick([
+          '你拍了拍手，将周围的弟兄们召集起来。"今日召集大家，是有要事商议。"你简明扼要地讲了近期的安排，众人纷纷点头。会议结束后，大家都精神了不少。',
+          '你站在众人面前，扫视一圈："兄弟们，咱们最近干得不错。但也不能掉以轻心，有几件事要注意..."你布置了接下来的任务，大家领命散去，士气高涨。',
+        ]),
+        impressionChange: randInt(3, 6),
+        moodChange: 10,
+      };
+    },
+  },
+
+  // 52. 赏罚
+  {
+    id: 'faction_reward', name: '赏罚', icon: '🎁', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      if (ctx.player.factionRole !== 'leader') return false;
+      return ctx.player.factionId != null
+        && ctx.target.identity?.factionId === ctx.player.factionId
+        && ctx.target.identity?.factionRole !== 'leader';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '赏赐或惩戒下属（可花费铜钱提升好感）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '下属';
+      const isReward = Math.random() < 0.7; // 70%概率赏，30%概率罚
+
+      if (isReward && ctx.player.wallet.copper >= 20) {
+        const reward = randInt(20, Math.min(50, ctx.player.wallet.copper));
+        return {
+          success: true,
+          message: `你从钱袋中取出${reward}文赏给${name}："你最近表现不错，这是你应得的。"${name}喜出望外，连忙跪下谢恩："多谢大人栽培！属下定当更加尽力！"周围的弟兄看了，也暗暗铆足了劲。`,
+          copperChange: -reward,
+          impressionChange: randInt(10, 20),
+          moodChange: 5,
+        };
+      }
+
+      if (isReward) {
+        return {
+          success: true,
+          message: `你拍了拍${name}的肩膀："干得好，继续保持。"虽然没有实质性的赏赐，但${name}依然受到鼓舞。`,
+          impressionChange: randInt(3, 8),
+          moodChange: 3,
+        };
+      }
+
+      // 惩罚
+      return {
+        success: true,
+        message: `你面色一沉，训斥${name}："最近办事不力，成何体统！"他低着头不敢吭声。虽然降了好感，但组织纪律需要维护。周围的弟兄也都噤了声。`,
+        impressionChange: randInt(-15, -5),
+        moodChange: -3,
+      };
+    },
+  },
+
+  // 53. 扩张招募
+  {
+    id: 'faction_expand', name: '扩张招募', icon: '📜', apCost: 3,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      if (ctx.player.factionRole !== 'leader') return false;
+      if (ctx.player.factionId == null) return false;
+      // 目标不是同组织成员
+      return ctx.target.identity?.factionId !== ctx.player.factionId
+        || ctx.target.identity?.factionId == null;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 3) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `邀请${name}加入你的组织`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const impression = getImpression(ctx);
+
+      // 好感度>40更容易加入
+      const joinChance = impression > 40 ? 0.6 : 0.25;
+
+      if (Math.random() < joinChance) {
+        return {
+          success: true,
+          message: `你向${name}伸出手："我观察你很久了。你的能力我们都看在眼里，有没有兴趣加入我们？"${name}想了想，握住了你的手："好，承蒙看重。"一个新成员加入了组织的行列。`,
+          impressionChange: randInt(8, 15),
+          moodChange: 5,
+        };
+      }
+
+      return {
+        success: true,
+        message: `${name}摇了摇头："多谢你的好意，但我现在不太想加入什么组织。"他语气平和但坚定。你不便强求，但留下了话："随时欢迎你改变主意。"`,
+        impressionChange: randInt(-2, 2),
+        moodChange: -2,
+      };
+    },
+  },
+
+  // 54. 收税
+  {
+    id: 'collect_tax', name: '收税', icon: '💰', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      // 玩家是government类型组织首领
+      return ctx.player.factionRole === 'leader'
+        && ctx.player.factionType === 'government';
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `向${name}收取税收`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const targetCopper = ctx.target.wallet?.copper ?? 0;
+      const tax = randInt(5, Math.min(15, targetCopper));
+
+      if (targetCopper >= tax) {
+        return {
+          success: true,
+          message: `你亮出官府令牌："按律纳税，${tax}文。"${name}虽然心疼铜板，但也不敢违抗，乖乖掏了钱。"知道了，大人。"他勉强挤出一丝笑容。`,
+          copperChange: tax,
+          impressionChange: randInt(-10, -3),
+          moodChange: -3,
+        };
+      }
+
+      return {
+        success: true,
+        message: `你亮出官府令牌要收税，${name}摊开双手："大人明鉴，小人实在拿不出来..."看着他的窘态，你叹了口气，这次就算了。`,
+        impressionChange: randInt(-5, 0),
+        moodChange: -2,
+      };
+    },
+  },
+
+  // ═══ 资产相关规则（3条） ═══
+
+  // 55. 慈善捐款
+  {
+    id: 'charity', name: '慈善捐款', icon: '🙏', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      if (ctx.player.wallet.copper < 50) return false;
+      return (ctx.target.wallet?.copper ?? 100) < 20;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 50) return { met: false, reason: '铜钱不够（至少50文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `捐助${name}一些铜钱（10~30文）`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const donation = randInt(10, 30);
+
+      return {
+        success: true,
+        message: `你看到${name}衣衫褴褛，从钱袋里取出${donation}文递过去。他愣了一下，眼眶泛红："多谢...多谢恩人！"他想跪下磕头，你连忙扶住了他。"拿着吧，好好过日子。"`,
+        copperChange: -donation,
+        impressionChange: 15,
+        moodChange: 10,
+      };
+    },
+  },
+
+  // 56. 赌博
+  {
+    id: 'gambling', name: '赌博', icon: '🎲', apCost: 2,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      return ctx.player.wallet.copper >= 30;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 2) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 30) return { met: false, reason: '铜钱不够（至少30文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: () => '和对方赌一把（10~50文）',
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const mood = ctx.player.vital.mood;
+      const stake = randInt(10, Math.min(50, ctx.player.wallet.copper));
+
+      // 心情影响胜率：心情好时运气更好
+      const winChance = 0.45 + (mood / 500); // 基础45%，心情100时+20%
+      const won = Math.random() < winChance;
+
+      if (won) {
+        return {
+          success: true,
+          message: `"赌不赌？"${name}来了兴致。你们说好了赌${stake}文。骰子掷下——你赢了！${name}苦笑着掏出铜板："手气真不错。"你得意地收了钱，心里美滋滋的。`,
+          copperChange: stake,
+          impressionChange: randInt(-3, 3),
+          moodChange: 5,
+        };
+      }
+
+      return {
+        success: true,
+        message: `"来来来，赌一把！"${name}搓着手说。你押了${stake}文。结果运气不佳——输了！${name}笑着收走了铜板："承让承让。"你懊恼地叹了口气，手气这东西果然说不准。`,
+        copperChange: -stake,
+        impressionChange: randInt(-2, 2),
+        moodChange: -5,
+      };
+    },
+  },
+
+  // 57. 借贷
+  {
+    id: 'loan', name: '借贷', icon: '📝', apCost: 1,
+    shouldAppear: (ctx) => {
+      if (ctx.target.type !== 'npc') return false;
+      if (ctx.player.wallet.copper < 50) return false;
+      return (ctx.target.wallet?.copper ?? 100) < 30;
+    },
+    canExecute: (ctx) => {
+      if (ctx.player.ap < 1) return { met: false, reason: '行动点不足' };
+      if (ctx.player.wallet.copper < 50) return { met: false, reason: '铜钱不够（至少50文）' };
+      return { met: true, reason: '' };
+    },
+    describeEffects: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      return `借铜钱给${name}（20~50文）`;
+    },
+    execute: (ctx) => {
+      const name = ctx.target.identity?.name || '对方';
+      const amount = randInt(20, 50);
+
+      return {
+        success: true,
+        message: `${name}面露难色，你看出他的窘境，主动开口："缺钱用？我借你${amount}文，不用急着还。"${name}感激不已："多谢！等我手头宽裕了，一定连本带利还你。"他郑重地记下这笔账。`,
+        copperChange: -amount,
+        impressionChange: 10,
         moodChange: 3,
       };
     },

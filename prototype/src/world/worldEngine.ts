@@ -507,6 +507,17 @@ export class WorldEngine {
     return null;
   }
 
+  /** 获取玩家的所有家庭成员ID列表 */
+  private getFamilyMemberIds(identity: { spouseId?: number; parentIds?: number[]; childIds?: number[]; siblingIds?: number[] } | undefined): number[] {
+    if (!identity) return [];
+    const ids: number[] = [];
+    if (identity.spouseId != null) ids.push(identity.spouseId);
+    if (identity.parentIds) ids.push(...identity.parentIds);
+    if (identity.childIds) ids.push(...identity.childIds);
+    if (identity.siblingIds) ids.push(...identity.siblingIds);
+    return ids;
+  }
+
   /** 按名称查找组织 */
   getFactionByName(name: string): FactionComponent | undefined {
     for (const f of this.factions.values()) {
@@ -1378,6 +1389,11 @@ export class WorldEngine {
         },
         factionId: this.getNpcFaction(playerId)?.id,
         factionRole: this.getNpcFaction(playerId)?.role as 'leader' | 'member' | undefined,
+        factionType: (() => { const pf = this.getNpcFaction(playerId); return pf ? this.factions.get(pf.id)?.type : undefined; })(),
+        profession: playerIdComp?.profession,
+        personality: playerIdComp?.personality,
+        familyMembers: this.getFamilyMemberIds(playerIdComp),
+        spouseId: playerIdComp?.spouseId,
       },
       target: {
         id: targetId,
@@ -1385,6 +1401,8 @@ export class WorldEngine {
         vital: targetVital ? { hunger: targetVital.hunger, fatigue: targetVital.fatigue, health: targetVital.health, mood: targetVital.mood } : null,
         wallet: targetWallet ? { copper: targetWallet.copper } : null,
         identity: targetIdentity ? { name: targetIdentity.name, profession: targetIdentity.profession, age: targetIdentity.age, personality: targetIdentity.personality, factionId: this.getNpcFaction(targetId)?.id, factionRole: this.getNpcFaction(targetId)?.role as 'leader' | 'member' | undefined } : null,
+        homeId: targetIdentity?.homeId,
+        workplaceId: targetIdentity?.workplaceId,
         position: targetPos ? { gridId: targetPos.gridId, areaId: targetPos.areaId } : null,
         ai: targetAI ? { goals: targetAI.goals, currentPlan: targetAI.currentPlan, planCooldown: targetAI.planCooldown, aiLevel: targetAI.aiLevel } : null,
         memory: targetMemory ? { recentEvents: targetMemory.recentEvents, impressions: targetMemory.impressions } : null,
