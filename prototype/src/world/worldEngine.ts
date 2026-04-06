@@ -16,8 +16,11 @@ import { PerceptionSystem } from './perceptionSystem';
 import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
-import { VitalComponent, WalletComponent, PositionComponent, NeedsComponent, ActionStateComponent, ActionRecord } from '../ecs/types';
+import { VitalComponent, WalletComponent, PositionComponent, NeedsComponent, ActionStateComponent, ActionRecord, EmotionComponent, WhimComponent, AspirationComponent, DailyPlanComponent, EmotionType, AspirationType } from '../ecs/types';
 import { decide, DecisionContext, DecisionResult } from '../ai/decisionEngine';
+import { updateEmotionComponent, EMOTION_CATEGORY_BIAS } from '../ai/emotionSystem';
+import { generateWhims, shouldRefreshWhims, checkWhimCompletion } from '../ai/whimSystem';
+import { ASPIRATION_CATEGORY_BIAS, getDefaultAspiration } from '../ai/aspirationSystem';
 import { InteractionContext } from '../server/protocol';
 import { getEmergentActions, executeEmergentAction } from './emergenceRules';
 import { MAP_CONNECTIONS, GRID_NAMES, GRID_ICONS } from './mapData';
@@ -1873,12 +1876,64 @@ export class WorldEngine {
     const pos = this.em.getComponent(entityId, 'Position');
     const copper = wallet?.copper ?? 0;
 
-    // 需求衰减：每回合自然下降
-    needs.hunger = Math.max(0, needs.hunger - (3 + Math.floor(Math.random() * 3)));
-    needs.fatigue = Math.max(0, needs.fatigue - (1 + Math.floor(Math.random() * 3)));
-    needs.mood = Math.max(0, needs.mood - (1 + Math.floor(Math.random() * 2)));
-    needs.social = Math.max(0, needs.social - (1 + Math.floor(Math.random() * 2)));
-    needs.safety = Math.max(0, needs.safety - (0 + Math.floor(Math.random() * 1)));
+    // 需求衰减：使用个性化衰减（性格影响衰减率）
+    this.vital.decayNeedsWithPersonality(needs, identity.personality);
+
+    // ──── 更新情绪系统 ────
+    let emotion = this.em.getComponent(entityId, 'Emotion');
+    if (!emotion) {
+      emotion = { current: 'happy', intensity: 20, ticksInEmotion: 0 };
+      this.em.addComponent(entityId, 'Emotion', emotion);
+    }
+    const actionState = this.em.getComponent(entityId, 'ActionState');
+    const recentWorkActions = actionState
+      ? actionState.actionHistory.slice(-3).filter((r: ActionRecord) => r.actionId === 'work' || r.goalId?.startsWith('work')).length
+      : 0;
+    updateEmotionComponent(emotion, {
+      needs,
+      personality: identity.personality,
+      recentWorkActions,
+    });
+
+    // ──── 检查/刷新心愿系统 ────
+    let whimComp = this.em.getComponent(entityId, 'Whim');
+    if (!whimComp) {
+      whimComp = { whims: [], lastRefreshTick: 0 };
+      this.em.addComponent(entityId, 'Whim', whimComp);
+    }
+    if (shouldRefreshWhims(whimComp.whims, this.time.tick, whimComp.lastRefreshTick)) {
+      whimComp.whims = generateWhims({
+        emotion: emotion.current,
+        personality: identity.personality,
+        shichen: this.time.shichenName,
+        needs: { hunger: needs.hunger, fatigue: needs.fatigue, social: needs.social, mood: needs.mood, safety: needs.safety, health: needs.health },
+        profession: identity.profession,
+        currentTick: this.time.tick,
+        existingWhims: whimComp.whims,
+      });
+      whimComp.lastRefreshTick = this.time.tick;
+    }
+
+    // ──── 每日计划系统 ────
+    let dailyPlan = this.em.getComponent(entityId, 'DailyPlan');
+    if (!dailyPlan || dailyPlan.dayGenerated !== this.time.day) {
+      const newPlan = this.generateDailyPlan(entityId, identity.personality, identity.profession);
+      if (!dailyPlan) {
+        this.em.addComponent(entityId, 'DailyPlan', newPlan);
+      } else {
+        dailyPlan.biases = newPlan.biases;
+        dailyPlan.dayGenerated = newPlan.dayGenerated;
+      }
+      dailyPlan = this.em.getComponent(entityId, 'DailyPlan');
+    }
+
+    // ──── 抱负系统 ────
+    let aspiration = this.em.getComponent(entityId, 'Aspiration');
+    if (!aspiration) {
+      const aspType = getDefaultAspiration(identity.profession);
+      aspiration = { type: aspType, progress: 0 };
+      this.em.addComponent(entityId, 'Aspiration', aspiration);
+    }
 
     // 检查家庭成员是否在附近
     const familyNearby = this.isFamilyNearby(entityId, identity);
@@ -1887,8 +1942,11 @@ export class WorldEngine {
     const gridId = pos?.gridId || 'center_street';
     const nearNpcCount = this.worldMap.getEntitiesInGrid(gridId).length;
 
-    // 构建决策上下文
+    // 构建决策上下文（含情绪/心愿/抱负/每日计划）
     const inv = this.em.getComponent(entityId, 'Inventory');
+    const recentActions = actionState
+      ? actionState.actionHistory.slice(-3).map((r: ActionRecord) => r.actionId)
+      : [];
     const ctx: DecisionContext = {
       needs,
       npcName: name,
@@ -1905,6 +1963,12 @@ export class WorldEngine {
       familyNearby,
       inventory: inv?.items || [],
       nearNpcCount,
+      recentActions,
+      // v4 新增
+      emotion: emotion.current,
+      whims: whimComp.whims,
+      aspiration: aspiration.type,
+      dailyPlanBiases: dailyPlan?.biases || {},
     };
 
     // 调用决策引擎
@@ -1936,12 +2000,19 @@ export class WorldEngine {
       wallet.copper = Math.max(0, wallet.copper + decision.effects.copper);
     }
 
+    // ──── 心愿完成处理 ────
+    if (decision.completedWhim && whimComp) {
+      // 移除已完成的心愿
+      whimComp.whims = whimComp.whims.filter(w => w.name !== decision.completedWhim!.name);
+      this.logEvent('npc', 'whim_complete', `${name}完成了心愿「${decision.completedWhim.name}」！心情变好了。`);
+    }
+
     // 记录行动到 ActionStateComponent
-    const actionState = this.em.getComponent(entityId, 'ActionState');
-    if (actionState) {
-      actionState.currentGoal = decision.goalId;
-      actionState.currentAction = decision.actionId;
-      actionState.lastActionTurn = this.time.tick;
+    const actionStateRec = this.em.getComponent(entityId, 'ActionState');
+    if (actionStateRec) {
+      actionStateRec.currentGoal = decision.goalId;
+      actionStateRec.currentAction = decision.actionId;
+      actionStateRec.lastActionTurn = this.time.tick;
 
       const record: ActionRecord = {
         turn: this.time.tick,
@@ -1951,9 +2022,9 @@ export class WorldEngine {
         actionId: decision.actionId,
         narrative: decision.narrative,
       };
-      actionState.actionHistory.push(record);
-      if (actionState.actionHistory.length > 50) {
-        actionState.actionHistory.shift();
+      actionStateRec.actionHistory.push(record);
+      if (actionStateRec.actionHistory.length > 50) {
+        actionStateRec.actionHistory.shift();
       }
     }
 
@@ -2020,6 +2091,35 @@ export class WorldEngine {
       if (fpos && fpos.gridId === gridId) return true;
     }
     return false;
+  }
+
+  /** 生成每日计划 — 基于性格+抱负+当前需求的哈希 */
+  private generateDailyPlan(
+    entityId: number,
+    personality: string[],
+    profession: string,
+  ): { biases: Record<string, number>; dayGenerated: number } {
+    // 简单哈希：基于 entityId + day 产生不同倾向
+    const seed = (entityId * 17 + this.time.day * 31) % 100;
+    const categories = ['work', 'social', 'leisure', 'survival', 'family'];
+    const biases: Record<string, number> = {};
+
+    // 选3-5个倾向
+    const numBiases = 3 + (seed % 3);
+    const shuffled = categories.sort(() => (seed * 7 + Math.random() * 100) % 2 === 0 ? 1 : -1);
+
+    for (let i = 0; i < Math.min(numBiases, shuffled.length); i++) {
+      const cat = shuffled[i];
+      // 性格影响倾向权重
+      let bias = 0.2;
+      if (cat === 'work' && (personality.includes('勤劳') || personality.includes('精明'))) bias = 0.35;
+      if (cat === 'leisure' && personality.includes('懒散')) bias = 0.35;
+      if (cat === 'social' && (personality.includes('健谈') || personality.includes('大方'))) bias = 0.35;
+      if (cat === 'family' && personality.includes('温和')) bias = 0.35;
+      biases[cat] = bias;
+    }
+
+    return { biases, dayGenerated: this.time.day };
   }
 
   /** 旧的 L0 NPC 行动模拟（GOAP fallback） */
@@ -2351,11 +2451,11 @@ export class WorldEngine {
     this.moveNPCToGrid(entityId, targetGrid);
 
     // 记录行动到 ActionStateComponent（只保留最近5条）
-    const actionState = this.em.getComponent(entityId, 'ActionState');
-    if (actionState) {
-      actionState.currentGoal = decision.goalId;
-      actionState.currentAction = decision.actionId;
-      actionState.lastActionTurn = this.time.tick;
+    const actionStateL1 = this.em.getComponent(entityId, 'ActionState');
+    if (actionStateL1) {
+      actionStateL1.currentGoal = decision.goalId;
+      actionStateL1.currentAction = decision.actionId;
+      actionStateL1.lastActionTurn = this.time.tick;
 
       const record = {
         turn: this.time.tick,
@@ -2365,9 +2465,9 @@ export class WorldEngine {
         actionId: decision.actionId,
         narrative: decision.narrative,
       } as ActionRecord;
-      actionState.actionHistory.push(record);
-      if (actionState.actionHistory.length > 5) {
-        actionState.actionHistory.shift();
+      actionStateL1.actionHistory.push(record);
+      if (actionStateL1.actionHistory.length > 5) {
+        actionStateL1.actionHistory.shift();
       }
     }
 
