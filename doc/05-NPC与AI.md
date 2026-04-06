@@ -392,33 +392,85 @@ NPC的独立决策会导致意想不到的事件涌现：
 interface Scene {
   id: string;                    // 唯一标识
   name: string;                  // 演出名称
-  description: string;           // 演出描述
   goalCategory: string;          // 匹配的目标类别(survival/social/work/...)
-  requiredTraits: string[];      // 要求参与者至少有一个的性格特征(满足其一即可,空=不限)
-  forbiddenTraits: string[];     // 有这些特征的NPC不能参与
-  requiredEmotion?: string;      // 可选：要求的情绪状态
-  requiredRelationType?: string; // 可选：要求与目标NPC的关系类型(friend/enemy/...)
-  location?: string[];           // 可选：要求的地点
-  profession?: string[];         // 可选：要求的职业
-  timeOfDay?: 'day' | 'night';   // 可选：时段要求
-  minCopper?: number;             // 可选：最低铜钱要求
-  maxCopper?: number;             // 可选：最高铜钱(穷人专属)
-  weather?: string[];             // 可选：天气要求
-  targetRequired: boolean;        // 是否需要目标NPC参与
   
-  // 叙事模板：支持参数化插值
-  narrative: string;              // 可含 {npcName}, {targetName}, {location}, {weather} 等
+  // ═══ 发起者(Actor)条件 — 谁能触发这个演出 ═══
+  actorTraits: string[];         // 发起者需要的性格(满足其一,空=不限)
+  actorForbiddenTraits: string[];// 发起者不能有的性格
+  actorProfession?: string[];    // 发起者职业要求
+  actorMinCopper?: number;       // 发起者最低铜钱
+  actorMaxCopper?: number;       // 发起者最高铜钱(穷人专属)
+  actorEmotion?: string;         // 发起者情绪要求
+  actorMinHealth?: number;       // 发起者最低健康
   
-  // 演出效果
-  effects: Record<string, number>;   // 对执行者的影响
-  targetEffects?: Record<string, number>; // 对目标NPC的影响(可选)
-  relationChange?: number;         // 关系变化
+  // ═══ 目标(Target)条件 — 需要谁在场才能触发 ═══
+  targetRequired: boolean;       // 是否需要目标NPC(单人演出=false)
+  targetTraits?: string[];       // 目标需要的性格(满足其一)
+  targetProfession?: string[];   // 目标职业要求
+  targetMinCopper?: number;      // 目标最低铜钱(如偷窃需要有钱人)
+  targetMaxCopper?: number;      // 目标最高铜钱
+  targetRelationType?: string;   // 与目标的关系要求(friend/enemy/stranger/any)
+  targetMinHealth?: number;      // 目标最低健康
   
-  // 权重与冷却
-  weight: number;                  // 基础权重(1-10)
-  cooldownTicks: number;           // 冷却tick数(避免重复)
+  // ═══ 环境条件 ═══
+  location?: string[];           // 地点要求
+  timeOfDay?: 'day' | 'night' | 'dawn' | 'dusk';  // 时段要求
+  weather?: string[];            // 天气要求
+  season?: string[];             // 季节要求
+  
+  // ═══ 结果判定 — 参考《漫野奇谭》成功/失败分支 ═══
+  outcomeType: 'certain' | 'contested' | 'chance';
+  // certain:  确定成功(如买炊饼，只要有钱就成功)
+  // contested: 对抗判定(发起者 vs 目标，如偷窃 vs 警觉)
+  // chance:   概率判定(固定概率，如采药是否找到)
+  
+  contestedStat?: { actor: string; target: string }; // 对抗属性(如 {actor:'cunning', target:'alertness})
+  successChance?: number;        // chance类型的成功概率(0-1)
+  
+  // ═══ 成功分支 ═══
+  successNarrative: string;      // 成功叙事模板
+  successEffects: Record<string, number>;          // 成功对发起者的效果
+  successTargetEffects?: Record<string, number>;   // 成功对目标的效果
+  successRelationChange?: number;                  // 成功的关系变化
+  
+  // ═══ 失败分支 ═══
+  failureNarrative?: string;     // 失败叙事模板(certain类型不需要)
+  failureEffects?: Record<string, number>;         // 失败对发起者的效果
+  failureTargetEffects?: Record<string, number>;   // 失败对目标的效果
+  failureRelationChange?: number;                  // 失败的关系变化
+  
+  // ═══ 权重与冷却 ═══
+  weight: number;                // 基础权重(1-10)
+  cooldownTicks: number;         // 冷却tick数
 }
 ```
+
+**结果判定规则**：
+
+```
+certain（确定型）：
+  例：买炊饼、散步、读书
+  只要前置条件满足，必定成功
+  只需要 successNarrative + successEffects
+
+contested（对抗型）：
+  例：偷窃(狡猾 vs 警觉)、打架(勇敢 vs 强壮)、说服(口才 vs 固执)
+  发起者和目标各有一个对抗属性
+  成功率 = actorStat / (actorStat + targetStat) × 50%~80%
+  需要成功+失败两套叙事和效果
+
+chance（概率型）：
+  例：采药是否找到好药(30%)、钓鱼是否钓到大鱼(20%)
+  固定概率判定
+  需要成功+失败两套叙事和效果
+```
+
+**关键设计原则（参考《漫野奇谭》）**：
+
+1. **严格前置条件**：每个演出的 `targetRequired` 和目标条件决定了是否可以触发。如果没有符合条件的目标NPC在场，这个演出会被跳过，不会出现在候选列表中。
+   - 小偷想偷窃 → 检查附近有没有 `targetMinCopper>20` 的人 → 没有 → 偷窃演出不可用 → 转而执行其他生存类演出
+2. **角色对称性**：互动演出对双方都有影响。偷窃成功→小偷得钱/受害者失钱；偷窃失败→小偷被抓/受害者安全。
+3. **匹配宽容度**：条件不要太严苛（否则很多演出永远不会触发），也不要太宽松（否则角色行为前后不一致）。参考漫野奇谭的平衡：性格特征满足其一即可，但关键条件（如关系类型、职业）必须精确匹配。
 
 ### 演出匹配流程
 
@@ -428,19 +480,31 @@ interface Scene {
 
 2. 从演出库中筛选所有 goalCategory 匹配的演出
 
-3. 逐一检查条件：
-   ├─ requiredTraits — NPC性格是否匹配(满足其一)
-   ├─ forbiddenTraits — NPC性格是否冲突(有则排除)
-   ├─ requiredEmotion — 当前情绪是否匹配
-   ├─ requiredRelationType — 与目标NPC的关系是否匹配
+3. 逐一严格检查条件（任一不满足则跳过该演出）：
+   ├─ actorTraits — 发起者性格是否匹配(满足其一,空=不限)
+   ├─ actorForbiddenTraits — 发起者性格是否冲突(有则排除)
+   ├─ actorProfession — 发起者职业是否匹配
+   ├─ actorMinCopper / actorMaxCopper — 发起者铜钱范围
+   ├─ actorEmotion — 发起者情绪是否匹配
+   ├─ actorMinHealth — 发起者健康是否足够
+   │
+   ├─ 【关键】targetRequired=true 时，必须检查：
+   │  ├─ 附近是否有满足 targetTraits 的NPC
+   │  ├─ 目标NPC是否满足 targetProfession
+   │  ├─ 目标NPC是否满足 targetMinCopper / targetMaxCopper
+   │  ├─ 目标NPC是否满足 targetRelationType (friend/enemy/stranger)
+   │  ├─ 目标NPC是否满足 targetMinHealth
+   │  └─ 如果没有符合条件的目标NPC → 此演出不可用，跳过
+   │
    ├─ location — 当前地点是否满足
-   ├─ profession — 职业是否满足
    ├─ timeOfDay — 时段是否满足
-   ├─ minCopper / maxCopper — 铜钱范围
    ├─ weather — 天气是否满足
+   ├─ season — 季节是否满足
    └─ cooldown — 是否在冷却中(跳过)
 
-4. 对所有满足条件的演出计算综合权重：
+4. 如果没有任何演出满足条件 → NPC回退到基础行为(回家/原地等待)
+
+5. 对所有满足条件的演出计算综合权重：
    score = baseWeight
          × (1 + traitMatchBonus)      // 性格匹配+50%
          × (1 + emotionMatchBonus)    // 情绪匹配+30%
@@ -448,10 +512,21 @@ interface Scene {
          × (1 + aspirationBonus)      // 抱负匹配+20%
          × (0.9 + random * 0.2)       // ±10%随机
 
-5. 按权重随机选择一个演出(softmax温度选择)
+6. 按权重随机选择一个演出(softmax温度选择)
 
-6. 参数化填充叙事模板并执行效果
+7. 结果判定：
+   ├─ certain → 直接执行成功分支
+   ├─ contested → 对抗判定(actorStat vs targetStat)
+   │  └─ 成功率 = actorStat / (actorStat + targetStat + 1) × 调整系数
+   └─ chance → 概率判定(与successChance比较)
+
+8. 参数化填充叙事模板并执行对应分支的效果
 ```
+
+**目标选择优先级**（当多个NPC满足目标条件时）：
+1. 关系最近的NPC优先（朋友>熟人>陌生人）
+2. 距离最近的NPC优先
+3. 随机选择
 
 ### 演出库(至少40个演出)
 
