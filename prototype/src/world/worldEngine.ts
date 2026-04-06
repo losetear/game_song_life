@@ -17,7 +17,7 @@ import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
 import { VitalComponent, WalletComponent, PositionComponent, NeedsComponent, ActionStateComponent, ActionRecord, EmotionComponent, WhimComponent, AspirationComponent, DailyPlanComponent, EmotionType, AspirationType } from '../ecs/types';
-import { decide, DecisionContext, DecisionResult } from '../ai/decisionEngine';
+import { decide, DecisionContext, DecisionResult, decideWithScene, NearbyNpcInfo } from '../ai/decisionEngine';
 import { updateEmotionComponent, EMOTION_CATEGORY_BIAS } from '../ai/emotionSystem';
 import { generateWhims, shouldRefreshWhims, checkWhimCompletion } from '../ai/whimSystem';
 import { ASPIRATION_CATEGORY_BIAS, getDefaultAspiration } from '../ai/aspirationSystem';
@@ -2024,6 +2024,107 @@ export class WorldEngine {
       nearbyRelations: this.relationshipSys.getNearbyRelations(entityId, nearNpcIds),
     };
 
+    // ── 优先使用演出库决策（漫野奇谭式）────
+    const nearbyNpcInfos: NearbyNpcInfo[] = nearNpcIds.map((nid: number) => {
+      const nWallet = this.em.getComponent(nid, 'Wallet') as any;
+      const nIdentity = this.em.getComponent(nid, 'Identity') as any;
+      const nVital = this.em.getComponent(nid, 'Vital') as any;
+      const relScore = this.relationshipSys.getScore(entityId, nid);
+      const relType = this.relationshipSys.getType(entityId, nid);
+      return {
+        id: nid,
+        name: nIdentity?.name || `NPC${nid}`,
+        profession: nIdentity?.profession || 'laborer',
+        personality: nIdentity?.personality || [],
+        copper: nWallet?.copper || 0,
+        health: nVital?.health || 100,
+        relationScore: relScore,
+        relationType: relType,
+      };
+    });
+
+    const sceneResult = decideWithScene(ctx, nearbyNpcInfos);
+
+    // 记录决策前的状态
+    const stateBefore = { hunger: vital.hunger, fatigue: vital.fatigue, copper, mood: vital.mood ?? 50 };
+
+    if (sceneResult) {
+      // 演出库命中 — 使用演出结果
+      for (const [key, value] of Object.entries(sceneResult.effects)) {
+        if (key in needs) {
+          (needs as any)[key] = Math.max(0, Math.min(100, (needs as any)[key] + value));
+        }
+      }
+      vital.hunger = needs.hunger;
+      vital.fatigue = needs.fatigue;
+      vital.health = needs.health;
+      vital.mood = needs.mood;
+      // safety/social 在 NeedsComponent 中但不在 VitalComponent
+      if (sceneResult.effects.copper && wallet) {
+        wallet.copper = Math.max(0, wallet.copper + sceneResult.effects.copper);
+      }
+
+      // 应用目标NPC效果
+      if (sceneResult.targetEffects && sceneResult.targetName) {
+        const targetNpc = nearbyNpcInfos.find((n: NearbyNpcInfo) => n.name === sceneResult.targetName);
+        if (targetNpc) {
+          const tVital = this.em.getComponent(targetNpc.id, 'Vital') as any;
+          const tWallet = this.em.getComponent(targetNpc.id, 'Wallet') as any;
+          if (tVital) {
+            for (const [key, value] of Object.entries(sceneResult.targetEffects)) {
+              if (key in tVital) tVital[key] = Math.max(0, Math.min(100, tVital[key] + value));
+            }
+          }
+          if (tWallet && sceneResult.targetEffects.copper) {
+            tWallet.copper = Math.max(0, tWallet.copper + sceneResult.targetEffects.copper);
+          }
+        }
+      }
+
+      // 关系变化
+      if (sceneResult.relationChange && sceneResult.targetName) {
+        const targetNpc = nearbyNpcInfos.find((n: NearbyNpcInfo) => n.name === sceneResult.targetName);
+        if (targetNpc) {
+          this.relationshipSys.modifyRelation(entityId, targetNpc.id, sceneResult.relationChange, this.time.tick);
+        }
+      }
+
+      // 记录到世界事件日志
+      this.eventLog.push({
+        tick: this.time.tick,
+        time: new Date().toISOString(),
+        type: 'npc',
+        category: `scene:${sceneResult.goalCategory}`,
+        message: sceneResult.narrative,
+        cause: `scene:${sceneResult.sceneId}:${sceneResult.success ? 'success' : 'failure'}`,
+        source: identity.name,
+      });
+      this.lastTickEvents++;
+
+      // 更新行为历史
+      const history = this.npcHistory.get(entityId) || [];
+      history.push({
+        tick: this.time.tick,
+        shichen: this.time.shichenName,
+        action: sceneResult.sceneId,
+        description: sceneResult.narrative,
+        result: sceneResult.success ? '成功' : '失败',
+        cause: sceneResult.goalCategory,
+        stateBefore,
+        stateAfter: { hunger: vital.hunger, fatigue: vital.fatigue, copper: wallet?.copper ?? 0, mood: vital.mood },
+      });
+      if (history.length > 20) history.shift();
+      this.npcHistory.set(entityId, history);
+
+      return {
+        npcName: name,
+        action: sceneResult.sceneName,
+        result: sceneResult.narrative,
+        majorEvents: [],
+      };
+    }
+
+    // ── 演出库未命中，使用旧决策引擎 ──
     // 调用决策引擎
     const decision = decide(ctx);
 
@@ -2031,9 +2132,6 @@ export class WorldEngine {
       // 决策引擎返回空 → 用兜底
       return this.simulateL0Legacy(entityId, vital, wallet, identity as any);
     }
-
-    // 记录决策前的状态
-    const stateBefore = { hunger: vital.hunger, fatigue: vital.fatigue, copper, mood: vital.mood ?? 50 };
 
     // 应用效果到 NeedsComponent
     for (const [key, value] of Object.entries(decision.effects)) {

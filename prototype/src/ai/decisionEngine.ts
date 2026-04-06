@@ -467,6 +467,124 @@ function inferGoal(ctx: DecisionContext, action: NPCAction): { id: string; name:
   return { id: action.category, name: action.name };
 }
 
+// ──── 演出库决策（优先于旧 decide）────
+import {
+  ALL_SCENES, findMatchingScene, resolveScene, formatNarrative,
+  SceneDecisionResult, NearbyNpcInfo, GoalCategory
+} from './sceneLibrary';
+
+export type { SceneDecisionResult, NearbyNpcInfo };
+
+const NEED_TO_GOAL: Record<string, GoalCategory> = {
+  hunger: 'survival',
+  fatigue: 'move',
+  health: 'survival',
+  mood: 'leisure',
+  safety: 'move',
+  social: 'social',
+};
+
+export function decideWithScene(
+  ctx: DecisionContext,
+  nearbyNpcs: NearbyNpcInfo[],
+): SceneDecisionResult | null {
+  // 1. 找最紧迫的需求 → 映射到 goalCategory
+  let worstNeed = '';
+  let worstVal = 100;
+  for (const key of NEED_KEYS) {
+    const val = (ctx.needs as any)[key] as number;
+    if (val < worstVal) { worstVal = val; worstNeed = key; }
+  }
+  const goalCategory = NEED_TO_GOAL[worstNeed] || 'leisure';
+
+  // 也试试社交（如果社交低）
+  const categories: GoalCategory[] = [goalCategory];
+  if (ctx.needs.social < 40 && goalCategory !== 'social') categories.push('social');
+  if (ctx.needs.hunger < 40 && goalCategory !== 'survival') categories.push('survival');
+
+  const recentSceneIds: string[] = [];
+
+  // 2. 逐个类别尝试匹配
+  for (const cat of categories) {
+    const match = findMatchingScene(
+      cat,
+      ctx.personality,
+      ctx.profession,
+      ctx.copper,
+      ctx.needs.health,
+      ctx.emotion || '',
+      ctx.currentGrid,
+      ctx.shichen,
+      ctx.weather,
+      'spring', // TODO: pass season
+      nearbyNpcs,
+      recentSceneIds,
+    );
+
+    if (!match) continue;
+
+    const { scene, target } = match;
+
+    // 3. 判定成功/失败
+    const actorStats: Record<string, number> = {
+      bravery: ctx.personality.includes('勇敢') ? 80 : 40,
+      cunning: ctx.personality.includes('狡猾') ? 80 : 40,
+      eloquence: ctx.personality.includes('健谈') ? 80 : 40,
+      cleverness: ctx.personality.includes('机灵') ? 80 : 40,
+      medicine: ctx.profession === 'doctor' ? 80 : 40,
+      patience: ctx.personality.includes('温和') ? 80 : 40,
+      courage: ctx.personality.includes('勇敢') ? 80 : 40,
+      social: ctx.needs.social,
+      pity: ctx.personality.includes('善良') ? 80 : 40,
+      aggression: ctx.personality.includes('暴躁') ? 80 : 40,
+      strength: ctx.needs.health,
+      wallet: ctx.copper,
+    };
+
+    const targetStats = target ? {
+      alertness: target.personality.includes('精明') ? 80 : 40,
+      cleverness: target.personality.includes('机灵') ? 80 : 40,
+      courage: target.personality.includes('勇敢') ? 80 : 40,
+      kindness: target.personality.includes('善良') ? 80 : 40,
+      judgment: target.personality.includes('精明') ? 80 : 40,
+      disease: 100 - target.health,
+      wallet: target.copper,
+      shyness: target.personality.includes('胆小') ? 80 : 40,
+      talent: target.personality.includes('勤劳') ? 80 : 40,
+      strength: target.health,
+      stinginess: target.personality.includes('吝啬') ? 80 : 40,
+    } : undefined;
+
+    const success = resolveScene(scene, actorStats, targetStats as any);
+    const outcome = success ? scene.success : scene.failure;
+
+    if (!outcome) continue; // 某些场景没有失败分支
+
+    const narrativeVars: Record<string, string> = {
+      npcName: ctx.npcName,
+      targetName: target?.name || '路人',
+      location: ctx.currentGrid,
+      weather: ctx.weather,
+      shichen: ctx.shichen,
+      day: String(ctx.day),
+    };
+
+    return {
+      sceneId: scene.id,
+      sceneName: scene.name,
+      goalCategory: scene.goalCategory,
+      narrative: formatNarrative(outcome.narrative, narrativeVars),
+      success,
+      effects: { ...outcome.effects },
+      targetEffects: outcome.targetEffects ? { ...outcome.targetEffects } : undefined,
+      relationChange: outcome.relationChange,
+      targetName: target?.name,
+    };
+  }
+
+  return null; // 没有匹配到演出，fallback到旧系统
+}
+
 function fallbackAction(ctx: DecisionContext): DecisionResult {
   const isNight = ['子', '丑', '寅', '亥'].includes(ctx.shichen);
   const isRain = ctx.weather === '暴雨' || ctx.weather === '小雨';
