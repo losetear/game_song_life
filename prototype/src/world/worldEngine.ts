@@ -2208,141 +2208,90 @@ export class WorldEngine {
       };
     }
 
-    // ── 演出库未命中，使用旧决策引擎 ──
-    // 调用决策引擎
-    const decision = decide(ctx);
-
-    if (!decision) {
-      // 决策引擎返回空 → 用兜底
-      return this.simulateL0Legacy(entityId, vital, wallet, identity as any);
+    // ── 演出库未命中，使用基础生存行为 ──
+    // 不再使用旧的decide()引擎，直接执行基于需求的基础行为
+    // ── 演出库未命中，使用基础生存行为（已移除旧decide引擎）──
+    // 找最紧迫的需求，直接调整
+    let worst = "hunger"; let worstVal = 100;
+    for (const k of ["hunger","fatigue","health","mood","social","safety"]) {
+      if ((needs as any)[k] < worstVal) { worstVal = (needs as any)[k]; worst = k; }
     }
-
-    // 应用效果到 NeedsComponent
-    for (const [key, value] of Object.entries(decision.effects)) {
+    
+    let basicDesc = "";
+    let basicEffect: Record<string, number> = {};
+    
+    switch(worst) {
+      case "hunger":
+        basicDesc = name + "找了点东西填肚子";
+        basicEffect = { hunger: 15, copper: -3 };
+        break;
+      case "fatigue":
+        basicDesc = name + "停下来休息了一会儿";
+        basicEffect = { fatigue: 20 };
+        break;
+      case "health":
+        basicDesc = name + "感觉不太舒服，去找了点药";
+        basicEffect = { health: 10, copper: -5 };
+        break;
+      case "mood":
+        basicDesc = name + "在街上随便逛了逛";
+        basicEffect = { mood: 8 };
+        break;
+      case "social":
+        basicDesc = name + "和路人说了几句话";
+        basicEffect = { social: 8 };
+        break;
+      case "safety":
+        basicDesc = name + "回到了安全的地方";
+        basicEffect = { safety: 15 };
+        break;
+    }
+    
+    // 应用效果
+    for (const [key, value] of Object.entries(basicEffect)) {
       if (key in needs) {
         (needs as any)[key] = Math.max(0, Math.min(100, (needs as any)[key] + value));
       }
     }
-
-    // 同步 NeedsComponent 到 VitalComponent（保持兼容）
     vital.hunger = needs.hunger;
     vital.fatigue = needs.fatigue;
     vital.health = needs.health;
     vital.mood = needs.mood;
-
-    // 铜钱效果
-    if (decision.effects.copper !== undefined && wallet) {
-      wallet.copper = Math.max(0, wallet.copper + decision.effects.copper);
+    if (basicEffect.copper && wallet) {
+      wallet.copper = Math.max(0, wallet.copper + basicEffect.copper);
     }
-
-    // ──── 心愿完成处理 ────
-    if (decision.completedWhim && whimComp) {
-      // 移除已完成的心愿
-      whimComp.whims = whimComp.whims.filter(w => w.name !== decision.completedWhim!.name);
-      this.logEvent('npc', 'whim_complete', `${name}完成了心愿「${decision.completedWhim.name}」！心情变好了。`);
-    }
-
-    // 记录行动到 ActionStateComponent
-    const actionStateRec = this.em.getComponent(entityId, 'ActionState');
-    if (actionStateRec) {
-      actionStateRec.currentGoal = decision.goalId;
-      actionStateRec.currentAction = decision.actionId;
-      actionStateRec.lastActionTurn = this.time.tick;
-
-      const record: ActionRecord = {
-        turn: this.time.tick,
-        day: this.time.day,
-        shichen: this.time.shichenName,
-        goalId: decision.goalId,
-        actionId: decision.actionId,
-        narrative: decision.narrative,
-      };
-      actionStateRec.actionHistory.push(record);
-      if (actionStateRec.actionHistory.length > 50) {
-        actionStateRec.actionHistory.shift();
-      }
-    }
-
-    // 根据行动类型移动 NPC
-    const targetGrid = this.getTargetGridForAction(entityId, decision.actionId);
-    this.moveNPCToGrid(entityId, targetGrid);
-
-    // 记录叙事事件
-    this.logEvent('npc', 'decision_engine', decision.narrative);
-
-    // ──── 链式反应检查 ────
-    const chainResults = this.chainReactionEngine.checkChainReactions({
-      sourceId: entityId,
-      actionId: decision.actionId,
-      currentTick: this.time.tick,
-      nearbyIds: nearNpcIds,
-      weather: this.weather.weather,
+    
+    this.eventLog.push({
+      tick: this.time.tick,
+      time: new Date().toISOString(),
+      type: "npc",
+      category: "basic_action",
+      message: basicDesc,
+      cause: worst,
+      source: identity.name,
     });
-    for (const chain of chainResults) {
-      this.logEvent('npc', 'chain_reaction', chain.narrative);
-    }
-
-    // ──── 生成叙事片段（留白式） ────
-    const relationship = this.em.getComponent(entityId, 'Relationship') || null;
-    const narrativeFragment = generateNarrativeFragment({
-      npcId: entityId,
-      npcName: name,
-      emotion: emotion.current,
-      emotionIntensity: emotion.intensity,
-      stress,
-      needs,
-      relationship,
-      hiddenTraits: hiddenTraits || null,
-      currentGrid: gridId,
-      shichen: this.time.shichenName,
-      weather: this.weather.weather,
-      nearNpcIds,
-      recentAction: decision.actionId,
-      em: this.em,
-    });
-    this.logEvent('npc', 'narrative_fragment', narrativeFragment);
-
-    // ──── 记忆固化检查 ────
-    this.stressMemorySys.consolidateMemories(entityId);
-
-    // 记录NPC行为历史
-    const stateAfter = {
-      hunger: vital.hunger,
-      fatigue: vital.fatigue,
-      copper: wallet?.copper ?? copper,
-      mood: vital.mood ?? 50,
-    };
-    if (!this.npcHistory.has(entityId)) {
-      this.npcHistory.set(entityId, []);
-    }
-    const hist = this.npcHistory.get(entityId)!;
-    hist.push({
+    this.lastTickEvents++;
+    
+    const bhistory = this.npcHistory.get(entityId) || [];
+    bhistory.push({
       tick: this.time.tick,
       shichen: this.time.shichenName,
-      action: decision.actionId,
-      description: decision.narrative,
-      result: '成功',
-      cause: decision.goalName,
+      action: "basic_" + worst,
+      description: basicDesc,
+      result: "完成",
+      cause: worst,
       stateBefore,
-      stateAfter,
+      stateAfter: { hunger: vital.hunger, fatigue: vital.fatigue, copper: wallet?.copper ?? 0, mood: vital.mood },
     });
-    if (hist.length > 50) hist.shift();
-
-    // 检查重大事件
-    const majorEvents: MajorEvent[] = [];
-    if (needs.hunger < 15) {
-      majorEvents.push({ type: 'npc', title: `${name}快要饿死了`, detail: `${name}已经饿了好几天了，面色蜡黄。`, impact: 'critical' });
-    } else if (needs.hunger < 30) {
-      majorEvents.push({ type: 'npc', title: `${name}正在挨饿`, detail: `${name}没钱吃饭，饿着肚子干活。`, impact: 'important' });
-    }
-    if (needs.mood < 20) {
-      majorEvents.push({ type: 'npc', title: `${name}心情极差`, detail: `${name}整日愁眉苦脸。`, impact: 'important' });
-    }
-    if (needs.health <= 0) {
-      majorEvents.push({ type: 'npc', title: `${name}倒下了`, detail: `${name}的健康状况急剧恶化。`, impact: 'critical' });
-    }
-
-    return { npcName: name, action: decision.actionId, result: decision.narrative, majorEvents };
+    if (bhistory.length > 20) bhistory.shift();
+    this.npcHistory.set(entityId, bhistory);
+    
+    return {
+      npcName: name,
+      action: basicDesc,
+      result: basicDesc,
+      majorEvents: [],
+    };
   }
 
   /** 检查家庭成员是否在附近 */
