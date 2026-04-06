@@ -55,6 +55,8 @@ export class LODManager {
       this.em.addComponent(entityId, 'Memory', {
         recentEvents: [],
         impressions: {},
+        shortTermMemories: [],
+        longTermMemories: [],
       });
     }
     if (!this.em.hasComponent(entityId, 'Relations')) {

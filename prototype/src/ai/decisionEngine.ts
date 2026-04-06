@@ -9,10 +9,11 @@
 // 5. 日常节律：早晨/上午/午间/下午/傍晚/深夜有不同的行为倾向
 // 6. softmax 温度选择从 top-5 中选，性格影响温度
 
-import { NeedsComponent, EmotionType, AspirationType, Whim } from '../ecs/types';
+import { NeedsComponent, EmotionType, AspirationType, Whim, HiddenTraitsComponent } from '../ecs/types';
 import { ALL_ACTIONS, NPCAction } from './actionRegistry';
 import { EMOTION_CATEGORY_BIAS } from './emotionSystem';
 import { ASPIRATION_CATEGORY_BIAS } from './aspirationSystem';
+import { getStressEffects } from './stressMemorySystem';
 
 export interface DecisionContext {
   needs: NeedsComponent;
@@ -36,6 +37,10 @@ export interface DecisionContext {
   whims?: Whim[];
   aspiration?: AspirationType;
   dailyPlanBiases?: Record<string, number>;
+  // v5 涌现叙事新增
+  stressLevel?: number;
+  hiddenTraits?: HiddenTraitsComponent;
+  nearbyRelations?: { targetId: number; score: number; type: string }[];
 }
 
 export interface DecisionResult {
@@ -292,6 +297,56 @@ export function decide(ctx: DecisionContext): DecisionResult {
     // 2l. 心愿加成：如果该行动类别或具体行动匹配某个活跃心愿，+30%加成
     if (whimCategories.has(action.category) || whimActionIds.has(action.id)) {
       score *= 1.3;
+    }
+
+    // 2m. 关系加成：帮助朋友+bonus，仇人在场-penalty
+    if (ctx.nearbyRelations && ctx.nearbyRelations.length > 0) {
+      const hasCloseFriend = ctx.nearbyRelations.some(r => r.score >= 61);
+      const hasEnemy = ctx.nearbyRelations.some(r => r.score <= -61);
+      // 社交类行动：有朋友在场+bonus
+      if (action.category === 'social' && hasCloseFriend) {
+        score *= 1.2;
+      }
+      // 偷窃/攻击：仇人在场时不做（或+penalty）
+      if ((action.id === 'steal' || action.id === 'fight' || action.id === 'attack') && hasEnemy) {
+        score *= 0.6;
+      }
+      // 交易类：有朋友在场+bonus
+      if (action.category === 'work' && hasCloseFriend) {
+        score *= 1.1;
+      }
+    }
+
+    // 2n. 压力修正：高压力降低工作类/社交类得分
+    if (ctx.stressLevel !== undefined && ctx.stressLevel > 60) {
+      const stressEffects = getStressEffects(ctx.stressLevel);
+      if (action.category === 'work') {
+        score *= stressEffects.focusModifier;
+      }
+      if (action.category === 'social') {
+        score *= stressEffects.socialModifier;
+      }
+    }
+
+    // 2o. 隐藏特征：高贪婪→赚钱行动+bonus，高荣耀→偷窃-penalty
+    if (ctx.hiddenTraits) {
+      const ht = ctx.hiddenTraits;
+      // 贪婪：赚钱行动+bonus
+      if (ht.greed > 70 && action.effects.copper && action.effects.copper > 0) {
+        score *= 1 + (ht.greed - 70) * 0.005; // 最多 +15%
+      }
+      // 荣耀：偷窃-penalty
+      if (ht.honor > 60 && (action.id === 'steal' || action.id === 'black_market')) {
+        score *= 1 - (ht.honor - 60) * 0.01; // 最多 -40%
+      }
+      // 野心：工作类+bonus
+      if (ht.ambition > 70 && action.category === 'work') {
+        score *= 1 + (ht.ambition - 70) * 0.004;
+      }
+      // 理性：高疲劳时更倾向休息
+      if (ht.rationality > 70 && ctx.needs.fatigue < 30 && action.category === 'work') {
+        score *= 0.8;
+      }
     }
 
     // 2m. 微量随机性（±10%）

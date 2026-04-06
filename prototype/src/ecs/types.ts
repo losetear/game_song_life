@@ -134,11 +134,52 @@ export interface DailyPlanComponent {
 export interface MemoryComponent {
   recentEvents: { content: string; tick: number }[];
   impressions: Record<string, number>; // targetId → 好感度
+  // 涌现叙事：短期/长期记忆（带情绪强度）
+  shortTermMemories: MemoryEntry[];
+  longTermMemories: MemoryEntry[];
+}
+
+export interface MemoryEntry {
+  event: string;
+  emotionType: string;   // happy/sad/angry/tense/fear/gratitude/disgust/pride
+  intensity: number;     // 1-10
+  tick: number;
 }
 
 export interface RelationsComponent {
   relations: Record<number, number>; // targetId → score
 }
+
+// === 涌现叙事：关系网络组件 ===
+export interface RelationshipComponent {
+  relations: Record<number, {
+    score: number;            // -100 到 +100
+    type: string;             // stranger/acquaintance/friend/closeFriend/unfamiliar/disliked/enemy
+    lastInteractionTick: number;
+  }>;
+}
+
+// === 涌现叙事：压力组件 ===
+export interface StressComponent {
+  level: number;              // 0-100
+  stressors: string[];        // 当前压力来源描述
+}
+
+// === 涌现叙事：隐藏特征组件 ===
+export interface HiddenTraitsComponent {
+  rationality: number;        // 理性 0-100
+  greed: number;              // 贪婪 0-100
+  honor: number;              // 荣耀 0-100
+  ambition: number;           // 野心 0-100
+  loyalty: number;            // 忠诚 0-100
+  revealedTo: number[];       // 已向哪些玩家/NPC揭示
+}
+
+// 可动态获得的性格特征
+export const DYNAMIC_PERSONALITY_TRAITS = [
+  '多疑', '感恩', '孤僻', '乐观', '愤世', '侠义',
+] as const;
+export type DynamicPersonalityTrait = typeof DYNAMIC_PERSONALITY_TRAITS[number];
 
 export interface GrowthComponent {
   stage: number;      // 0=种子, 1=幼苗, 2=成熟, 3=枯萎
@@ -209,6 +250,10 @@ export type ComponentTypeMap = {
   Whim: WhimComponent;
   Aspiration: AspirationComponent;
   DailyPlan: DailyPlanComponent;
+  // 涌现叙事组件
+  Relationship: RelationshipComponent;
+  Stress: StressComponent;
+  HiddenTraits: HiddenTraitsComponent;
 };
 
 export type ComponentName = keyof ComponentTypeMap;

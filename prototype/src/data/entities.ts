@@ -214,7 +214,7 @@ export function generateEntities(em: EntityManager, worldMap: WorldMap): EntityG
     em.addComponent(id, 'Wallet', { copper: 20 + Math.floor(Math.random() * 80) });
     em.addComponent(id, 'Inventory', { items: [{ itemType: 'food', amount: 1 }] });
     em.addComponent(id, 'AI', { goals: ['survive'], currentPlan: [], planCooldown: 0, aiLevel: 0 });
-    em.addComponent(id, 'Memory', { recentEvents: [], impressions: {} });
+    em.addComponent(id, 'Memory', { recentEvents: [], impressions: {}, shortTermMemories: [], longTermMemories: [] });
     em.addComponent(id, 'Relations', { relations: {} });
 
     // 需求组件（模拟人生式需求驱动）

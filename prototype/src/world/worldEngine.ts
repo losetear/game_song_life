@@ -24,7 +24,11 @@ import { ASPIRATION_CATEGORY_BIAS, getDefaultAspiration } from '../ai/aspiration
 import { InteractionContext } from '../server/protocol';
 import { getEmergentActions, executeEmergentAction } from './emergenceRules';
 import { MAP_CONNECTIONS, GRID_NAMES, GRID_ICONS } from './mapData';
-import { FactionComponent } from '../ecs/types';
+import { FactionComponent, HiddenTraitsComponent } from '../ecs/types';
+import { RelationshipSystem } from '../ai/relationshipSystem';
+import { StressMemorySystem, getStressEffects } from '../ai/stressMemorySystem';
+import { ChainReactionEngine } from '../world/chainReactionEngine';
+import { generateNarrativeFragment, NarrativeContext } from '../ai/narrativeFragments';
 
 // === 重大事件 ===
 export interface MajorEvent {
@@ -344,6 +348,11 @@ export class WorldEngine {
   // NPC 行为历史记录（L0 NPC）
   private npcHistory: Map<number, NPCHistoryEntry[]> = new Map();
 
+  // 涌现叙事系统
+  private relationshipSys: RelationshipSystem;
+  private stressMemorySys: StressMemorySystem;
+  private chainReactionEngine: ChainReactionEngine;
+
   // 天气事件传播链
   private propagationChains: { message: string; source: string; spreadRadius: number; tick: number; cause: string; active: boolean }[] = [];
 
@@ -358,6 +367,11 @@ export class WorldEngine {
     this.lod = new LODManager(this.em, this.worldMap, this.regionSim);
     this.weather = new WeatherSystem();
     this.eventEngine = new EventEngine();
+
+    // 涌现叙事系统初始化
+    this.relationshipSys = new RelationshipSystem(this.em);
+    this.stressMemorySys = new StressMemorySystem(this.em);
+    this.chainReactionEngine = new ChainReactionEngine(this.em, this.relationshipSys, this.stressMemorySys);
   }
 
   /** 记录世界事件 */
@@ -1895,6 +1909,28 @@ export class WorldEngine {
       recentWorkActions,
     });
 
+    // ──── 更新压力系统 ────
+    const gridId = pos?.gridId || 'center_street';
+    const nearNpcIds = this.worldMap.getEntitiesInGrid(gridId).filter((id: number) => id !== entityId);
+    const nearEnemies = this.relationshipSys.getNearbyRelations(entityId, nearNpcIds)
+      .filter(r => r.score <= -61).length;
+    const nearFriends = this.relationshipSys.getNearbyRelations(entityId, nearNpcIds)
+      .filter(r => r.score >= 61).length;
+    const stress = this.stressMemorySys.updateStress(entityId, {
+      needs,
+      weather: this.weather.weather,
+      currentGrid: gridId,
+      currentTick: this.time.tick,
+      nearbyEnemies: nearEnemies,
+      nearbyFriends: nearFriends,
+      copper: wallet?.copper ?? 0,
+    });
+
+    // ──── 更新关系系统 ────
+    this.relationshipSys.ensureRelationshipComponent(entityId);
+    this.relationshipSys.applyProximityBonus(entityId, nearNpcIds, this.time.tick);
+    this.relationshipSys.applyDecay(entityId, this.time.tick);
+
     // ──── 检查/刷新心愿系统 ────
     let whimComp = this.em.getComponent(entityId, 'Whim');
     if (!whimComp) {
@@ -1938,9 +1974,22 @@ export class WorldEngine {
     // 检查家庭成员是否在附近
     const familyNearby = this.isFamilyNearby(entityId, identity);
 
-    // 检查附近NPC数量
-    const gridId = pos?.gridId || 'center_street';
-    const nearNpcCount = this.worldMap.getEntitiesInGrid(gridId).length;
+    // 检查附近NPC数量（使用已计算的 nearNpcIds）
+    const nearNpcCount = nearNpcIds.length;
+
+    // ──── 隐藏特征初始化 ────
+    let hiddenTraits = this.em.getComponent(entityId, 'HiddenTraits');
+    if (!hiddenTraits) {
+      hiddenTraits = {
+        rationality: 30 + Math.floor(Math.random() * 50),
+        greed: 20 + Math.floor(Math.random() * 50),
+        honor: 30 + Math.floor(Math.random() * 50),
+        ambition: 20 + Math.floor(Math.random() * 50),
+        loyalty: 30 + Math.floor(Math.random() * 50),
+        revealedTo: [],
+      };
+      this.em.addComponent(entityId, 'HiddenTraits', hiddenTraits);
+    }
 
     // 构建决策上下文（含情绪/心愿/抱负/每日计划）
     const inv = this.em.getComponent(entityId, 'Inventory');
@@ -1969,6 +2018,10 @@ export class WorldEngine {
       whims: whimComp.whims,
       aspiration: aspiration.type,
       dailyPlanBiases: dailyPlan?.biases || {},
+      // v5 涌现叙事新增
+      stressLevel: stress.level,
+      hiddenTraits,
+      nearbyRelations: this.relationshipSys.getNearbyRelations(entityId, nearNpcIds),
     };
 
     // 调用决策引擎
@@ -2034,6 +2087,41 @@ export class WorldEngine {
 
     // 记录叙事事件
     this.logEvent('npc', 'decision_engine', decision.narrative);
+
+    // ──── 链式反应检查 ────
+    const chainResults = this.chainReactionEngine.checkChainReactions({
+      sourceId: entityId,
+      actionId: decision.actionId,
+      currentTick: this.time.tick,
+      nearbyIds: nearNpcIds,
+      weather: this.weather.weather,
+    });
+    for (const chain of chainResults) {
+      this.logEvent('npc', 'chain_reaction', chain.narrative);
+    }
+
+    // ──── 生成叙事片段（留白式） ────
+    const relationship = this.em.getComponent(entityId, 'Relationship') || null;
+    const narrativeFragment = generateNarrativeFragment({
+      npcId: entityId,
+      npcName: name,
+      emotion: emotion.current,
+      emotionIntensity: emotion.intensity,
+      stress,
+      needs,
+      relationship,
+      hiddenTraits: hiddenTraits || null,
+      currentGrid: gridId,
+      shichen: this.time.shichenName,
+      weather: this.weather.weather,
+      nearNpcIds,
+      recentAction: decision.actionId,
+      em: this.em,
+    });
+    this.logEvent('npc', 'narrative_fragment', narrativeFragment);
+
+    // ──── 记忆固化检查 ────
+    this.stressMemorySys.consolidateMemories(entityId);
 
     // 记录NPC行为历史
     const stateAfter = {
