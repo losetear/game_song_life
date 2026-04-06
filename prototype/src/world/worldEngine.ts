@@ -50,11 +50,12 @@ interface L0ActionResult {
 export interface WorldEvent {
   tick: number;
   time: string;       // ISO timestamp
-  type: 'npc' | 'player' | 'economy' | 'state' | 'move' | 'weather' | 'ecology' | 'international' | 'national' | 'regional' | 'propagation';
+  type: 'npc' | 'player' | 'economy' | 'state' | 'move' | 'weather' | 'ecology' | 'international' | 'national' | 'regional' | 'propagation' | 'scene';
   category: string;   // 子分类
   message: string;    // 描述
   cause?: string;     // 因果标记（触发原因）
-  source?: string;    // 来源分类
+  source?: string;    // 来源NPC名
+  target?: string;    // 目标NPC名（双人演出时）
 }
 
 // === NPC 行为历史记录 ===
@@ -1862,6 +1863,42 @@ export class WorldEngine {
   }
 
   /** L0 NPC 单个行动模拟（需求驱动决策引擎 / 旧GOAP fallback） */
+  /** 生成目标视角的行动描述 */
+  private getTargetPerspectiveAction(sceneId: string, success: boolean): string {
+    const map: Record<string, string> = {
+      s_friend_meal: '蹭了顿饭',
+      s_steal_food: '偷了食物',
+      s_shared_meal: '分了食物',
+      s_beg: '讨了些钱',
+      mi_pickpocket: '扒了钱包',
+      mi_con_game: '骗了钱',
+      mi_extort: '勒索了钱',
+      mi_rob: '抢了钱',
+      mi_spread_rumor: '说了些闲话',
+      c_street_fight: '打了一顿',
+      c_shout_match: '骂了一顿',
+      c_insult: '羞辱了一番',
+      c_protect_weak: '保护了',
+      c_draw_weapon: '拔刀威胁了',
+      so_tea_chat: '聊了聊天',
+      so_drink_together: '一起喝了酒',
+      so_share_news: '分享了消息',
+      so_help_carry: '帮搬了东西',
+      w_hard_sell: '推销了东西',
+      w_treat_patient: '看了诊',
+      t_haggle_hard: '砍了价',
+      t_charity: '施舍了些钱',
+      r_glance: '偷偷看了',
+      r_hold_hand: '牵了手',
+      l_chess_game: '下了盘棋',
+      f_child_play: '逗着玩了一会儿',
+      f_neighbor_chat: '聊了会天',
+      cr_teach: '教了些东西',
+      fa_secret_meeting: '开了个密会',
+    };
+    return map[sceneId] || (success ? '做了些什么' : '试图做些什么');
+  }
+
   private simulateL0Action(entityId: number): L0ActionResult {
     const vital = this.em.getComponent(entityId, 'Vital');
     const wallet = this.em.getComponent(entityId, 'Wallet');
@@ -2089,7 +2126,7 @@ export class WorldEngine {
         }
       }
 
-      // 记录到世界事件日志
+      // 记录到世界事件日志（发起者视角）
       this.eventLog.push({
         tick: this.time.tick,
         time: new Date().toISOString(),
@@ -2098,10 +2135,11 @@ export class WorldEngine {
         message: sceneResult.narrative,
         cause: `scene:${sceneResult.sceneId}:${sceneResult.success ? 'success' : 'failure'}`,
         source: identity.name,
+        target: sceneResult.targetName,
       });
       this.lastTickEvents++;
 
-      // 更新行为历史
+      // 更新发起者行为历史
       const history = this.npcHistory.get(entityId) || [];
       history.push({
         tick: this.time.tick,
@@ -2115,6 +2153,52 @@ export class WorldEngine {
       });
       if (history.length > 20) history.shift();
       this.npcHistory.set(entityId, history);
+
+      // ── 在目标NPC的历史中也写入事件（双向记录）──
+      if (sceneResult.targetName) {
+        const targetNpc = nearbyNpcInfos.find((n: NearbyNpcInfo) => n.name === sceneResult.targetName);
+        if (targetNpc) {
+          // 生成目标视角的叙事（从目标的角度描述同一件事）
+          const targetNarrative = sceneResult.success
+            ? `${identity.name}对${sceneResult.targetName}${this.getTargetPerspectiveAction(sceneResult.sceneId, sceneResult.success)}`
+            : `${identity.name}试图对${sceneResult.targetName}${this.getTargetPerspectiveAction(sceneResult.sceneId, sceneResult.success)}`;
+
+          // 目标NPC的事件日志
+          this.eventLog.push({
+            tick: this.time.tick,
+            time: new Date().toISOString(),
+            type: 'npc',
+            category: `scene_target:${sceneResult.goalCategory}`,
+            message: targetNarrative,
+            cause: `scene_target:${sceneResult.sceneId}:${sceneResult.success ? 'success' : 'failure'}`,
+            source: sceneResult.targetName,
+            target: identity.name,
+          });
+          this.lastTickEvents++;
+
+          // 目标NPC的行为历史
+          const targetHistory = this.npcHistory.get(targetNpc.id) || [];
+          const tVital = this.em.getComponent(targetNpc.id, 'Vital') as any;
+          const tWallet = this.em.getComponent(targetNpc.id, 'Wallet') as any;
+          targetHistory.push({
+            tick: this.time.tick,
+            shichen: this.time.shichenName,
+            action: `被${sceneResult.sceneId}`,
+            description: targetNarrative,
+            result: sceneResult.success ? '受到影响' : '未受影响',
+            cause: `被动:${sceneResult.goalCategory}`,
+            stateBefore: { hunger: tVital?.hunger ?? 50, fatigue: tVital?.fatigue ?? 50, copper: tWallet?.copper ?? 0, mood: tVital?.mood ?? 50 },
+            stateAfter: {
+              hunger: tVital?.hunger,
+              fatigue: tVital?.fatigue,
+              copper: tWallet?.copper ?? 0,
+              mood: tVital?.mood,
+            },
+          });
+          if (targetHistory.length > 20) targetHistory.shift();
+          this.npcHistory.set(targetNpc.id, targetHistory);
+        }
+      }
 
       return {
         npcName: name,
