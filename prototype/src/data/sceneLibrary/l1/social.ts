@@ -1,0 +1,279 @@
+// ════════════════════════════════════════
+// L1 社交演出 (15个)
+// 群体闲聊、聚会、节庆、日常互动
+// ════════════════════════════════════════
+
+import { L1Scene } from '../../../ai/sceneLibrary/types';
+
+const ALL_PROFESSIONS = ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'];
+
+export const L1_SOCIAL_SCENES: L1Scene[] = [
+  {
+    id: 'l1_market_gossip',
+    name: '交换八卦',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}在{location}交换八卦，谁家婆娘跑了、谁家小子中了秀才，消息比风传得还快。',
+      avgEffects: { mood: 5, social: 8 },
+      atmosphereEffect: '嘈杂',
+    },
+    weight: 9,
+    cooldownTicks: 2,
+    maxPerTick: 5,
+  },
+  {
+    id: 'l1_tea_house_crowd',
+    name: '茶楼听书',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}挤在茶楼听书，说书先生一拍惊堂木，满座鸦雀无声，精彩处轰然叫好。',
+      avgEffects: { mood: 12, social: 6, copper: -3, fatigue: -8 },
+      atmosphereEffect: '热闹',
+    },
+    weight: 8,
+    cooldownTicks: 3,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_street_corner_chat',
+    name: '街角闲聊',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      needThreshold: 60,
+    },
+    outcome: {
+      narrative: '{count}个{professionName}聚在街角闲聊，倚着墙根蹲在地上，有一搭没一搭地扯着闲篇。',
+      avgEffects: { mood: 4, social: 6, fatigue: -3 },
+      atmosphereEffect: '慵懒',
+    },
+    weight: 7,
+    cooldownTicks: 2,
+    maxPerTick: 5,
+  },
+  {
+    id: 'l1_workplace_banter',
+    name: '干活说笑',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      needThreshold: 60,
+    },
+    outcome: {
+      narrative: '{count}个{professionName}一边干活一边开玩笑，荤段子抛来抛去引来一阵哄笑，苦活也不那么难熬了。',
+      avgEffects: { mood: 8, social: 5, fatigue: -5 },
+      atmosphereEffect: '欢快',
+    },
+    weight: 7,
+    cooldownTicks: 3,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_festival_gathering',
+    name: '赶庙会',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}参加庙会，锣鼓喧天狮子舞得欢，杂耍摊前围满了人，糖人糖葫芦诱得孩童直嚷嚷。',
+      avgEffects: { mood: 15, social: 8, copper: -5 },
+      atmosphereEffect: '喜庆',
+    },
+    weight: 6,
+    cooldownTicks: 8,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_mourning_group',
+    name: '悼念邻人',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      needThreshold: 35,
+    },
+    outcome: {
+      narrative: '{count}个{professionName}在悼念逝去的邻人，白幡在风中飘动，众人默默站着，有人低声念着逝者的好。',
+      avgEffects: { mood: -10, social: 6 },
+      atmosphereEffect: '哀伤',
+    },
+    weight: 3,
+    cooldownTicks: 10,
+    maxPerTick: 2,
+  },
+  {
+    id: 'l1_newcomer_welcome',
+    name: '迎新邻居',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}迎接新来的邻居，有人端了碗热汤过去，有人帮忙搬家具，街坊们热情地打着招呼。',
+      avgEffects: { mood: 6, social: 10 },
+      atmosphereEffect: '温暖',
+    },
+    weight: 4,
+    cooldownTicks: 8,
+    maxPerTick: 2,
+  },
+  {
+    id: 'l1_argument_crowd',
+    name: '围观争吵',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      needThreshold: 50,
+    },
+    outcome: {
+      narrative: '{count}个{professionName}围观一场争吵，两人指着鼻子骂得不可开交，旁观者有的劝有的起哄，乱成一锅粥。',
+      avgEffects: { mood: 2, social: 3 },
+      atmosphereEffect: '骚动',
+    },
+    weight: 5,
+    cooldownTicks: 4,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_children_playing',
+    name: '孩童嬉戏',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个家庭看孩子们在街上玩耍，踢毽子跳皮筋追逐打闹，大人们站在一旁脸上露出了笑容。',
+      avgEffects: { mood: 8, social: 4 },
+      atmosphereEffect: '温馨',
+    },
+    weight: 6,
+    cooldownTicks: 4,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_elder_wisdom',
+    name: '老人讲古',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      timeOfDay: 'dusk',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}听老人讲古，槐树底下一把蒲扇一壶茶，从先帝爷讲到旱涝灾荒，听众时而唏嘘时而点头。',
+      avgEffects: { mood: 6, social: 7 },
+      atmosphereEffect: '怀旧',
+    },
+    weight: 5,
+    cooldownTicks: 5,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_evening_stroll',
+    name: '傍晚散步',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      timeOfDay: 'dusk',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}在傍晚散步，天边烧着火红的晚霞，三三两两沿着河边走，聊聊一天的琐事。',
+      avgEffects: { mood: 7, social: 5, fatigue: -8 },
+      atmosphereEffect: '宁静',
+    },
+    weight: 7,
+    cooldownTicks: 3,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_dawn_exercise',
+    name: '晨间活动',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'fatigue',
+      timeOfDay: 'dawn',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}在晨光中活动筋骨，有人打拳有人慢走，清新的空气灌进肺里精神为之一振。',
+      avgEffects: { fatigue: -10, mood: 5, hunger: -5 },
+      atmosphereEffect: '朝气',
+    },
+    weight: 6,
+    cooldownTicks: 3,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_temple_gathering',
+    name: '寺庙祈福',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      location: ['temple'],
+    },
+    outcome: {
+      narrative: '{count}个{professionName}聚集在寺庙祈福，香烟袅袅木鱼声声，跪在蒲团上虔诚地叩拜许愿。',
+      avgEffects: { mood: 10, social: 4 },
+      atmosphereEffect: '虔诚',
+    },
+    weight: 6,
+    cooldownTicks: 5,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_rain_huddle',
+    name: '雨棚避雨',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      weather: ['rain'],
+    },
+    outcome: {
+      narrative: '{count}个{professionName}挤在雨棚下躲雨，肩挨着肩听着哗哗雨声，陌生人之间也搭上了话。',
+      avgEffects: { mood: 2, social: 6 },
+      atmosphereEffect: '亲密',
+    },
+    weight: 7,
+    cooldownTicks: 3,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_moon_gazing',
+    name: '赏月',
+    category: 'social',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      timeOfDay: 'night',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}一起赏月，皓月当空银辉洒地，有人吟诗有人默默出神，夜风送来阵阵花香。',
+      avgEffects: { mood: 10, fatigue: -5, social: 5 },
+      atmosphereEffect: '诗意',
+    },
+    weight: 5,
+    cooldownTicks: 5,
+    maxPerTick: 3,
+  },
+];

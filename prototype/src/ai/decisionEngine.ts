@@ -14,6 +14,13 @@ import { ALL_ACTIONS, NPCAction } from './actionRegistry';
 import { EMOTION_CATEGORY_BIAS } from './emotionSystem';
 import { ASPIRATION_CATEGORY_BIAS } from './aspirationSystem';
 import { getStressEffects } from './stressMemorySystem';
+import {
+  SceneLibraryManager,
+  SceneDecisionResult,
+  GoalCategory,
+  NearbyNpcInfo,
+  formatNarrative,
+} from './sceneLibrary';
 
 export interface DecisionContext {
   needs: NeedsComponent;
@@ -468,10 +475,8 @@ function inferGoal(ctx: DecisionContext, action: NPCAction): { id: string; name:
 }
 
 // ──── 演出库决策（优先于旧 decide）────
-import {
-  ALL_SCENES, findMatchingScene, resolveScene, formatNarrative,
-  SceneDecisionResult, NearbyNpcInfo, GoalCategory
-} from './sceneLibrary';
+// 注意：SceneDecisionResult, NearbyNpcInfo, GoalCategory 已在文件头部从新模块导入
+// SceneLibraryManager 实例由 worldEngine 创建并传入
 
 export type { SceneDecisionResult, NearbyNpcInfo };
 
@@ -487,7 +492,13 @@ const NEED_TO_GOAL: Record<string, GoalCategory> = {
 export function decideWithScene(
   ctx: DecisionContext,
   nearbyNpcs: NearbyNpcInfo[],
+  sceneLib?: SceneLibraryManager,
+  season?: string,
+  tick?: number,
 ): SceneDecisionResult | null {
+  // 如果没有传入 SceneLibraryManager，回退到空（不使用演出库）
+  if (!sceneLib) return null;
+
   // 1. 找最紧迫的需求 → 映射到 goalCategory
   let worstNeed = '';
   let worstVal = 100;
@@ -502,87 +513,86 @@ export function decideWithScene(
   if (ctx.needs.social < 40 && goalCategory !== 'social') categories.push('social');
   if (ctx.needs.hunger < 40 && goalCategory !== 'survival') categories.push('survival');
 
-  const recentSceneIds: string[] = [];
+  // 构建 actor 上下文
+  const activeWhimCategories = new Set<string>();
+  if (ctx.whims) {
+    for (const w of ctx.whims) {
+      if (w.relatedCategory) activeWhimCategories.add(w.relatedCategory);
+    }
+  }
 
-  // 2. 逐个类别尝试匹配
-  for (const cat of categories) {
-    const match = findMatchingScene(
-      cat,
-      ctx.personality,
-      ctx.profession,
-      ctx.copper,
-      ctx.needs.health,
-      ctx.emotion || '',
-      ctx.currentGrid,
-      ctx.shichen,
-      ctx.weather,
-      'spring', // TODO: pass season
-      nearbyNpcs,
-      recentSceneIds,
-    );
+  const actorContext = {
+    traits: ctx.personality,
+    profession: ctx.profession,
+    copper: ctx.copper,
+    health: ctx.needs.health,
+    emotion: ctx.emotion || '',
+    stress: ctx.stressLevel || 0,
+    aspirationType: ctx.aspiration,
+    aspirationProgress: undefined as number | undefined,
+    currentGrid: ctx.currentGrid,
+    shichen: ctx.shichen,
+    weather: ctx.weather,
+    season: season || '春',
+    day: ctx.day,
+    tick: tick || 0,
+    factionId: ctx.factionId,
+    nearbyCount: ctx.nearNpcCount,
+    activeWhimCategories,
+  };
 
-    if (!match) continue;
+  // 构建 stat lookup
+  const actorStats: Record<string, number> = {
+    bravery: ctx.personality.includes('勇敢') ? 80 : 40,
+    cunning: ctx.personality.includes('狡猾') ? 80 : 40,
+    eloquence: ctx.personality.includes('健谈') ? 80 : 40,
+    cleverness: ctx.personality.includes('机灵') ? 80 : 40,
+    medicine: ctx.profession === 'doctor' ? 80 : 40,
+    patience: ctx.personality.includes('温和') ? 80 : 40,
+    courage: ctx.personality.includes('勇敢') ? 80 : 40,
+    social: ctx.needs.social,
+    pity: ctx.personality.includes('善良') ? 80 : 40,
+    aggression: ctx.personality.includes('暴躁') ? 80 : 40,
+    strength: ctx.needs.health,
+    wallet: ctx.copper,
+    loyalty: ctx.hiddenTraits?.loyalty || 50,
+    honor: ctx.hiddenTraits?.honor || 50,
+  };
 
-    const { scene, target } = match;
-
-    // 3. 判定成功/失败
-    const actorStats: Record<string, number> = {
-      bravery: ctx.personality.includes('勇敢') ? 80 : 40,
-      cunning: ctx.personality.includes('狡猾') ? 80 : 40,
-      eloquence: ctx.personality.includes('健谈') ? 80 : 40,
-      cleverness: ctx.personality.includes('机灵') ? 80 : 40,
-      medicine: ctx.profession === 'doctor' ? 80 : 40,
-      patience: ctx.personality.includes('温和') ? 80 : 40,
-      courage: ctx.personality.includes('勇敢') ? 80 : 40,
-      social: ctx.needs.social,
-      pity: ctx.personality.includes('善良') ? 80 : 40,
-      aggression: ctx.personality.includes('暴躁') ? 80 : 40,
-      strength: ctx.needs.health,
-      wallet: ctx.copper,
+  const targetStatsLookup = (targetId: number): Record<string, number> => {
+    const target = nearbyNpcs.find(n => n.id === targetId);
+    return {
+      alertness: target?.personality.includes('精明') ? 80 : 40,
+      cleverness: target?.personality.includes('机灵') ? 80 : 40,
+      courage: target?.personality.includes('勇敢') ? 80 : 40,
+      kindness: target?.personality.includes('善良') ? 80 : 40,
+      judgment: target?.personality.includes('精明') ? 80 : 40,
+      disease: target ? 100 - target.health : 50,
+      wallet: target?.copper || 50,
+      shyness: target?.personality.includes('胆小') ? 80 : 40,
+      talent: target?.personality.includes('勤劳') ? 80 : 40,
+      strength: target?.health || 50,
+      stinginess: target?.personality.includes('吝啬') ? 80 : 40,
     };
+  };
 
-    const targetStats = target ? {
-      alertness: target.personality.includes('精明') ? 80 : 40,
-      cleverness: target.personality.includes('机灵') ? 80 : 40,
-      courage: target.personality.includes('勇敢') ? 80 : 40,
-      kindness: target.personality.includes('善良') ? 80 : 40,
-      judgment: target.personality.includes('精明') ? 80 : 40,
-      disease: 100 - target.health,
-      wallet: target.copper,
-      shyness: target.personality.includes('胆小') ? 80 : 40,
-      talent: target.personality.includes('勤劳') ? 80 : 40,
-      strength: target.health,
-      stinginess: target.personality.includes('吝啬') ? 80 : 40,
-    } : undefined;
+  // 通过 SceneLibraryManager 匹配
+  const result = sceneLib.matchL0(categories, actorContext, nearbyNpcs, actorStats, targetStatsLookup);
 
-    const success = resolveScene(scene, actorStats, targetStats as any);
-    const outcome = success ? scene.success : scene.failure;
-
-    if (!outcome) continue; // 某些场景没有失败分支
-
-    const narrativeVars: Record<string, string> = {
+  if (result) {
+    // 重新格式化叙事，用真实NPC名字
+    const vars: Record<string, string> = {
       npcName: ctx.npcName,
-      targetName: target?.name || '路人',
+      targetName: result.targetName || '路人',
       location: ctx.currentGrid,
       weather: ctx.weather,
       shichen: ctx.shichen,
       day: String(ctx.day),
     };
-
-    return {
-      sceneId: scene.id,
-      sceneName: scene.name,
-      goalCategory: scene.goalCategory,
-      narrative: formatNarrative(outcome.narrative, narrativeVars),
-      success,
-      effects: { ...outcome.effects },
-      targetEffects: outcome.targetEffects ? { ...outcome.targetEffects } : undefined,
-      relationChange: outcome.relationChange,
-      targetName: target?.name,
-    };
+    result.narrative = formatNarrative(result.narrative, vars);
   }
 
-  return null; // 没有匹配到演出，fallback到旧系统
+  return result;
 }
 
 function fallbackAction(ctx: DecisionContext): DecisionResult {

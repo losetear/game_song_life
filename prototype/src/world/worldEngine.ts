@@ -29,6 +29,11 @@ import { RelationshipSystem } from '../ai/relationshipSystem';
 import { StressMemorySystem, getStressEffects } from '../ai/stressMemorySystem';
 import { ChainReactionEngine } from '../world/chainReactionEngine';
 import { generateNarrativeFragment, NarrativeContext } from '../ai/narrativeFragments';
+import { SceneLibraryManager, L2RegionStats } from '../ai/sceneLibrary';
+import { ALL_L0_SCENES } from '../data/sceneLibrary/l0';
+import { ALL_L1_SCENES } from '../data/sceneLibrary/l1';
+import { ALL_L2_SCENES } from '../data/sceneLibrary/l2';
+import { PROFESSION_DISPLAY, gridDisplayName } from '../ai/sceneLibrary/narrativeFormatter';
 
 // === 重大事件 ===
 export interface MajorEvent {
@@ -354,6 +359,9 @@ export class WorldEngine {
   private stressMemorySys: StressMemorySystem;
   private chainReactionEngine: ChainReactionEngine;
 
+  // 多粒度演出库
+  readonly sceneLib: SceneLibraryManager;
+
   // 天气事件传播链
   private propagationChains: { message: string; source: string; spreadRadius: number; tick: number; cause: string; active: boolean }[] = [];
 
@@ -373,6 +381,12 @@ export class WorldEngine {
     this.relationshipSys = new RelationshipSystem(this.em);
     this.stressMemorySys = new StressMemorySystem(this.em);
     this.chainReactionEngine = new ChainReactionEngine(this.em, this.relationshipSys, this.stressMemorySys);
+
+    // 多粒度演出库初始化
+    this.sceneLib = new SceneLibraryManager();
+    this.sceneLib.registerL0(ALL_L0_SCENES);
+    this.sceneLib.registerL1(ALL_L1_SCENES);
+    this.sceneLib.registerL2(ALL_L2_SCENES);
   }
 
   /** 记录世界事件 */
@@ -1755,6 +1769,41 @@ export class WorldEngine {
     // 5. L2 区域统计更新
     this.regionSim.update(this.time.season, this.weather.farmYieldMod);
 
+    // 5b. L2 区域级演出叙事
+    const l2Regions: L2RegionStats[] = this.regionSim.getAllRegions().map(r => {
+      const baseOutput = (r.area > 0 && r.baseYield > 0) ? r.area * r.baseYield : 1;
+      return {
+        regionId: r.regionId,
+        regionName: GRID_NAMES[r.regionId] || r.regionId,
+        regionType: r.regionType,
+        stats: {
+          yield: r.yieldAmount / baseOutput,
+          animal: r.maxAnimal > 0 ? r.wildAnimalCount / r.maxAnimal : 0.5,
+          fish: r.fishBase > 0 ? r.fishAmount / r.fishBase : 0.5,
+          mood: 0.5,
+          weather: r.weatherMod || 1.0,
+        },
+      };
+    });
+    const l2Narratives = this.sceneLib.matchL2All(l2Regions, {
+      weather: this.weather.weather,
+      season: this.time.season,
+      tick: this.time.tick,
+    });
+    for (const narr of l2Narratives) {
+      const msg = narr.outcome.narrative
+        .replace(/\{regionName\}/g, narr.regionName)
+        .replace(/\{statValue\}/g, String(Math.round(narr.statValue * 100)) + '%')
+        .replace(/\{season\}/g, this.time.season);
+      this.logEvent('ecology', 'l2_scene', msg);
+      // 应用经济效果
+      if (narr.outcome.economicEffect) {
+        for (const eff of narr.outcome.economicEffect) {
+          // TODO: 接入 economySystem 的价格乘数
+        }
+      }
+    }
+
     // 6. 经济系统更新（传入天气和区域统计）
     this.economy.update(this.weather, this.regionSim.getAllRegions());
 
@@ -2080,7 +2129,7 @@ export class WorldEngine {
       };
     });
 
-    const sceneResult = decideWithScene(ctx, nearbyNpcInfos);
+    const sceneResult = decideWithScene(ctx, nearbyNpcInfos, this.sceneLib, this.time.season, this.time.tick);
 
     // 记录决策前的状态
     const stateBefore = { hunger: vital.hunger, fatigue: vital.fatigue, copper, mood: vital.mood ?? 50 };
@@ -2544,38 +2593,106 @@ export class WorldEngine {
   private simulateL1Batch(): { total: number; highlights: string[] } {
     let actions = 0;
     const l1Highlights: string[] = [];
+    this.sceneLib.resetTickCounters();
 
+    // 1. 所有 L1 NPC 需求衰减
     for (const entityId of this.l1Entities) {
       const vital = this.em.getComponent(entityId, 'Vital');
       if (!vital) continue;
-
-      // L1 NPC 需求衰减（所有 L1 NPC）
       const needs = this.em.getComponent(entityId, 'Needs');
       if (needs) {
         needs.hunger = Math.max(0, needs.hunger - (3 + Math.floor(Math.random() * 3)));
         needs.fatigue = Math.max(0, needs.fatigue - (1 + Math.floor(Math.random() * 3)));
         needs.mood = Math.max(0, needs.mood - (1 + Math.floor(Math.random() * 2)));
         needs.social = Math.max(0, needs.social - (1 + Math.floor(Math.random() * 2)));
-
-        // 同步到 Vital（保持兼容）
         vital.hunger = needs.hunger;
         vital.fatigue = needs.fatigue;
         vital.health = needs.health;
         vital.mood = needs.mood;
       } else {
-        // 没有 NeedsComponent 的旧 L1 用简单衰减
         vital.hunger = Math.max(0, vital.hunger - 5);
         vital.fatigue = Math.min(100, vital.fatigue + 3);
       }
+      actions++;
+    }
 
-      // 有 NeedsComponent 的 L1 NPC → 简化决策引擎
-      if (needs) {
-        const result = this.simulateL1Decision(entityId, needs, vital);
-        if (result) {
-          l1Highlights.push(result.narrative);
+    // 2. 按 (gridId, profession) 分组 L1 NPC
+    const groups = new Map<string, number[]>();
+    for (const entityId of this.l1Entities) {
+      const pos = this.em.getComponent(entityId, 'Position');
+      const identity = this.em.getComponent(entityId, 'Identity');
+      if (!pos || !identity) continue;
+      const key = `${pos.gridId}:${identity.profession}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(entityId);
+    }
+
+    // 3. 每组匹配 L1 场景
+    const worldCtx = {
+      weather: this.weather.weather,
+      shichen: this.time.shichenName,
+      season: this.time.season,
+      tick: this.time.tick,
+    };
+
+    for (const [key, entityIds] of groups) {
+      const [gridId, profession] = key.split(':');
+
+      // 取样本 NPC 的需求作为代表
+      const sampleId = entityIds[0];
+      const needs = this.em.getComponent(sampleId, 'Needs');
+
+      const l1Result = this.sceneLib.matchL1({
+        profession,
+        gridId,
+        needs: needs
+          ? { hunger: needs.hunger, fatigue: needs.fatigue, mood: needs.mood, social: needs.social, safety: needs.safety || 50 }
+          : { hunger: 50, fatigue: 50, mood: 50, social: 50, safety: 50 },
+        groupSize: entityIds.length,
+        worldContext: worldCtx,
+      });
+
+      if (l1Result) {
+        // 应用效果到组内每个 NPC
+        for (const eid of entityIds) {
+          const n = this.em.getComponent(eid, 'Needs');
+          const w = this.em.getComponent(eid, 'Wallet');
+          if (n) {
+            for (const [k, v] of Object.entries(l1Result.outcome.avgEffects)) {
+              if (k in n) (n as any)[k] = Math.max(0, Math.min(100, (n as any)[k] + v));
+            }
+          }
+          if (l1Result.outcome.copperPoolChange && w) {
+            const share = Math.floor(l1Result.outcome.copperPoolChange / entityIds.length);
+            w.copper = Math.max(0, w.copper + share);
+          }
         }
+
+        // 格式化叙事
+        const narrative = l1Result.outcome.narrative
+          .replace(/\{count\}/g, String(entityIds.length))
+          .replace(/\{professionName\}/g, PROFESSION_DISPLAY[profession] || profession)
+          .replace(/\{location\}/g, gridDisplayName(gridId));
+
+        l1Highlights.push(narrative);
+        this.logEvent('npc', 'l1_scene', narrative);
       } else {
-        // fallback: 10% 概率随机移到相邻 grid
+        // 无场景匹配 → 用旧决策引擎 fallback
+        for (const eid of entityIds.slice(0, 3)) {
+          const n = this.em.getComponent(eid, 'Needs');
+          const v = this.em.getComponent(eid, 'Vital');
+          if (n && v) {
+            const result = this.simulateL1Decision(eid, n, v);
+            if (result) l1Highlights.push(result.narrative);
+          }
+        }
+      }
+    }
+
+    // 4. 无 NeedsComponent 的旧 L1 NPC → 随机移动
+    for (const entityId of this.l1Entities) {
+      const needs = this.em.getComponent(entityId, 'Needs');
+      if (!needs) {
         const type = this.em.getType(entityId);
         if (type === 'npc' && Math.random() < 0.1) {
           const pos = this.em.getComponent(entityId, 'Position');
@@ -2588,17 +2705,15 @@ export class WorldEngine {
           }
         }
       }
-
-      actions++;
     }
+
     this.lastTickEvents = actions + this.l0Entities.length;
 
-    // 生成 L1 汇总事件
+    // 生成 L1 汇总
     const npcCount = this.l1Entities.length;
     const highlights: string[] = [];
     if (npcCount > 0) {
-      // 将决策引擎产出的亮点纳入
-      highlights.push(...l1Highlights.slice(0, 5));
+      highlights.push(...l1Highlights.slice(0, 8));
       const summaries = [
         `城中有${Math.min(npcCount, Math.floor(npcCount * 0.3))}人在忙碌地干活。`,
         `街上来来往往${Math.floor(npcCount * 0.1)}个行人。`,

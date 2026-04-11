@@ -1,0 +1,200 @@
+// ════════════════════════════════════════
+// L1 季节演出 (10个)
+// 春夏秋冬特色群体活动
+// ════════════════════════════════════════
+
+import { L1Scene } from '../../../ai/sceneLibrary/types';
+
+const ALL_PROFESSIONS = ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'];
+
+export const L1_SEASONAL_SCENES: L1Scene[] = [
+  {
+    id: 'l1_spring_planting',
+    name: '春耕忙种',
+    category: 'seasonal',
+    conditions: {
+      profession: ['farmer', 'laborer'],
+      dominantNeed: 'safety',
+      season: ['spring'],
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个农夫和苦力趁着春光抢种庄稼，田里水牛拉着犁翻出湿润的泥土，秧苗一捆捆地往田里运。',
+      avgEffects: { fatigue: 12, hunger: -10, mood: 5, copper: 5 },
+      atmosphereEffect: '生机勃勃',
+    },
+    weight: 9,
+    cooldownTicks: 3,
+    maxPerTick: 5,
+  },
+  {
+    id: 'l1_spring_blossom_viewing',
+    name: '踏青赏花',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      season: ['spring'],
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}结伴踏青赏花，桃花杏花开得漫山遍野，春风拂面花香醉人，好一幅人间三月天。',
+      avgEffects: { mood: 15, fatigue: -8, social: 6 },
+      atmosphereEffect: '春暖花开',
+    },
+    weight: 6,
+    cooldownTicks: 5,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_summer_heat_rest',
+    name: '酷暑纳凉',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'fatigue',
+      season: ['summer'],
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}在酷暑中找阴凉处歇息，蒲扇扇个不停汗还是止不住，井水镇过的西瓜切开一人一块。',
+      avgEffects: { fatigue: -10, mood: 5, hunger: 8 },
+      atmosphereEffect: '暑热',
+    },
+    weight: 8,
+    cooldownTicks: 3,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_summer_rainstorm',
+    name: '暴雨骤至',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'safety',
+      season: ['summer'],
+      weather: ['rain'],
+    },
+    outcome: {
+      narrative: '{count}个{professionName}被夏季暴雨淋了个措手不及，雷电交加大雨如注，众人抱着头冲向最近的屋檐。',
+      avgEffects: { mood: -8, health: -3, fatigue: 5 },
+      atmosphereEffect: '风雨交加',
+    },
+    weight: 7,
+    cooldownTicks: 4,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_autumn_harvest',
+    name: '秋收忙季',
+    category: 'seasonal',
+    conditions: {
+      profession: ['farmer', 'laborer'],
+      dominantNeed: 'safety',
+      season: ['autumn'],
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个农夫和苦力忙着秋收，金黄的稻穗弯了腰，镰刀挥得虎虎生风，打谷场上谷子堆成了小山。',
+      avgEffects: { fatigue: 15, hunger: -12, mood: 8, copper: 8 },
+      atmosphereEffect: '丰收',
+    },
+    weight: 9,
+    cooldownTicks: 3,
+    maxPerTick: 5,
+  },
+  {
+    id: 'l1_autumn_moon_festival',
+    name: '中秋赏月',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      season: ['autumn'],
+      timeOfDay: 'night',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}聚在一起过中秋，月饼切开了分着吃，桂花酒倒在粗碗里碰杯，抬头望月满轮如盘。',
+      avgEffects: { mood: 15, social: 10, hunger: 10 },
+      atmosphereEffect: '团圆',
+    },
+    weight: 5,
+    cooldownTicks: 10,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_winter_snow_play',
+    name: '雪后嬉戏',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      season: ['winter'],
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}在大雪后出来嬉戏，堆雪人打雪仗好不热闹，红扑扑的脸上全是雪沫子。',
+      avgEffects: { mood: 12, social: 6, fatigue: 3 },
+      atmosphereEffect: '银装素裹',
+    },
+    weight: 5,
+    cooldownTicks: 6,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_winter_firewood',
+    name: '冬日劈柴',
+    category: 'seasonal',
+    conditions: {
+      profession: ['farmer', 'laborer', 'hunter'],
+      dominantNeed: 'safety',
+      season: ['winter'],
+      timeOfDay: 'day',
+    },
+    outcome: {
+      narrative: '{count}个农夫苦力和猎人在冬日劈柴备火，斧头落下木屑纷飞，劈好的柴码得整整齐齐准备过冬。',
+      avgEffects: { fatigue: 10, hunger: -8, copper: 3 },
+      atmosphereEffect: '坚韧',
+    },
+    weight: 7,
+    cooldownTicks: 4,
+    maxPerTick: 3,
+  },
+  {
+    id: 'l1_new_year_prep',
+    name: '年关准备',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'mood',
+      season: ['winter'],
+    },
+    outcome: {
+      narrative: '{count}个{professionName}忙着准备过年，贴春联挂灯笼杀鸡宰羊，集市上红红火火人声鼎沸，年味越来越浓。',
+      avgEffects: { mood: 12, social: 6, copper: -10, hunger: 10 },
+      atmosphereEffect: '喜庆',
+    },
+    weight: 6,
+    cooldownTicks: 6,
+    maxPerTick: 4,
+  },
+  {
+    id: 'l1_lantern_festival',
+    name: '元宵灯会',
+    category: 'seasonal',
+    conditions: {
+      profession: ALL_PROFESSIONS,
+      dominantNeed: 'social',
+      season: ['spring'],
+      timeOfDay: 'night',
+    },
+    outcome: {
+      narrative: '{count}个{professionName}涌上街看元宵灯会，花灯争奇斗艳流光溢彩，猜灯谜的猜灯谜，吃汤圆的吃汤圆，热闹到深夜。',
+      avgEffects: { mood: 18, social: 10, fatigue: 5, copper: -5 },
+      atmosphereEffect: '灯火辉煌',
+    },
+    weight: 5,
+    cooldownTicks: 10,
+    maxPerTick: 3,
+  },
+];
