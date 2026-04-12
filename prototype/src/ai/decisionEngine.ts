@@ -524,6 +524,7 @@ export function decideWithScene(
   const actorContext = {
     traits: ctx.personality,
     profession: ctx.profession,
+    npcName: ctx.npcName,
     copper: ctx.copper,
     health: ctx.needs.health,
     emotion: ctx.emotion || '',

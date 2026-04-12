@@ -17,6 +17,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'safety',
       season: ['spring'],
       timeOfDay: 'day',
+      actorTraits: ['勤劳', '坚韧'],
+      actorForbiddenTraits: ['懒惰'],
     },
     outcome: {
       narrative: '{count}个农夫和苦力趁着春光抢种庄稼，田里水牛拉着犁翻出湿润的泥土，秧苗一捆捆地往田里运。',
@@ -36,6 +38,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       season: ['spring'],
       timeOfDay: 'day',
+      actorTraits: ['浪漫', '乐观'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}结伴踏青赏花，桃花杏花开得漫山遍野，春风拂面花香醉人，好一幅人间三月天。',
@@ -55,6 +59,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'fatigue',
       season: ['summer'],
       timeOfDay: 'day',
+      dominantMood: 'tired',
+      requireNearbyProfession: ['chef'],
     },
     outcome: {
       narrative: '{count}个{professionName}在酷暑中找阴凉处歇息，蒲扇扇个不停汗还是止不住，井水镇过的西瓜切开一人一块。',
@@ -74,6 +80,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'safety',
       season: ['summer'],
       weather: ['rain'],
+      actorForbiddenTraits: ['从容'],
+      dominantMood: 'anxious',
     },
     outcome: {
       narrative: '{count}个{professionName}被夏季暴雨淋了个措手不及，雷电交加大雨如注，众人抱着头冲向最近的屋檐。',
@@ -93,6 +101,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'safety',
       season: ['autumn'],
       timeOfDay: 'day',
+      actorTraits: ['勤劳', '坚韧'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个农夫和苦力忙着秋收，金黄的稻穗弯了腰，镰刀挥得虎虎生风，打谷场上谷子堆成了小山。',
@@ -112,6 +122,9 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'social',
       season: ['autumn'],
       timeOfDay: 'night',
+      actorTraits: ['浪漫', '深情'],
+      actorForbiddenTraits: ['冷漠'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}聚在一起过中秋，月饼切开了分着吃，桂花酒倒在粗碗里碰杯，抬头望月满轮如盘。',
@@ -131,6 +144,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       season: ['winter'],
       timeOfDay: 'day',
+      actorTraits: ['乐观', '爱玩'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}在大雪后出来嬉戏，堆雪人打雪仗好不热闹，红扑扑的脸上全是雪沫子。',
@@ -150,6 +165,8 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'safety',
       season: ['winter'],
       timeOfDay: 'day',
+      actorTraits: ['坚韧', '勤劳'],
+      actorForbiddenTraits: ['软弱'],
     },
     outcome: {
       narrative: '{count}个农夫苦力和猎人在冬日劈柴备火，斧头落下木屑纷飞，劈好的柴码得整整齐齐准备过冬。',
@@ -168,6 +185,9 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       season: ['winter'],
+      actorTraits: ['乐观', '热情'],
+      requireNearbyProfession: ['merchant', 'chef'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}忙着准备过年，贴春联挂灯笼杀鸡宰羊，集市上红红火火人声鼎沸，年味越来越浓。',
@@ -187,6 +207,9 @@ export const L1_SEASONAL_SCENES: L1Scene[] = [
       dominantNeed: 'social',
       season: ['spring'],
       timeOfDay: 'night',
+      actorTraits: ['好奇', '浪漫'],
+      requireNearbyProfession: ['merchant', 'chef'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}涌上街看元宵灯会，花灯争奇斗艳流光溢彩，猜灯谜的猜灯谜，吃汤圆的吃汤圆，热闹到深夜。',

@@ -78,6 +78,13 @@ export interface SceneOption {
   cost?: number;        // 铜钱花费
   costLabel?: string;   // 显示文本如 "5文"
   desc?: string;        // 选项描述
+  // === 漫野奇谭化：多步骤场景支持 ===
+  type?: 'action' | 'scene_phase';    // scene_phase 表示玩家场景中的选项
+  scenePhaseData?: {
+    sceneId: string;
+    phaseId: string;
+    choices: { id: string; text: string; condition?: { field: string; operator: string; value: number | string } }[];
+  };
 }
 
 export interface ServerMessage {

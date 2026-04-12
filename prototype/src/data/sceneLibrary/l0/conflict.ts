@@ -15,7 +15,7 @@ export const CONFLICT_SCENES: L0Scene[] = [
     name: '街头打架',
     description: '与仇敌在街头拳脚相向，最常见的暴力冲突',
     goalCategory: 'conflict',
-    outcomeType: 'contested',
+    outcomeType: 'multi_contested',
     contestedStat: { actor: 'bravery', target: 'strength' },
     conditions: {
       actorTraits: ['暴躁', '勇敢'],
@@ -24,7 +24,7 @@ export const CONFLICT_SCENES: L0Scene[] = [
       targetRelationType: 'enemy',
     },
     success: {
-      narrative: '{npcName}一拳砸在{targetName}脸上。围观的人炸了锅。尘土飞扬，{targetName}被打翻在地。',
+      narrative: '{npcName}一拳砸在{targetName}脸上。围观的人炸了锅。',
       effects: { mood: 5, health: -5 },
       targetEffects: { health: -15, mood: -10 },
       relationChange: -20,
@@ -37,6 +37,86 @@ export const CONFLICT_SCENES: L0Scene[] = [
       relationChange: -20,
       memoryTag: '被攻击',
     },
+    // === 漫野奇谭化：多属性判定 + 多层级结果 ===
+    resolution: {
+      type: 'multi_contested',
+      contestedStat: { actor: 'bravery', target: 'strength' },
+      multiContested: {
+        actorStats: [
+          { stat: 'bravery', weight: 1.0 },
+          { stat: 'strength', weight: 0.6 },
+          { stat: 'agility', weight: 0.3 },
+        ],
+        targetStats: [
+          { stat: 'bravery', weight: 0.5 },
+          { stat: 'strength', weight: 1.0 },
+          { stat: 'agility', weight: 0.3 },
+        ],
+        modifiers: [
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'angry' }, bonus: 10 },
+          { condition: { field: 'actorStress', op: 'gte', value: 60 }, bonus: 8 },
+          { condition: { field: 'honor', op: 'gte', value: 70 }, bonus: -10 },  // 荣誉高不愿打架
+          { condition: { field: 'nearbyCount', op: 'gte', value: 5 }, bonus: 5 }, // 围观多更兴奋
+        ],
+      },
+    },
+    tieredOutcomes: [
+      {
+        minScore: 90,
+        tier: 'critical_success',
+        outcome: {
+          narrative: '{npcName}一记漂亮的勾拳正中{targetName}下巴！{targetName}翻了个跟头倒地，半天爬不起来。围观者爆发出雷鸣般的叫好声。',
+          effects: { mood: 15, health: -2 },
+          targetEffects: { health: -25, mood: -20 },
+          relationChange: -30,
+          memoryTag: '完胜街头打架',
+        },
+      },
+      {
+        minScore: 60,
+        tier: 'success',
+        outcome: {
+          narrative: '{npcName}一拳砸在{targetName}脸上。围观的人炸了锅。尘土飞扬，{targetName}被打翻在地。',
+          effects: { mood: 5, health: -5 },
+          targetEffects: { health: -15, mood: -10 },
+          relationChange: -20,
+          memoryTag: '被攻击',
+        },
+      },
+      {
+        minScore: 40,
+        tier: 'partial_success',
+        outcome: {
+          narrative: '{npcName}和{targetName}扭打在一起，两人都挂了彩。围观的人拉开了他们，各自骂骂咧咧。',
+          effects: { mood: -3, health: -10 },
+          targetEffects: { health: -10, mood: -5 },
+          relationChange: -15,
+          memoryTag: '互殴',
+        },
+      },
+      {
+        minScore: 20,
+        tier: 'failure',
+        outcome: {
+          narrative: '{targetName}更快，一脚踹在{npcName}肚子上。踉跄倒退几步，撞翻了路边的水缸。',
+          effects: { health: -15, mood: -10 },
+          targetEffects: { health: -3, mood: 3 },
+          relationChange: -20,
+          memoryTag: '被打',
+        },
+      },
+      {
+        minScore: 0,
+        tier: 'critical_failure',
+        outcome: {
+          narrative: '{npcName}出手被{targetName}轻松闪开，反被一拳打翻在地。鼻子血流如注，围观者发出嘘声。巡街的甲士听到动静赶了过来。',
+          effects: { health: -25, mood: -20, copper: -10 },
+          targetEffects: { health: -2, mood: 10 },
+          relationChange: -25,
+          memoryTag: '惨败街头',
+        },
+      },
+    ],
     weight: 3,
     cooldownTicks: 10,
     tags: ['violence', 'street'],
@@ -117,7 +197,7 @@ export const CONFLICT_SCENES: L0Scene[] = [
     name: '拔刀相向',
     description: '冲突升级到动刀子，生死一线之间',
     goalCategory: 'conflict',
-    outcomeType: 'contested',
+    outcomeType: 'multi_contested',
     contestedStat: { actor: 'bravery', target: 'bravery' },
     conditions: {
       actorTraits: ['勇敢', '暴躁'],
@@ -128,18 +208,96 @@ export const CONFLICT_SCENES: L0Scene[] = [
       targetMinHealth: 40,
     },
     success: {
-      narrative: '"呛"地一声拔出刀来。铁器出鞘的声音尖利刺耳，周围的人哗地往后退。鲜血淌了下来。',
+      narrative: '"呛"地一声拔出刀来。铁器出鞘的声音尖利刺耳。',
       effects: { health: -10, mood: 3 },
       targetEffects: { health: -25, mood: -10 },
       relationChange: -30,
       memoryTag: '刀伤',
     },
     failure: {
-      narrative: '{targetName}一脚踢在{npcName}手腕上，刀飞出去了。紧接着一拳砸在面门上。',
+      narrative: '{targetName}一脚踢在{npcName}手腕上，刀飞出去了。',
       effects: { health: -25, mood: -15 },
       relationChange: -30,
       memoryTag: '被攻击',
     },
+    resolution: {
+      type: 'multi_contested',
+      contestedStat: { actor: 'bravery', target: 'bravery' },
+      multiContested: {
+        actorStats: [
+          { stat: 'bravery', weight: 1.2 },
+          { stat: 'strength', weight: 0.8 },
+          { stat: 'agility', weight: 0.5 },
+        ],
+        targetStats: [
+          { stat: 'bravery', weight: 1.2 },
+          { stat: 'strength', weight: 0.8 },
+          { stat: 'agility', weight: 0.5 },
+        ],
+        modifiers: [
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'angry' }, bonus: 15 },
+          { condition: { field: 'actorStress', op: 'gte', value: 70 }, bonus: 10 },
+          { condition: { field: 'rationality', op: 'gte', value: 70 }, bonus: -15 }, // 理性高不想拼命
+          { condition: { field: 'greed', op: 'gte', value: 70 }, bonus: -10 },       // 贪婪者惜命
+          { condition: { field: 'loyalty', op: 'gte', value: 70 }, bonus: 8 },       // 忠诚者在战斗中坚定
+        ],
+      },
+    },
+    tieredOutcomes: [
+      {
+        minScore: 90,
+        tier: 'critical_success',
+        outcome: {
+          narrative: '{npcName}"呛"地拔刀出鞘，刀光一闪，{targetName}的手臂上绽开一道血口！{targetName}痛呼倒地，再无还手之力。围观者吓得四散奔逃。',
+          effects: { health: -5, mood: 10 },
+          targetEffects: { health: -35, mood: -25 },
+          relationChange: -40,
+          memoryTag: '刀伤惨胜',
+        },
+      },
+      {
+        minScore: 60,
+        tier: 'success',
+        outcome: {
+          narrative: '"呛"地一声拔出刀来。铁器出鞘的声音尖利刺耳，周围的人哗地往后退。鲜血淌了下来。',
+          effects: { health: -10, mood: 3 },
+          targetEffects: { health: -25, mood: -10 },
+          relationChange: -30,
+          memoryTag: '刀伤',
+        },
+      },
+      {
+        minScore: 40,
+        tier: 'partial_success',
+        outcome: {
+          narrative: '{npcName}拔出刀来，{targetName}也亮出了家伙。两人对峙片刻，各自受了些轻伤，被旁人拼命拉开。刀口还在淌血。',
+          effects: { health: -20, mood: -5 },
+          targetEffects: { health: -18, mood: -8 },
+          relationChange: -30,
+          memoryTag: '互刃',
+        },
+      },
+      {
+        minScore: 20,
+        tier: 'failure',
+        outcome: {
+          narrative: '{targetName}一脚踢在{npcName}手腕上，刀飞出去了。紧接着一拳砸在面门上。',
+          effects: { health: -25, mood: -15 },
+          relationChange: -30,
+          memoryTag: '被攻击',
+        },
+      },
+      {
+        minScore: 0,
+        tier: 'critical_failure',
+        outcome: {
+          narrative: '{npcName}手一哆嗦，刀被{targetName}一把夺了过去。冰冷的刀刃架在{npcName}脖子上，{targetName}咬牙道："再敢动，要你命。"围观者鸦雀无声。',
+          effects: { health: -30, mood: -30, social: -10 },
+          relationChange: -40,
+          memoryTag: '被缴械',
+        },
+      },
+    ],
     weight: 1,
     cooldownTicks: 20,
     tags: ['violence', 'weapon', 'lethal'],

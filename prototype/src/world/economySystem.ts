@@ -39,6 +39,8 @@ export class EconomySystem {
   };
   /** 最近的价格变动记录 */
   private recentChanges: { item: string; change: string; reason: string }[] = [];
+  /** 临时价格修正（L2场景触发，每回合衰减） */
+  private priceMultipliers: Map<string, { multiplier: number; remaining: number }> = new Map();
 
   /** 基于供需和天气更新价格 */
   update(weather?: WeatherSystem, regions?: RegionStats[]): void {
@@ -94,6 +96,29 @@ export class EconomySystem {
         this.priceHistory[item].shift();
       }
     }
+
+    // 5. 应用临时价格修正并衰减
+    for (const [good, mod] of this.priceMultipliers) {
+      if (mod.remaining > 0) {
+        if (this.prices[good as keyof MarketPrices] !== undefined) {
+          const currentPrice = this.prices[good as keyof MarketPrices];
+          const base = BASE_PRICES[good as keyof MarketPrices] || 10;
+          const targetMod = base * mod.multiplier;
+          // 每回合向修正方向移动5%
+          const adjusted = currentPrice + (targetMod - currentPrice) * 0.05;
+          this.prices[good as keyof MarketPrices] = Math.round(Math.max(1, adjusted) * 100) / 100;
+        }
+        mod.remaining--;
+        if (mod.remaining <= 0) {
+          this.priceMultipliers.delete(good);
+        }
+      }
+    }
+  }
+
+  /** 应用L2场景触发的临时价格修正 */
+  applyPriceMultiplier(good: string, multiplier: number, durationTicks: number): void {
+    this.priceMultipliers.set(good, { multiplier, remaining: durationTicks });
   }
 
   getPrice(item: keyof MarketPrices): number {

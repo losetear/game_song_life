@@ -32,12 +32,13 @@ export function benchE2E(): BenchmarkItem {
     // 处理
     const result = engine.executePlayerAction(playerId, parsed.actionId, parsed.params);
 
-    // 模拟发送响应（JSON stringify）
+    // 模拟发送响应（JSON stringify）— 处理可能的场景中断
+    const isScenePhase = result && 'isScenePhase' in result;
     const response = JSON.stringify({
       type: 'actionResult',
       seqId: parsed.seqId,
-      data: { message: result.message },
-      timings: result.timings,
+      data: { message: isScenePhase ? (result as any).narrative : result.message },
+      timings: isScenePhase ? {} : (result as any).timings,
     });
 
     const elapsed = performance.now() - parseStart;

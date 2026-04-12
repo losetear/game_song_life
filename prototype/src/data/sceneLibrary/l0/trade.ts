@@ -16,7 +16,7 @@ export const TRADE_SCENES: L0Scene[] = [
     name: '狠砍价',
     description: '精明吝啬之人买东西，恨不得把铜钱掰成两半花。',
     goalCategory: 'trade',
-    outcomeType: 'contested',
+    outcomeType: 'multi_contested',
     contestedStat: { actor: 'eloquence', target: 'cleverness' },
     conditions: {
       actorTraits: ['精明', '吝啬'],
@@ -28,15 +28,85 @@ export const TRADE_SCENES: L0Scene[] = [
       location: ['east_market', 'west_market'],
     },
     success: {
-      narrative: '{npcName}拿起货看了看，眉头皱成一团。"这成色……五文，多一文不要。"{targetName}还想争辩，{npcName}放下东西转身就走。背后传来一声叹息："行行行，给你。"',
+      narrative: '{npcName}拿起货看了看，眉头皱成一团。"这成色……五文，多一文不要。"',
       effects: { copper: 8, mood: 3 },
       targetEffects: { copper: -8 },
       relationChange: -2,
     },
     failure: {
-      narrative: '两个人讨价还价了半个时辰，最后还是没谈拢。{npcName}悻悻地放下东西，空手走了。',
+      narrative: '两个人讨价还价了半个时辰，最后还是没谈拢。',
       effects: { mood: -2 },
     },
+    resolution: {
+      type: 'multi_contested',
+      contestedStat: { actor: 'eloquence', target: 'cleverness' },
+      multiContested: {
+        actorStats: [
+          { stat: 'eloquence', weight: 1.0 },
+          { stat: 'cleverness', weight: 0.5 },
+          { stat: 'greed', weight: 0.4 },
+        ],
+        targetStats: [
+          { stat: 'cleverness', weight: 1.0 },
+          { stat: 'eloquence', weight: 0.5 },
+        ],
+        modifiers: [
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'happy' }, bonus: -3 }, // 开心时容易大方
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'tense' }, bonus: 5 },   // 紧张时更计较
+          { condition: { field: 'nearbyCount', op: 'gte', value: 4 }, bonus: -5 },              // 围观多不好意思太狠
+        ],
+      },
+    },
+    tieredOutcomes: [
+      {
+        minScore: 90,
+        tier: 'critical_success',
+        outcome: {
+          narrative: '{npcName}拿起货看了半晌，嗤笑一声："就这破烂？送我都嫌占地方。"转身就走。{targetName}急了："别走别走，你说个价！"{npcName}头也不回地竖起两根指头。最终以极低的价格成交，{targetName}欲哭无泪。',
+          effects: { copper: 15, mood: 8 },
+          targetEffects: { copper: -15, mood: -8 },
+          relationChange: -5,
+        },
+      },
+      {
+        minScore: 60,
+        tier: 'success',
+        outcome: {
+          narrative: '{npcName}拿起货看了看，眉头皱成一团。"这成色……五文，多一文不要。"{targetName}还想争辩，{npcName}放下东西转身就走。背后传来一声叹息："行行行，给你。"',
+          effects: { copper: 8, mood: 3 },
+          targetEffects: { copper: -8 },
+          relationChange: -2,
+        },
+      },
+      {
+        minScore: 40,
+        tier: 'partial_success',
+        outcome: {
+          narrative: '{npcName}和{targetName}唇枪舌剑了半天，最终以一个折中价成交。两人谁也不满意，但都觉得自己没亏太多。',
+          effects: { copper: 3, mood: 0 },
+          targetEffects: { copper: -3 },
+          relationChange: 0,
+        },
+      },
+      {
+        minScore: 20,
+        tier: 'failure',
+        outcome: {
+          narrative: '两个人讨价还价了半个时辰，最后还是没谈拢。{npcName}悻悻地放下东西，空手走了。',
+          effects: { mood: -2 },
+        },
+      },
+      {
+        minScore: 0,
+        tier: 'critical_failure',
+        outcome: {
+          narrative: '{npcName}砍价砍得太狠，把{targetName}惹毛了。"买不起就别摸！"摊主一把夺回货物，还骂骂咧咧。围观的人都看向{npcName}，让他好不尴尬。',
+          effects: { mood: -10, social: -5 },
+          targetEffects: { mood: 5 },
+          relationChange: -8,
+        },
+      },
+    ],
     weight: 6,
     cooldownTicks: 3,
     tags: ['trade', 'haggling', 'market'],

@@ -189,35 +189,76 @@ export function matchL1Scene(
   const candidates: { scene: L1Scene; score: number }[] = [];
 
   for (const scene of allScenes) {
+    const cond = scene.conditions;
+
     // 职业过滤
-    if (!scene.conditions.profession.includes(context.profession)) continue;
+    if (!cond.profession.includes(context.profession)) continue;
 
     // 需求阈值
-    const needValue = (context.needs as Record<string, number>)[scene.conditions.dominantNeed];
-    if (scene.conditions.needThreshold !== undefined && needValue > scene.conditions.needThreshold) continue;
+    const needValue = (context.needs as Record<string, number>)[cond.dominantNeed];
+    if (cond.needThreshold !== undefined && needValue > cond.needThreshold) continue;
 
     // 组大小
-    if (scene.conditions.minGroupSize && context.groupSize < scene.conditions.minGroupSize) continue;
+    if (cond.minGroupSize && context.groupSize < cond.minGroupSize) continue;
 
     // 地点
-    if (scene.conditions.location && !scene.conditions.location.includes(context.gridId)) continue;
+    if (cond.location && !cond.location.includes(context.gridId)) continue;
 
     // 时段
-    if (!checkTimeOfDay(context.worldContext.shichen, scene.conditions.timeOfDay)) continue;
+    if (!checkTimeOfDay(context.worldContext.shichen, cond.timeOfDay)) continue;
 
     // 天气
-    if (scene.conditions.weather && scene.conditions.weather.length > 0 && !scene.conditions.weather.includes(context.worldContext.weather)) continue;
+    if (cond.weather && cond.weather.length > 0 && !cond.weather.includes(context.worldContext.weather)) continue;
 
     // 季节
-    if (scene.conditions.season && scene.conditions.season.length > 0 && !scene.conditions.season.includes(context.worldContext.season)) continue;
+    if (cond.season && cond.season.length > 0 && !cond.season.includes(context.worldContext.season)) continue;
 
     // 冷却
     if (recentSceneIds.includes(scene.id)) continue;
 
-    // 评分
+    // === 漫野奇谭化：加强条件约束 ===
+
+    // 性格过滤（组内至少1人匹配）
+    if (cond.actorTraits && cond.actorTraits.length > 0) {
+      if (!context.actorPersonality || !cond.actorTraits.some(t => context.actorPersonality!.includes(t))) continue;
+    }
+
+    // 禁止性格
+    if (cond.actorForbiddenTraits && cond.actorForbiddenTraits.length > 0) {
+      if (context.actorPersonality && cond.actorForbiddenTraits.some(t => context.actorPersonality!.includes(t))) continue;
+    }
+
+    // 附近职业要求
+    if (cond.requireNearbyProfession && cond.requireNearbyProfession.length > 0) {
+      if (!context.nearbyProfessions || !cond.requireNearbyProfession.some(p => context.nearbyProfessions!.includes(p))) continue;
+    }
+
+    // 附近关系要求
+    if (cond.requireNearbyRelation) {
+      if (!context.nearbyRelationTypes || !context.nearbyRelationTypes.includes(cond.requireNearbyRelation)) continue;
+    }
+
+    // 阵营类型要求
+    if (cond.requireFactionType && cond.requireFactionType.length > 0) {
+      if (!context.groupFactionTypes || !cond.requireFactionType.some(f => context.groupFactionTypes!.includes(f))) continue;
+    }
+
+    // 平均情绪要求
+    if (cond.dominantMood) {
+      const avgMood = context.avgMood ?? 50;
+      const moodMap: Record<string, [number, number]> = {
+        'happy': [60, 100], 'tense': [0, 40], 'angry': [0, 30],
+        'sad': [0, 35], 'social': [50, 100], 'bored': [20, 50],
+        'fearful': [0, 30],
+      };
+      const range = moodMap[cond.dominantMood];
+      if (range && (avgMood < range[0] || avgMood > range[1])) continue;
+    }
+
+    // 评分（降低随机噪声，让权重和属性主导）
     const score = scene.weight
       + (100 - (needValue || 50)) * 0.1
-      + Math.random() * 3;
+      + Math.random() * 0.5;
 
     candidates.push({ scene, score });
   }

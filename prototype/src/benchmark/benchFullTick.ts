@@ -30,8 +30,8 @@ export function benchFullTick(): BenchmarkItem {
   let lastResult: any;
 
   for (let i = 0; i < 5; i++) {
-    const result = engine.executePlayerAction(playerId, 'rest', {});
-    times.push(result.timings.total);
+    const result = engine.executePlayerAction(playerId, 'rest', {}) as any;
+    times.push(result.timings ? result.timings.total : 0);
     lastResult = result;
   }
 

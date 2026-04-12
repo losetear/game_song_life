@@ -15,6 +15,9 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
     conditions: {
       profession: ALL_PROFESSIONS,
       dominantNeed: 'fatigue',
+      actorTraits: ['好学', '耐心'],
+      actorForbiddenTraits: ['急躁'],
+      dominantMood: 'calm',
     },
     outcome: {
       narrative: '{count}个{professionName}围在棋摊看人对弈，下棋的捻须沉思，观棋的急得直跺脚恨不得替他落子。',
@@ -33,6 +36,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       timeOfDay: 'night',
+      actorTraits: ['爱冒险', '冲动'],
+      actorForbiddenTraits: ['自律'],
     },
     outcome: {
       narrative: '{count}个{professionName}围在暗巷里掷骰赌钱，骰子在碗里骨碌碌转，输的拍大腿赢的咧嘴笑。',
@@ -51,6 +56,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'fatigue',
       needThreshold: 40,
+      dominantMood: 'tired',
+      actorForbiddenTraits: ['吝啬'],
     },
     outcome: {
       narrative: '{count}个{professionName}在温泉里泡澡，热水漫过肩膀一天的疲惫全化开了，蒸汽氤氲中有人哼起了小曲。',
@@ -70,6 +77,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       timeOfDay: 'day',
       season: ['spring'],
+      actorTraits: ['乐观', '浪漫'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}在空地上放风筝，纸鸢乘风扶摇直上，线轴飞快地转着，欢笑声飘荡在春风里。',
@@ -88,6 +97,9 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'fatigue',
       timeOfDay: 'day',
+      actorTraits: ['耐心', '悠闲'],
+      actorForbiddenTraits: ['急躁'],
+      dominantMood: 'calm',
     },
     outcome: {
       narrative: '{count}个{professionName}在河边钓鱼，鱼竿一字排开浮漂在水面轻轻晃动，半天不上鱼也不着急，图的就是这份清净。',
@@ -106,6 +118,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       timeOfDay: 'dusk',
+      actorTraits: ['浪漫', '乐观'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}聚在一起奏乐，二胡琵琶笛子各显神通，曲调悠扬引得路人纷纷驻足。',
@@ -124,6 +138,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       timeOfDay: 'night',
+      actorTraits: ['浪漫', '口才好'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}在月下对歌，你一句我一句此起彼伏，歌声在夜色中回荡，引得邻里推开窗户倾听。',
@@ -142,6 +158,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'fatigue',
       needThreshold: 55,
+      actorTraits: ['悠闲', '好学'],
+      dominantMood: 'calm',
     },
     outcome: {
       narrative: '{count}个{professionName}围坐打牌消遣，四个人搓一圈麻将骨牌碰得哗啦响，茶水续了一壶又一壶。',
@@ -161,6 +179,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       dominantNeed: 'social',
       timeOfDay: 'night',
       season: ['winter'],
+      actorTraits: ['好奇', '口才好'],
+      actorForbiddenTraits: ['冷漠'],
     },
     outcome: {
       narrative: '{count}个{professionName}围在火炉边讲故事，柴火噼啪作响映红了众人的脸，鬼故事吓得胆小的直往人堆里缩。',
@@ -180,6 +200,9 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       timeOfDay: 'day',
       season: ['spring'],
+      actorTraits: ['浪漫', '悠闲'],
+      actorForbiddenTraits: ['暴躁'],
+      requireNearbyRelation: 'friend',
     },
     outcome: {
       narrative: '{count}个{professionName}在河边铺开布帕野餐，河水清澈柳枝垂拂，春风带着花香把饭菜都衬得更香了。',
@@ -198,6 +221,8 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
       profession: ['guard', 'hunter', 'laborer', 'farmer', 'rogue'],
       dominantNeed: 'mood',
       timeOfDay: 'day',
+      actorTraits: ['勇敢', '好胜'],
+      actorForbiddenTraits: ['软弱'],
     },
     outcome: {
       narrative: '{count}个{professionName}在空地上举行摔跤比赛，两人扭成一团难分难解，围观者叫好声震天，赌谁赢的铜板押了一地。',
@@ -215,6 +240,9 @@ export const L1_LEISURE_SCENES: L1Scene[] = [
     conditions: {
       profession: ['teacher', 'doctor', 'merchant'],
       dominantNeed: 'mood',
+      actorTraits: ['博学', '雅致'],
+      actorForbiddenTraits: ['粗鲁', '暴躁'],
+      dominantMood: 'calm',
     },
     outcome: {
       narrative: '{count}个先生大夫和商贩在诗会上吟诗作对，宣纸铺开墨香四溢，一句好诗引得众人抚掌叫绝。',

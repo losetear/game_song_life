@@ -15,6 +15,7 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
     conditions: {
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
+      actorTraits: ['口才好', '好奇'],
     },
     outcome: {
       narrative: '{count}个{professionName}在{location}交换八卦，谁家婆娘跑了、谁家小子中了秀才，消息比风传得还快。',
@@ -33,6 +34,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
       timeOfDay: 'day',
+      actorTraits: ['好奇', '乐观'],
+      requireNearbyProfession: ['teacher'],
     },
     outcome: {
       narrative: '{count}个{professionName}挤在茶楼听书，说书先生一拍惊堂木，满座鸦雀无声，精彩处轰然叫好。',
@@ -51,6 +54,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
       needThreshold: 60,
+      actorForbiddenTraits: ['冷漠'],
+      requireNearbyRelation: 'neighbor',
     },
     outcome: {
       narrative: '{count}个{professionName}聚在街角闲聊，倚着墙根蹲在地上，有一搭没一搭地扯着闲篇。',
@@ -69,6 +74,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       needThreshold: 60,
+      actorTraits: ['幽默', '乐观'],
+      actorForbiddenTraits: ['严肃'],
     },
     outcome: {
       narrative: '{count}个{professionName}一边干活一边开玩笑，荤段子抛来抛去引来一阵哄笑，苦活也不那么难熬了。',
@@ -87,6 +94,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
       timeOfDay: 'day',
+      dominantMood: 'happy',
+      requireNearbyProfession: ['merchant', 'chef'],
     },
     outcome: {
       narrative: '{count}个{professionName}参加庙会，锣鼓喧天狮子舞得欢，杂耍摊前围满了人，糖人糖葫芦诱得孩童直嚷嚷。',
@@ -105,6 +114,9 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       needThreshold: 35,
+      actorTraits: ['仁慈', '深情'],
+      actorForbiddenTraits: ['冷漠'],
+      dominantMood: 'sad',
     },
     outcome: {
       narrative: '{count}个{professionName}在悼念逝去的邻人，白幡在风中飘动，众人默默站着，有人低声念着逝者的好。',
@@ -122,6 +134,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
     conditions: {
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
+      actorTraits: ['热情', '慷慨'],
+      actorForbiddenTraits: ['冷漠', '傲慢'],
     },
     outcome: {
       narrative: '{count}个{professionName}迎接新来的邻居，有人端了碗热汤过去，有人帮忙搬家具，街坊们热情地打着招呼。',
@@ -140,6 +154,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       needThreshold: 50,
+      actorTraits: ['好奇'],
+      actorForbiddenTraits: ['正义'],
     },
     outcome: {
       narrative: '{count}个{professionName}围观一场争吵，两人指着鼻子骂得不可开交，旁观者有的劝有的起哄，乱成一锅粥。',
@@ -158,6 +174,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       timeOfDay: 'day',
+      actorTraits: ['温柔', '乐观'],
+      requireNearbyRelation: 'family',
     },
     outcome: {
       narrative: '{count}个家庭看孩子们在街上玩耍，踢毽子跳皮筋追逐打闹，大人们站在一旁脸上露出了笑容。',
@@ -176,6 +194,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
       timeOfDay: 'dusk',
+      actorTraits: ['好奇', '尊老'],
+      requireNearbyRelation: 'elder',
     },
     outcome: {
       narrative: '{count}个{professionName}听老人讲古，槐树底下一把蒲扇一壶茶，从先帝爷讲到旱涝灾荒，听众时而唏嘘时而点头。',
@@ -194,6 +214,9 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
       timeOfDay: 'dusk',
+      actorTraits: ['悠闲'],
+      actorForbiddenTraits: ['暴躁'],
+      requireNearbyRelation: 'friend',
     },
     outcome: {
       narrative: '{count}个{professionName}在傍晚散步，天边烧着火红的晚霞，三三两两沿着河边走，聊聊一天的琐事。',
@@ -212,6 +235,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'fatigue',
       timeOfDay: 'dawn',
+      actorTraits: ['自律', '勤劳'],
+      dominantMood: 'energetic',
     },
     outcome: {
       narrative: '{count}个{professionName}在晨光中活动筋骨，有人打拳有人慢走，清新的空气灌进肺里精神为之一振。',
@@ -230,6 +255,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       location: ['temple'],
+      actorTraits: ['虔诚'],
+      actorForbiddenTraits: ['贪婪'],
     },
     outcome: {
       narrative: '{count}个{professionName}聚集在寺庙祈福，香烟袅袅木鱼声声，跪在蒲团上虔诚地叩拜许愿。',
@@ -248,6 +275,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'social',
       weather: ['rain'],
+      actorForbiddenTraits: ['冷漠'],
+      dominantMood: 'calm',
     },
     outcome: {
       narrative: '{count}个{professionName}挤在雨棚下躲雨，肩挨着肩听着哗哗雨声，陌生人之间也搭上了话。',
@@ -266,6 +295,8 @@ export const L1_SOCIAL_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       timeOfDay: 'night',
+      actorTraits: ['浪漫', '诗意'],
+      dominantMood: 'calm',
     },
     outcome: {
       narrative: '{count}个{professionName}一起赏月，皓月当空银辉洒地，有人吟诗有人默默出神，夜风送来阵阵花香。',

@@ -13,6 +13,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
     conditions: {
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
+      actorTraits: ['精明', '节俭'],
+      actorForbiddenTraits: ['傲慢'],
     },
     outcome: {
       narrative: '{count}个{professionName}在{location}的市场摊位前找便宜吃的，挑挑拣拣比了好几家才掏出铜板。',
@@ -32,6 +34,7 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       dominantNeed: 'hunger',
       needThreshold: 40,
       timeOfDay: 'day',
+      actorTraits: ['勤劳'],
     },
     outcome: {
       narrative: '{count}个{professionName}趁着午休匆匆扒了一口饭，碗筷还没放稳就又忙去了。',
@@ -51,6 +54,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       dominantNeed: 'hunger',
       needThreshold: 30,
       location: ['temple'],
+      actorTraits: ['虔诚', '谦逊'],
+      actorForbiddenTraits: ['贪婪'],
     },
     outcome: {
       narrative: '{count}个{professionName}在寺庙门口排着队领粥，木碗里稀粥冒着热气，虽然清淡却是救命的暖意。',
@@ -69,6 +74,7 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
       needThreshold: 45,
+      requireNearbyProfession: ['chef', 'merchant'],
     },
     outcome: {
       narrative: '热心摊贩给{count}个{professionName}免费试吃，油条炸得金黄酥脆，众人连连点头。',
@@ -87,6 +93,7 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
       needThreshold: 50,
+      dominantMood: 'tired',
     },
     outcome: {
       narrative: '{count}个{professionName}在井边歇脚喝水，葫芦瓢传来传去，清凉的井水顺着喉咙直淌下去。',
@@ -106,6 +113,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       dominantNeed: 'hunger',
       needThreshold: 40,
       timeOfDay: 'dawn',
+      actorTraits: ['勤劳'],
+      requireNearbyProfession: ['chef'],
     },
     outcome: {
       narrative: '{count}个{professionName}喝着便宜粥当早饭，白粥配咸菜，简单却暖胃，新的一天就这么开始了。',
@@ -125,6 +134,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       dominantNeed: 'hunger',
       needThreshold: 30,
       minGroupSize: 3,
+      actorTraits: ['慷慨', '乐观'],
+      actorForbiddenTraits: ['自私'],
     },
     outcome: {
       narrative: '{count}个{professionName}凑在一起把剩菜煮了一锅，虽然寒酸但众人分食倒也热闹，谁也没嫌弃。',
@@ -143,6 +154,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'mood',
       needThreshold: 30,
+      actorTraits: ['勤劳', '坚韧'],
+      dominantMood: 'anxious',
     },
     outcome: {
       narrative: '{count}个{professionName}忙得顾不上吃饭，肚子咕咕叫着却谁也不肯先停下手里的活。',
@@ -161,6 +174,9 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'doctor', 'blacksmith', 'chef', 'teacher', 'guard'],
       dominantNeed: 'hunger',
       needThreshold: 50,
+      actorTraits: ['慷慨', '豪爽'],
+      actorForbiddenTraits: ['吝啬'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}凑钱吃了一顿好的，红烧肉、清蒸鱼摆满一桌，众人举杯碰碗好不痛快。',
@@ -179,6 +195,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
       weather: ['rain'],
+      actorForbiddenTraits: ['乐观'],
+      dominantMood: 'gloomy',
     },
     outcome: {
       narrative: '{count}个{professionName}在避雨处啃干粮，雨水顺着屋檐滴答作响，冷馒头就着凉水也算一顿。',
@@ -198,6 +216,9 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       dominantNeed: 'hunger',
       needThreshold: 40,
       season: ['winter'],
+      actorTraits: ['坚韧'],
+      actorForbiddenTraits: ['软弱'],
+      dominantMood: 'sad',
     },
     outcome: {
       narrative: '{count}个{professionName}在寒冬中艰难觅食，呼出的白气凝结在围巾上，路边的店铺都关了大半。',
@@ -216,6 +237,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['farmer'],
       dominantNeed: 'hunger',
       season: ['autumn'],
+      actorTraits: ['勤劳', '乐观'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个农夫庆祝丰收大吃一顿，新米煮的饭格外香甜，锅里炖着肥鸡，一年的辛苦都在这一刻值了。',
@@ -234,6 +257,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
       timeOfDay: 'night',
+      requireNearbyProfession: ['chef', 'merchant'],
+      dominantMood: 'happy',
     },
     outcome: {
       narrative: '{count}个{professionName}在夜市吃宵夜，灯火通明的摊位飘着烤串的香味，铁板上滋滋冒油。',
@@ -252,6 +277,7 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'doctor', 'hunter', 'blacksmith', 'chef', 'teacher', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
       needThreshold: 55,
+      requireNearbyProfession: ['doctor'],
     },
     outcome: {
       narrative: '{count}个{professionName}喝了碗凉茶解渴，药草的甘苦在舌尖化开，暑气消了不少。',
@@ -270,6 +296,8 @@ export const L1_SURVIVAL_SCENES: L1Scene[] = [
       profession: ['merchant', 'farmer', 'guard', 'hunter', 'blacksmith', 'laborer', 'rogue'],
       dominantNeed: 'hunger',
       needThreshold: 35,
+      actorForbiddenTraits: ['自律', '虔诚'],
+      dominantMood: 'sad',
     },
     outcome: {
       narrative: '{count}个{professionName}喝着劣酒忘却饥饿，辛辣的酒液灼烧喉咙，却也暂时压住了胃里的空虚。',

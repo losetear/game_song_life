@@ -14,7 +14,7 @@ export const MISCHIEF_SCENES: L0Scene[] = [
 
   {
     id: 'mi_pickpocket', name: '扒窃', description: '狡猾者伸手摸人钱袋',
-    goalCategory: 'mischief', outcomeType: 'contested', weight: 2, cooldownTicks: 8,
+    goalCategory: 'mischief', outcomeType: 'multi_contested', weight: 2, cooldownTicks: 8,
     contestedStat: { actor: 'cunning', target: 'alertness' },
     tags: ['stealing', 'street', 'aggressive'],
     conditions: {
@@ -35,6 +35,85 @@ export const MISCHIEF_SCENES: L0Scene[] = [
       relationChange: -25,
       memoryTag: '扒窃被抓',
     },
+    resolution: {
+      type: 'multi_contested',
+      contestedStat: { actor: 'cunning', target: 'alertness' },
+      multiContested: {
+        actorStats: [
+          { stat: 'cunning', weight: 1.2 },
+          { stat: 'agility', weight: 0.6 },
+          { stat: 'greed', weight: 0.3 },
+        ],
+        targetStats: [
+          { stat: 'alertness', weight: 1.0 },
+          { stat: 'cunning', weight: 0.4 },
+        ],
+        modifiers: [
+          { condition: { field: 'nearbyCount', op: 'gte', value: 5 }, bonus: 8 },  // 人多好下手
+          { condition: { field: 'nearbyCount', op: 'lte', value: 2 }, bonus: -10 }, // 人少容易暴露
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'tense' }, bonus: -8 }, // 紧张手抖
+          { condition: { field: 'actorStress', op: 'gte', value: 60 }, bonus: -5 },
+          { condition: { field: 'honor', op: 'gte', value: 60 }, bonus: -15 }, // 有荣誉感的不擅长偷窃
+        ],
+      },
+    },
+    tieredOutcomes: [
+      {
+        minScore: 90,
+        tier: 'critical_success',
+        outcome: {
+          narrative: '{npcName}的手如鬼魅般探入{targetName}怀中，不仅摸走了钱袋，还顺手牵走了一块玉佩。等到{targetName}发现时，{npcName}早已消失在人群中。',
+          effects: { copper: 25, mood: 8, safety: -5 },
+          targetEffects: { copper: -25, mood: -15 },
+          relationChange: -20,
+          memoryTag: '满载而归',
+        },
+      },
+      {
+        minScore: 60,
+        tier: 'success',
+        outcome: {
+          narrative: '{npcName}的手像蛇一样伸进了{targetName}的口袋。指尖触到铜钱的一刻，心跳猛地加速。得手了。',
+          effects: { copper: 15, mood: 3, safety: -10 },
+          targetEffects: { copper: -15, mood: -8 },
+          relationChange: -15,
+          memoryTag: '扒窃得手',
+        },
+      },
+      {
+        minScore: 40,
+        tier: 'partial_success',
+        outcome: {
+          narrative: '{npcName}的手伸进{targetName}口袋，刚碰到铜钱，{targetName}似乎有所察觉，回了一下头。{npcName}赶紧缩手，只摸走了几文散钱。',
+          effects: { copper: 5, mood: -2, safety: -15 },
+          targetEffects: { copper: -5, mood: -2 },
+          relationChange: -10,
+          memoryTag: '勉强得手',
+        },
+      },
+      {
+        minScore: 20,
+        tier: 'failure',
+        outcome: {
+          narrative: '{npcName}的手刚伸出去，{targetName}猛地回头，一把抓住了他的手腕。"抓小偷！"',
+          effects: { mood: -15, safety: -25, health: -5 },
+          targetEffects: { mood: 5 },
+          relationChange: -25,
+          memoryTag: '扒窃被抓',
+        },
+      },
+      {
+        minScore: 0,
+        tier: 'critical_failure',
+        outcome: {
+          narrative: '{npcName}还没来得及下手，旁边的巡城甲士就注意到了他的可疑举动。一把扣住他的肩膀："鬼鬼祟祟干什么？"铜钱没偷到，自己倒被押进了府衙。',
+          effects: { mood: -25, safety: -40, copper: -20 },
+          targetEffects: { mood: 0 },
+          relationChange: -30,
+          memoryTag: '当场抓获',
+        },
+      },
+    ],
   },
   {
     id: 'mi_con_game', name: '骗术', description: '用花言巧语骗人钱财',

@@ -4,7 +4,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import path from 'path';
-import { WorldEngine } from '../world/worldEngine';
+import { WorldEngine, ScenePhaseResult } from '../world/worldEngine';
 import { ClientMessage, ServerMessage, BenchmarkReport, SceneOption } from './protocol';
 import { runAllBenchmarks } from '../benchmark/runner';
 
@@ -761,6 +761,56 @@ export class GameServer {
       }
     });
 
+    // ── 场景选择 API ──────────────────────────────────
+
+    // POST /api/scene-choice — 处理玩家多步骤场景选择
+    this.app.post('/api/scene-choice', (req, res) => {
+      try {
+        const { choiceId } = req.body;
+        if (!choiceId) { res.status(400).json({ success: false, message: '缺少choiceId参数' }); return; }
+        const result = this.engine.resolvePlayerSceneChoice(this.playerId, choiceId);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // ── 监控面板 API（实体引用 + 场景历史）──────────────────────────
+
+    // GET /api/world/events/by-entity/:id — 查询涉及指定实体的事件
+    this.app.get('/api/world/events/by-entity/:id', (req, res) => {
+      try {
+        const entityId = parseInt(req.params.id);
+        const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+        const events = this.engine.getEventsByEntity(entityId, limit);
+        res.json({ entityId, total: events.length, events });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // GET /api/world/scene-history — 查询场景历史
+    this.app.get('/api/world/scene-history', (req, res) => {
+      try {
+        const level = req.query.level as string | undefined;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+        const scenes = this.engine.getSceneHistory(level, limit);
+        res.json({ total: scenes.length, scenes });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
+    // GET /api/world/player-scene/status — 当前活跃玩家场景状态
+    this.app.get('/api/world/player-scene/status', (_req, res) => {
+      try {
+        const active = this.engine.sceneLib.getActivePlayerScene();
+        res.json({ active: !!active, scene: active });
+      } catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+      }
+    });
+
     // ── 上帝模式 / Admin API ──────────────────────────────────
 
     // POST /api/admin/weather — 强制天气变更
@@ -903,7 +953,73 @@ export class GameServer {
           const msg: ClientMessage = JSON.parse(data.toString());
 
           if (msg.type === 'action') {
+            // 场景选择处理
+            if (msg.actionId === 'scene_choice') {
+              const result = this.engine.resolvePlayerSceneChoice(this.playerId, msg.params?.choiceId);
+              if (result && 'isScenePhase' in result) {
+                const sr = result as ScenePhaseResult;
+                ws.send(JSON.stringify({
+                  type: 'actionResult',
+                  seqId: msg.seqId,
+                  data: {
+                    message: sr.narrative,
+                    scenePhaseData: {
+                      sceneId: sr.sceneId,
+                      narrative: sr.narrative,
+                      choices: sr.choices,
+                      participantNames: sr.participantNames,
+                    },
+                    worldState: sr.worldState,
+                    playerState: sr.playerState,
+                  },
+                }));
+              } else {
+                // 场景结束，返回正常 TickResult
+                const tr = result as any;
+                ws.send(JSON.stringify({
+                  type: 'actionResult',
+                  seqId: msg.seqId,
+                  data: {
+                    message: tr.message,
+                    sceneDescription: tr.sceneDescription,
+                    sceneLocation: `汴京 · ${tr.sceneLocation}`,
+                    npcMessages: tr.npcMessages,
+                    worldState: tr.worldState,
+                    perception: tr.perception,
+                    playerState: tr.playerState,
+                    turnSummary: tr.turnSummary,
+                    distantNews: tr.distantNews,
+                    briefing: tr.briefing,
+                  },
+                  timings: tr.timings,
+                }));
+              }
+              return;
+            }
+
             const result = this.engine.executePlayerAction(this.playerId, msg.actionId, msg.params);
+
+            // 检查是否被多步骤场景中断
+            if (result && 'isScenePhase' in result) {
+              const sr = result as ScenePhaseResult;
+              ws.send(JSON.stringify({
+                type: 'actionResult',
+                seqId: msg.seqId,
+                data: {
+                  message: sr.narrative,
+                  scenePhaseData: {
+                    sceneId: sr.sceneId,
+                    narrative: sr.narrative,
+                    choices: sr.choices,
+                    participantNames: sr.participantNames,
+                  },
+                  worldState: sr.worldState,
+                  playerState: sr.playerState,
+                },
+              }));
+              return;
+            }
+
             const response: ServerMessage = {
               type: 'actionResult',
               seqId: msg.seqId,
@@ -911,7 +1027,6 @@ export class GameServer {
                 message: result.message,
                 sceneDescription: result.sceneDescription,
                 sceneLocation: `汴京 · ${result.sceneLocation}`,
-                // 不再发送硬编码的场景选项 — 选项由 nearby 实体和 move-options 动态提供
                 npcMessages: result.npcMessages,
                 worldState: result.worldState,
                 perception: result.perception,
@@ -939,8 +1054,9 @@ export class GameServer {
     this.engine.em.addComponent(this.playerId, 'Vital', { hunger: 80, fatigue: 80, health: 100, mood: 70 });
     this.engine.em.addComponent(this.playerId, 'Wallet', { copper: 100 });
     this.engine.em.addComponent(this.playerId, 'Inventory', { items: [] });
-    this.engine.em.addComponent(this.playerId, 'Identity', { name: '你', profession: 'wanderer', age: 25, personality: [] });
+    this.engine.em.addComponent(this.playerId, 'Identity', { name: '你', profession: 'wanderer', age: 25, personality: ['勇敢', '精明', '善良'] });
     this.engine.em.addComponent(this.playerId, 'ActionPoints', { current: 5, max: 5 });
+    this.engine.em.addComponent(this.playerId, 'HiddenTraits', { rationality: 40, greed: 30, honor: 50, ambition: 35, loyalty: 45, revealedTo: [] });
     this.engine.worldMap.addEntity(this.playerId, 'center_street');
   }
 

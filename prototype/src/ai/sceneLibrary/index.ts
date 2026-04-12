@@ -8,8 +8,14 @@ export {
   L1Scene, L1SceneCondition, L1SceneOutcome, L1MatchContext, L1MatchResult,
   L2Scene, L2SceneCondition, L2SceneOutcomeVariant, L2RegionStats, L2MatchResult,
   NearbyNpcInfo, SceneDecisionResult,
+  // 漫野奇谭化新增
+  SceneResolution, TieredOutcome, OutcomeTier,
+  PlayerScene, PlayerSceneStep, PlayerSceneChoice, PlayerSceneConsequence,
+  PlayerSceneParticipant, PlayerSceneState, PlayerSceneMatchResult,
+  PlayerChoiceCondition,
 } from './types';
-export { resolveScene } from './resolver';
+export { resolveScene, resolveSceneV2, selectTieredOutcome } from './resolver';
+export type { ResolveContext, ResolveResult } from './resolver';
 export { formatNarrative, PROFESSION_DISPLAY, shichenDesc, gridDisplayName } from './narrativeFormatter';
 export { matchL0Scene, matchL1Scene, matchL2Scenes } from './matcher';
 // 兼容旧导入

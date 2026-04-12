@@ -16,6 +16,8 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['merchant', 'blacksmith', 'chef'],
       dominantNeed: 'safety',
       minGroupSize: 3,
+      actorTraits: ['精明', '口才好'],
+      requireFactionType: ['guild'],
     },
     outcome: {
       narrative: '{count}个商贩铁匠和厨子聚在行会里议事，商定今年的行规和物价，意见不一的拍桌吵嚷，统一的点头附和。',
@@ -34,6 +36,8 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['guard'],
       dominantNeed: 'fatigue',
       timeOfDay: 'dawn',
+      actorTraits: ['严肃', '正义'],
+      requireFactionType: ['official'],
     },
     outcome: {
       narrative: '{count}个衙役在城门口换班，夜班的面带倦色交了钥匙，白班的束紧腰带接过令牌，一切井然有序。',
@@ -52,6 +56,9 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['rogue'],
       dominantNeed: 'safety',
       minGroupSize: 3,
+      actorTraits: ['霸道', '狡猾'],
+      actorForbiddenTraits: ['正义'],
+      requireFactionType: ['gang'],
     },
     outcome: {
       narrative: '{count}个混混在{location}宣示地盘，叉腰瞪眼摆出一副不好惹的架势，警告外人别越界。',
@@ -70,6 +77,9 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['farmer'],
       dominantNeed: 'social',
       minGroupSize: 3,
+      actorTraits: ['合作', '慷慨'],
+      actorForbiddenTraits: ['自私'],
+      requireNearbyRelation: 'neighbor',
     },
     outcome: {
       narrative: '{count}个农夫自发组织起来互助，今天帮你家收谷明天帮他家修屋顶，有活一起干有力一起出。',
@@ -87,6 +97,8 @@ export const L1_FACTION_SCENES: L1Scene[] = [
     conditions: {
       profession: ['merchant', 'guard', 'hunter'],
       dominantNeed: 'safety',
+      actorTraits: ['勇敢', '合作'],
+      requireFactionType: ['guild', 'official'],
     },
     outcome: {
       narrative: '{count}个商贩衙役和猎人组成了商队护卫队，刀枪上膛弓弩在手，护送满载货物的骡车穿过险要路段。',
@@ -105,6 +117,8 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['doctor', 'teacher'],
       dominantNeed: 'mood',
       location: ['temple'],
+      actorTraits: ['仁慈', '虔诚'],
+      actorForbiddenTraits: ['贪婪', '冷漠'],
     },
     outcome: {
       narrative: '{count}个大夫和先生在寺庙里义诊义教，看病的不收钱，识字的不收束修，穷苦人排着队感恩戴德。',
@@ -123,6 +137,9 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['laborer'],
       dominantNeed: 'safety',
       minGroupSize: 3,
+      actorTraits: ['坚韧', '合作'],
+      actorForbiddenTraits: ['自私'],
+      requireFactionType: ['guild'],
     },
     outcome: {
       narrative: '{count}个苦力结成帮伙揽活，人多力量大能接大活，活干完了一起领工钱，不干活的钱一个子儿也拿不到。',
@@ -142,6 +159,10 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       needThreshold: 55,
       minGroupSize: 4,
+      actorTraits: ['豪爽', '忠诚'],
+      actorForbiddenTraits: ['冷漠'],
+      dominantMood: 'happy',
+      requireFactionType: ['guild', 'gang'],
     },
     outcome: {
       narrative: '{count}个{professionName}在帮会庆功宴上举杯痛饮，桌上摆满了好酒好菜，同门兄弟你一句我一句吹着牛皮。',
@@ -160,6 +181,10 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       profession: ['rogue', 'guard', 'merchant'],
       dominantNeed: 'mood',
       needThreshold: 35,
+      actorTraits: ['暴躁', '冲动'],
+      actorForbiddenTraits: ['冷静'],
+      requireFactionType: ['gang', 'official'],
+      dominantMood: 'angry',
     },
     outcome: {
       narrative: '{count}个混混衙役和商贩卷入了两派之间的摩擦，互相推搡叫骂剑拔弩张，街面上的气氛骤然紧张起来。',
@@ -179,6 +204,9 @@ export const L1_FACTION_SCENES: L1Scene[] = [
       dominantNeed: 'social',
       needThreshold: 45,
       minGroupSize: 3,
+      actorTraits: ['忠诚', '勇敢'],
+      actorForbiddenTraits: ['自私'],
+      requireNearbyRelation: 'friend',
     },
     outcome: {
       narrative: '{count}个{professionName}举行了结义仪式，焚香磕头歃血为盟，誓言有福同享有难同当，从此便是异姓兄弟。',

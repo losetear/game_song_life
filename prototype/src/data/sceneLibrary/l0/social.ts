@@ -153,7 +153,7 @@ export const SOCIAL_SCENES: L0Scene[] = [
   },
   {
     id: 'so_play_dice', name: '掷骰子', description: '和朋友比试骰子',
-    goalCategory: 'social', outcomeType: 'contested', weight: 4, cooldownTicks: 4,
+    goalCategory: 'social', outcomeType: 'multi_contested', weight: 4, cooldownTicks: 4,
     contestedStat: { actor: 'cleverness', target: 'luck' },
     tags: ['gambling', 'game', 'social'],
     conditions: {
@@ -161,16 +161,86 @@ export const SOCIAL_SCENES: L0Scene[] = [
       targetRequired: true,
     },
     success: {
-      narrative: '{npcName}和{targetName}摆开骰子。{npcName}一把掷下去，三个六朝上。"哈哈，我赢了！"{targetName}苦笑着掏出铜钱。',
+      narrative: '{npcName}和{targetName}摆开骰子。{npcName}一把掷下去，三个六朝上。',
       effects: { copper: 5, mood: 8, social: 5 },
       targetEffects: { copper: -5, mood: -3 },
       relationChange: 1,
     },
     failure: {
-      narrative: '骰子骨碌碌转了好几圈才停下。{targetName}一看点数，乐了。{npcName}挠了挠头："再来再来！"',
+      narrative: '骰子骨碌碌转了好几圈才停下。{targetName}一看点数，乐了。',
       effects: { copper: -5, mood: -2, social: 5 },
       relationChange: 1,
     },
+    resolution: {
+      type: 'multi_contested',
+      contestedStat: { actor: 'cleverness', target: 'luck' },
+      multiContested: {
+        actorStats: [
+          { stat: 'cleverness', weight: 1.0 },
+          { stat: 'cunning', weight: 0.5 },
+          { stat: 'luck', weight: 0.3 },
+        ],
+        targetStats: [
+          { stat: 'luck', weight: 1.0 },
+          { stat: 'cleverness', weight: 0.3 },
+        ],
+        modifiers: [
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'happy' }, bonus: 5 },
+          { condition: { field: 'actorEmotion', op: 'includes', value: 'tense' }, bonus: -5 },
+        ],
+      },
+    },
+    tieredOutcomes: [
+      {
+        minScore: 90,
+        tier: 'critical_success',
+        outcome: {
+          narrative: '{npcName}和{targetName}摆开骰子。{npcName}一把掷下去，三个六朝上！"豹子！"围观的人炸了锅。{targetName}目瞪口呆，苦笑着掏出铜钱。{npcName}得意洋洋地把铜钱哗啦啦倒进自己袋里。',
+          effects: { copper: 10, mood: 15, social: 8 },
+          targetEffects: { copper: -10, mood: -5 },
+          relationChange: 2,
+        },
+      },
+      {
+        minScore: 60,
+        tier: 'success',
+        outcome: {
+          narrative: '{npcName}和{targetName}摆开骰子。{npcName}一把掷下去，三个六朝上。"哈哈，我赢了！"{targetName}苦笑着掏出铜钱。',
+          effects: { copper: 5, mood: 8, social: 5 },
+          targetEffects: { copper: -5, mood: -3 },
+          relationChange: 1,
+        },
+      },
+      {
+        minScore: 40,
+        tier: 'partial_success',
+        outcome: {
+          narrative: '两人你输一把我赢一把，打了半天平手。最后{npcName}险胜半子，{targetName}笑道："再来！我不信邪！"',
+          effects: { copper: 2, mood: 3, social: 5 },
+          targetEffects: { copper: -2, mood: 2 },
+          relationChange: 2,
+        },
+      },
+      {
+        minScore: 20,
+        tier: 'failure',
+        outcome: {
+          narrative: '骰子骨碌碌转了好几圈才停下。{targetName}一看点数，乐了。{npcName}挠了挠头："再来再来！"',
+          effects: { copper: -5, mood: -2, social: 5 },
+          relationChange: 1,
+        },
+      },
+      {
+        minScore: 0,
+        tier: 'critical_failure',
+        outcome: {
+          narrative: '{npcName}连输五把，脸都绿了。{targetName}乐不可支地收着铜钱："承让承让！"{npcName}咬牙道："你出千！"{targetName}收起笑容："说话要有证据。"',
+          effects: { copper: -15, mood: -12, social: 3 },
+          targetEffects: { copper: 15, mood: 10 },
+          relationChange: -2,
+        },
+      },
+    ],
   },
   {
     id: 'so_storytelling', name: '讲故事', description: '健谈者给周围人讲段故事',

@@ -17,7 +17,7 @@ import { WeatherSystem } from './weatherSystem';
 import { EventEngine, CausalEvent } from './eventEngine';
 import { SceneOption, TurnBriefing } from '../server/protocol';
 import { VitalComponent, WalletComponent, PositionComponent, NeedsComponent, ActionStateComponent, ActionRecord, EmotionComponent, WhimComponent, AspirationComponent, DailyPlanComponent, EmotionType, AspirationType } from '../ecs/types';
-import { decide, DecisionContext, DecisionResult, decideWithScene, NearbyNpcInfo } from '../ai/decisionEngine';
+import { decide, DecisionContext, DecisionResult, decideWithScene } from '../ai/decisionEngine';
 import { updateEmotionComponent, EMOTION_CATEGORY_BIAS } from '../ai/emotionSystem';
 import { generateWhims, shouldRefreshWhims, checkWhimCompletion } from '../ai/whimSystem';
 import { ASPIRATION_CATEGORY_BIAS, getDefaultAspiration } from '../ai/aspirationSystem';
@@ -29,11 +29,12 @@ import { RelationshipSystem } from '../ai/relationshipSystem';
 import { StressMemorySystem, getStressEffects } from '../ai/stressMemorySystem';
 import { ChainReactionEngine } from '../world/chainReactionEngine';
 import { generateNarrativeFragment, NarrativeContext } from '../ai/narrativeFragments';
-import { SceneLibraryManager, L2RegionStats } from '../ai/sceneLibrary';
+import { SceneLibraryManager, L2RegionStats, L0ActorContext, GoalCategory, NearbyNpcInfo, SceneDecisionResult } from '../ai/sceneLibrary';
 import { ALL_L0_SCENES } from '../data/sceneLibrary/l0';
 import { ALL_L1_SCENES } from '../data/sceneLibrary/l1';
 import { ALL_L2_SCENES } from '../data/sceneLibrary/l2';
 import { PROFESSION_DISPLAY, gridDisplayName } from '../ai/sceneLibrary/narrativeFormatter';
+import { getAvailableFactionActions, markFactionActionUsed, weightedRandomSelect, FactionAction } from '../data/factionActions';
 
 // === 重大事件 ===
 export interface MajorEvent {
@@ -61,6 +62,12 @@ export interface WorldEvent {
   cause?: string;     // 因果标记（触发原因）
   source?: string;    // 来源NPC名
   target?: string;    // 目标NPC名（双人演出时）
+  // --- 实体引用（结构化，供监控面板查询） ---
+  sourceEntityId?: number;    // 发起实体ID
+  targetEntityId?: number;    // 目标实体ID
+  factionId?: number;         // 涉及的组织ID
+  buildingId?: number;        // 涉及的建筑ID
+  sceneLevel?: 'L0' | 'L1' | 'L2' | 'player_scene';
 }
 
 // === NPC 行为历史记录 ===
@@ -137,6 +144,18 @@ export interface TickResult {
   };
   distantNews: { message: string; cause: string; source: string }[];
   briefing: TurnBriefing;
+}
+
+// === 玩家多步骤场景结果 ===
+export interface ScenePhaseResult {
+  isScenePhase: true;
+  sceneId: string;
+  narrative: string;
+  choices: { id: string; text: string; conditionMet: boolean }[];
+  participantNpcIds: number[];
+  participantNames: string[];
+  playerState: TickResult['playerState'];
+  worldState: TickResult['worldState'];
 }
 
 // ============================================================
@@ -351,6 +370,10 @@ export class WorldEngine {
   private readonly maxEvents = 500;
   readonly startTime: number = Date.now();
 
+  // 场景历史记录（L0/L1/L2/PlayerScene，供监控面板查询）
+  private sceneHistory: WorldEvent[] = [];
+  private readonly maxSceneHistory = 200;
+
   // NPC 行为历史记录（L0 NPC）
   private npcHistory: Map<number, NPCHistoryEntry[]> = new Map();
 
@@ -402,6 +425,54 @@ export class WorldEngine {
       this.eventLog.shift();
     }
     this.eventLog.push(evt);
+  }
+
+  /** 记录带实体引用的世界事件 */
+  logEventEx(type: WorldEvent['type'], category: string, message: string, refs?: {
+    sourceEntityId?: number;
+    targetEntityId?: number;
+    factionId?: number;
+    buildingId?: number;
+    sceneLevel?: WorldEvent['sceneLevel'];
+  }): void {
+    const evt: WorldEvent = {
+      tick: this.time.tick,
+      time: new Date().toISOString(),
+      type,
+      category,
+      message,
+      ...refs,
+    };
+    if (this.eventLog.length >= this.maxEvents) {
+      this.eventLog.shift();
+    }
+    this.eventLog.push(evt);
+    // 场景级别事件同时写入 sceneHistory
+    if (refs?.sceneLevel) {
+      if (this.sceneHistory.length >= this.maxSceneHistory) {
+        this.sceneHistory.shift();
+      }
+      this.sceneHistory.push(evt);
+    }
+  }
+
+  /** 获取涉及指定实体的所有事件 */
+  getEventsByEntity(entityId: number, limit: number = 50): WorldEvent[] {
+    const matched = this.eventLog.filter(e =>
+      e.sourceEntityId === entityId ||
+      e.targetEntityId === entityId ||
+      e.factionId === entityId ||
+      e.buildingId === entityId
+    );
+    return matched.slice(-limit);
+  }
+
+  /** 获取场景历史记录（可按级别过滤） */
+  getSceneHistory(level?: string, limit: number = 50): WorldEvent[] {
+    const source = level
+      ? this.sceneHistory.filter(e => e.sceneLevel === level)
+      : this.sceneHistory;
+    return source.slice(-limit);
   }
 
   /** 获取最近 N 条事件 */
@@ -596,7 +667,15 @@ export class WorldEngine {
           const event = rule.generate(worldState);
           const key = `${event.type}:${event.message}`;
           if (!generated.has(key)) {
-            this.logEvent(event.type, event.category, event.message);
+            // 应用实体效果
+            if (rule.applyEffects) rule.applyEffects(worldState);
+            // 获取实体引用
+            const refs = rule.entityRefs ? rule.entityRefs(worldState) : undefined;
+            if (refs) {
+              this.logEventEx(event.type, event.category, event.message, refs);
+            } else {
+              this.logEvent(event.type, event.category, event.message);
+            }
             generated.add(key);
           }
         }
@@ -614,8 +693,13 @@ export class WorldEngine {
     const prevWeather = this.previousWeather;
 
     const factionList: FactionComponent[] = [];
-    for (const f of this.factions.values()) factionList.push(f);
+    const factionIds: Map<string, number> = new Map(); // name → entityId
+    for (const [fid, f] of this.factions) {
+      factionList.push(f);
+      factionIds.set(f.name, fid);
+    }
     const factionByName = (name: string) => factionList.find(f => f.name === name);
+    const factionIdByName = (name: string) => factionIds.get(name);
 
     const prices = this.economy.getPrices();
     const basePrices: Record<string, number> = { food: 10, herbs: 15, cloth: 20, material: 8, cargo: 12 };
@@ -641,6 +725,7 @@ export class WorldEngine {
       weather: { weather, prevWeather, description: this.weather.getDescription() },
       factions: factionList,
       factionByName,
+      factionIdByName,
       economy: { prices, basePrices },
       ecology,
       npcSummary: { totalActions: this.l0Entities.length, avgMood, avgHunger },
@@ -660,6 +745,10 @@ export class WorldEngine {
       category: string;
       condition: (ws: WS) => boolean;
       generate: (ws: WS) => { type: ET; category: string; message: string };
+      /** 触发时修改实体属性 */
+      applyEffects?: (ws: WS) => void;
+      /** 返回实体引用用于日志记录 */
+      entityRefs?: (ws: WS) => { factionId?: number; buildingId?: number; sourceEntityId?: number; targetEntityId?: number };
       priority: number;
     }
 
@@ -668,7 +757,9 @@ export class WorldEngine {
       condition: (ws: WS) => boolean,
       generate: (ws: WS) => { type: ET; category: string; message: string },
       priority = 0,
-    ): EventRule => ({ id, type, category, condition, generate, priority });
+      applyEffects?: (ws: WS) => void,
+      entityRefs?: (ws: WS) => { factionId?: number; buildingId?: number; sourceEntityId?: number; targetEntityId?: number },
+    ): EventRule => ({ id, type, category, condition, generate, priority, applyEffects, entityRefs });
 
     return [
       // ═══ 国际事件 ═══
@@ -679,6 +770,15 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: `海上丝绸之路传来消息：泉州港到岸${Math.random() > 0.5 ? '三艘' : '五艘'}番船，货物堆积如山` }),
+        0,
+        // applyEffects: 市舶司增加收入，码头帮心情上升
+        (ws) => {
+          const sp = ws.factionByName('市舶司');
+          const mt = ws.factionByName('码头帮');
+          if (sp) sp.treasury += 300;
+          if (mt) mt.mood = Math.min(100, mt.mood + 2);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('市舶司') }),
       ),
       mk('intl_trade_route', 'international', '国际',
         (ws) => {
@@ -687,6 +787,14 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: `丝绸之路商队抵达汴京，带来${Math.random() > 0.5 ? '香料' : '琉璃器'}，东市商贩争相收购` }),
+        0,
+        (ws) => {
+          const mt = ws.factionByName('码头帮');
+          const ds = ws.factionByName('东市商会');
+          if (mt) mt.treasury += 200;
+          if (ds) ds.mood = Math.min(100, ds.mood + 2);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('码头帮') }),
       ),
       mk('intl_tributary', 'international', '国际',
         (ws) => {
@@ -695,6 +803,12 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: `高丽国遣使来朝，进贡${Math.random() > 0.5 ? '高丽参' : '白瓷器'}百箱` }),
+        0,
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          if (hb) hb.treasury += 500;
+        },
+        (ws) => ({ factionId: ws.factionIdByName('户部') }),
       ),
       mk('intl_border', 'international', '国际',
         (ws) => {
@@ -703,6 +817,12 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: '边境军饷不足，消息传来引发朝野议论' }),
+        0,
+        (ws) => {
+          const army = ws.factionByName('禁军');
+          if (army) army.mood = Math.max(0, army.mood - 3);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('禁军') }),
       ),
       mk('intl_border_conflict', 'international', '国际',
         (ws) => {
@@ -712,6 +832,12 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: `西夏边境传来消息：${Math.random() > 0.5 ? '边境小规模摩擦，商旅暂缓' : '两国互市恢复正常'}` }),
+        0,
+        (ws) => {
+          const army = ws.factionByName('禁军');
+          if (army) { army.mood = Math.max(0, army.mood - 2); army.treasury -= 200; }
+        },
+        (ws) => ({ factionId: ws.factionIdByName('禁军') }),
       ),
       mk('intl_peace_treaty', 'international', '国际',
         (ws) => {
@@ -721,6 +847,12 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: '枢密院与禁军联合上奏：边境安定，请允通商' }),
+        0,
+        (ws) => {
+          const sm = ws.factionByName('枢密院');
+          if (sm) sm.influence = Math.min(100, sm.influence + 1);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('枢密院') }),
       ),
       mk('intl_famine_relief', 'international', '国际',
         (ws) => {
@@ -730,6 +862,12 @@ export class WorldEngine {
         },
         () => ({ type: 'international' as ET, category: '国际',
           message: '朝廷拨银赈济受灾州县，户部调度粮草北上' }),
+        0,
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          if (hb) hb.treasury -= 1000;
+        },
+        (ws) => ({ factionId: ws.factionIdByName('户部') }),
       ),
       // 国际 fallback
       mk('intl_fallback', 'international', '国际',
@@ -758,6 +896,14 @@ export class WorldEngine {
           return { type: 'national' as ET, category: '国家',
             message: `户部奏报：国库${trend}，${Math.random() > 0.5 ? '减免今年秋税两成' : '加强税收征管'}` };
         },
+        0,
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          if (hb) hb.treasury += Math.random() > 0.5 ? -300 : 500;
+          const ds = ws.factionByName('东市商会');
+          if (ds) ds.mood = Math.min(100, Math.max(0, ds.mood + (Math.random() > 0.5 ? -2 : 2)));
+        },
+        (ws) => ({ factionId: ws.factionIdByName('户部') }),
       ),
       mk('nat_exam', 'national', '国家',
         (ws) => {
@@ -766,6 +912,12 @@ export class WorldEngine {
         },
         () => ({ type: 'national' as ET, category: '国家',
           message: `科举消息：${Math.random() > 0.5 ? '今年恩科定于八月举行' : '太学扩招，各地学子纷纷入京'}` }),
+        0,
+        (ws) => {
+          const tx = ws.factionByName('太学');
+          if (tx) tx.influence = Math.min(100, tx.influence + 2);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('太学') }),
       ),
       mk('nat_military', 'national', '国家',
         (ws) => {
@@ -774,6 +926,12 @@ export class WorldEngine {
         },
         (ws) => ({ type: 'national' as ET, category: '国家',
           message: `禁军${ws.factionByName('禁军')!.mood < 40 ? '士气低落，将士怨声载道' : '换防，京城各门甲士增派一倍'}` }),
+        0,
+        (ws) => {
+          const army = ws.factionByName('禁军');
+          if (army) { army.mood = Math.min(100, Math.max(0, army.mood + (army.mood < 40 ? -2 : 1))); army.treasury -= 100; }
+        },
+        (ws) => ({ factionId: ws.factionIdByName('禁军') }),
       ),
       mk('nat_justice', 'national', '国家',
         (ws) => {
@@ -782,6 +940,12 @@ export class WorldEngine {
         },
         () => ({ type: 'national' as ET, category: '国家',
           message: `开封府尹巡视城内治安，${Math.random() > 0.5 ? '查处三家违规商铺' : '嘉奖巡城甲士'}` }),
+        0,
+        (ws) => {
+          const kf = ws.factionByName('开封府');
+          if (kf) { kf.influence = Math.min(100, kf.influence + 1); kf.treasury += 50; }
+        },
+        (ws) => ({ factionId: ws.factionIdByName('开封府') }),
       ),
       mk('nat_food_reserve', 'national', '国家',
         (ws) => {
@@ -790,6 +954,12 @@ export class WorldEngine {
         },
         () => ({ type: 'national' as ET, category: '国家',
           message: `户部清查各地粮仓：${Math.random() > 0.5 ? '江南粮仓充裕' : '河北数州粮仓亏空，紧急调拨'}` }),
+        0,
+        (ws) => {
+          const hb = ws.factionByName('户部');
+          if (hb) hb.treasury -= 200;
+        },
+        (ws) => ({ factionId: ws.factionIdByName('户部') }),
       ),
       mk('nat_imperial_decree', 'national', '国家',
         (ws) => ws.day % 7 === 0,
@@ -838,6 +1008,12 @@ export class WorldEngine {
         },
         () => ({ type: 'regional' as ET, category: '地区',
           message: `东市今日${Math.random() > 0.5 ? '人声鼎沸，商贩云集' : '略显冷清，传闻有官差巡查'}` }),
+        0,
+        (ws) => {
+          const ds = ws.factionByName('东市商会');
+          if (ds) ds.treasury += 50;
+        },
+        (ws) => ({ factionId: ws.factionIdByName('东市商会') }),
       ),
       mk('reg_dock', 'regional', '地区',
         (ws) => {
@@ -847,6 +1023,12 @@ export class WorldEngine {
         },
         () => ({ type: 'regional' as ET, category: '地区',
           message: `汴河码头${Math.random() > 0.5 ? '到岸粮船数十艘，卸货忙碌' : '今日无大船到港'}` }),
+        0,
+        (ws) => {
+          const mt = ws.factionByName('码头帮');
+          if (mt) { mt.treasury += 80; mt.mood = Math.min(100, mt.mood + 1); }
+        },
+        (ws) => ({ factionId: ws.factionIdByName('码头帮') }),
       ),
       mk('reg_temple', 'regional', '地区',
         (ws) => {
@@ -855,6 +1037,12 @@ export class WorldEngine {
         },
         () => ({ type: 'regional' as ET, category: '地区',
           message: `大相国寺庙会${Math.random() > 0.5 ? '热闹非凡，百戏杂耍齐上' : '僧人做法事，信众络绎不绝'}` }),
+        0,
+        (ws) => {
+          const temple = ws.factionByName('大相国寺');
+          if (temple) { temple.treasury += 100; temple.influence = Math.min(100, temple.influence + 1); }
+        },
+        (ws) => ({ factionId: ws.factionIdByName('大相国寺') }),
       ),
       mk('reg_crime', 'regional', '地区',
         (ws) => {
@@ -864,6 +1052,14 @@ export class WorldEngine {
         },
         () => ({ type: 'regional' as ET, category: '地区',
           message: `南坊住宅区${Math.random() > 0.5 ? '有邻里因宅基纠纷报官' : '街头出现扒手，巡城甲士已接到报官'}` }),
+        0,
+        (ws) => {
+          const kf = ws.factionByName('开封府');
+          if (kf) kf.treasury += 30;
+          const gb = ws.factionByName('丐帮分舵');
+          if (gb) gb.mood = Math.max(0, gb.mood - 2);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('开封府') }),
       ),
       mk('reg_residential', 'regional', '地区',
         (ws) => ws.npcSummary.avgMood < 40,
@@ -906,6 +1102,13 @@ export class WorldEngine {
           return { type: 'economy' as ET, category: '物价',
             message: `${surging}价暴涨！东市传来消息，有人囤货居奇，百姓叫苦不迭` };
         },
+        0,
+        // 涨价时商人赚钱
+        (ws) => {
+          const ds = ws.factionByName('东市商会');
+          if (ds) ds.treasury += 100;
+        },
+        (ws) => ({ factionId: ws.factionIdByName('东市商会') }),
       ),
       mk('eco_price_drop', 'economy', '物价',
         (ws) => {
@@ -924,6 +1127,12 @@ export class WorldEngine {
           return { type: 'economy' as ET, category: '物价',
             message: `${dropping}价暴跌至历史低位，商户议论纷纷` };
         },
+        0,
+        (ws) => {
+          const ds = ws.factionByName('东市商会');
+          if (ds) { ds.treasury -= 80; ds.mood = Math.max(0, ds.mood - 3); }
+        },
+        (ws) => ({ factionId: ws.factionIdByName('东市商会') }),
       ),
       mk('eco_smuggling', 'economy', '物价',
         (ws) => {
@@ -933,6 +1142,14 @@ export class WorldEngine {
         },
         () => ({ type: 'economy' as ET, category: '物价',
           message: '码头一带出现来路不明的货物，市舶司尚未察觉' }),
+        0,
+        (ws) => {
+          const mt = ws.factionByName('码头帮');
+          if (mt) { mt.treasury += 60; mt.influence = Math.min(100, mt.influence + 1); }
+          const sp = ws.factionByName('市舶司');
+          if (sp) sp.influence = Math.max(0, sp.influence - 1);
+        },
+        (ws) => ({ factionId: ws.factionIdByName('码头帮') }),
       ),
 
       // ═══ 天气事件 ═══
@@ -1766,6 +1983,9 @@ export class WorldEngine {
     // 4. L1 NPC 批量行动 (简化模拟)
     const l1Summary = this.simulateL1Batch();
 
+    // 4.5. 组织主动行动
+    this.simulateFactionTurn();
+
     // 5. L2 区域统计更新
     this.regionSim.update(this.time.season, this.weather.farmYieldMod);
 
@@ -1799,7 +2019,7 @@ export class WorldEngine {
       // 应用经济效果
       if (narr.outcome.economicEffect) {
         for (const eff of narr.outcome.economicEffect) {
-          // TODO: 接入 economySystem 的价格乘数
+          this.economy.applyPriceMultiplier(eff.good, eff.priceMultiplier, 5);
         }
       }
     }
@@ -2175,17 +2395,40 @@ export class WorldEngine {
         }
       }
 
-      // 记录到世界事件日志（发起者视角）
-      this.eventLog.push({
-        tick: this.time.tick,
-        time: new Date().toISOString(),
-        type: 'npc',
-        category: `scene:${sceneResult.goalCategory}`,
-        message: sceneResult.narrative,
-        cause: `scene:${sceneResult.sceneId}:${sceneResult.success ? 'success' : 'failure'}`,
-        source: identity.name,
-        target: sceneResult.targetName,
+      // 记录到世界事件日志（发起者视角，带实体引用）
+      const npcFactionInfo = this.getNpcFaction(entityId);
+      const targetNpcForLog = sceneResult.targetName
+        ? nearbyNpcInfos.find((n: NearbyNpcInfo) => n.name === sceneResult.targetName)
+        : undefined;
+      this.logEventEx('npc', `scene:${sceneResult.goalCategory}`, sceneResult.narrative, {
+        sourceEntityId: entityId,
+        targetEntityId: targetNpcForLog?.id,
+        factionId: npcFactionInfo?.id,
+        sceneLevel: 'L0',
       });
+
+      // 组织效果：如果NPC属于组织，调整组织属性
+      if (npcFactionInfo) {
+        const faction = this.factions.get(npcFactionInfo.id);
+        if (faction) {
+          // 场景成功 → 组织声望微升，失败 → 微降
+          faction.influence = Math.min(100, Math.max(0,
+            faction.influence + (sceneResult.success ? 0.5 : -0.3)
+          ));
+        }
+      }
+      // 目标NPC的组织效果
+      if (targetNpcForLog) {
+        const targetFactionInfo = this.getNpcFaction(targetNpcForLog.id);
+        if (targetFactionInfo) {
+          const targetFaction = this.factions.get(targetFactionInfo.id);
+          if (targetFaction) {
+            targetFaction.mood = Math.min(100, Math.max(0,
+              targetFaction.mood + (sceneResult.success ? -0.5 : 0.3)
+            ));
+          }
+        }
+      }
       this.lastTickEvents++;
 
       // 更新发起者行为历史
@@ -2212,16 +2455,11 @@ export class WorldEngine {
             ? `${identity.name}对${sceneResult.targetName}${this.getTargetPerspectiveAction(sceneResult.sceneId, sceneResult.success)}`
             : `${identity.name}试图对${sceneResult.targetName}${this.getTargetPerspectiveAction(sceneResult.sceneId, sceneResult.success)}`;
 
-          // 目标NPC的事件日志
-          this.eventLog.push({
-            tick: this.time.tick,
-            time: new Date().toISOString(),
-            type: 'npc',
-            category: `scene_target:${sceneResult.goalCategory}`,
-            message: targetNarrative,
-            cause: `scene_target:${sceneResult.sceneId}:${sceneResult.success ? 'success' : 'failure'}`,
-            source: sceneResult.targetName,
-            target: identity.name,
+          // 目标NPC的事件日志（带实体引用）
+          this.logEventEx('npc', `scene_target:${sceneResult.goalCategory}`, targetNarrative, {
+            sourceEntityId: targetNpc.id,
+            targetEntityId: entityId,
+            sceneLevel: 'L0',
           });
           this.lastTickEvents++;
 
@@ -2627,7 +2865,7 @@ export class WorldEngine {
       groups.get(key)!.push(entityId);
     }
 
-    // 3. 每组匹配 L1 场景
+    // 3. 每组匹配 L1 场景（按需求子分组 + 个体差异）
     const worldCtx = {
       weather: this.weather.weather,
       shichen: this.time.shichenName,
@@ -2638,52 +2876,171 @@ export class WorldEngine {
     for (const [key, entityIds] of groups) {
       const [gridId, profession] = key.split(':');
 
-      // 取样本 NPC 的需求作为代表
-      const sampleId = entityIds[0];
-      const needs = this.em.getComponent(sampleId, 'Needs');
+      // 收集 grid 级别的共享数据（只算一次）
+      const gridEntities = this.worldMap.getEntitiesInGrid(gridId);
+      const nearbyProfessions: string[] = [];
+      let totalMood = 0; let moodCount = 0;
+      for (const geid of gridEntities) {
+        const gIdent = this.em.getComponent(geid, 'Identity');
+        if (gIdent) nearbyProfessions.push(gIdent.profession);
+        const gVital = this.em.getComponent(geid, 'Vital');
+        if (gVital) { totalMood += gVital.mood; moodCount++; }
+      }
+      // 收集组内阵营类型
+      const groupFactionTypes: string[] = [];
+      for (const eid2 of entityIds) {
+        const fInfo = this.getNpcFaction(eid2);
+        if (fInfo) {
+          const fComp = this.factions.get(fInfo.id);
+          if (fComp && fComp.type) groupFactionTypes.push(fComp.type);
+        }
+      }
 
-      const l1Result = this.sceneLib.matchL1({
-        profession,
-        gridId,
-        needs: needs
-          ? { hunger: needs.hunger, fatigue: needs.fatigue, mood: needs.mood, social: needs.social, safety: needs.safety || 50 }
-          : { hunger: 50, fatigue: 50, mood: 50, social: 50, safety: 50 },
-        groupSize: entityIds.length,
-        worldContext: worldCtx,
-      });
-
-      if (l1Result) {
-        // 应用效果到组内每个 NPC
+      // ── 按最紧迫需求分成子组 ──
+      const subGroups = new Map<string, number[]>();
+      if (entityIds.length >= 5) {
+        // 大组：按dominantNeed分2-3个子组
         for (const eid of entityIds) {
           const n = this.em.getComponent(eid, 'Needs');
-          const w = this.em.getComponent(eid, 'Wallet');
-          if (n) {
-            for (const [k, v] of Object.entries(l1Result.outcome.avgEffects)) {
-              if (k in n) (n as any)[k] = Math.max(0, Math.min(100, (n as any)[k] + v));
+          if (!n) {
+            const arr = subGroups.get('_default');
+            if (arr) arr.push(eid); else subGroups.set('_default', [eid]);
+            continue;
+          }
+          const needMap: Record<string, number> = { hunger: n.hunger, fatigue: n.fatigue, mood: n.mood, social: n.social, safety: n.safety || 50 };
+          const sorted = Object.entries(needMap).sort((a, b) => a[1] - b[1]);
+          const worst = sorted[0][0];
+          const arr = subGroups.get(worst);
+          if (arr) arr.push(eid); else subGroups.set(worst, [eid]);
+        }
+      } else {
+        // 小组：不分子组，整体匹配
+        subGroups.set('_all', entityIds);
+      }
+
+      // ── 每个子组独立匹配 L1 场景 ──
+      for (const [needKey, subIds] of subGroups) {
+        if (subIds.length === 0) continue;
+
+        // 取子组样本NPC的需求
+        const sampleId = subIds[0];
+        const sampleNeeds = this.em.getComponent(sampleId, 'Needs');
+        const sampleIdentity = this.em.getComponent(sampleId, 'Identity');
+
+        // 子组专属需求：如果按need分组，则dominantNeed设为该需求
+        const l1Needs = sampleNeeds
+          ? { hunger: sampleNeeds.hunger, fatigue: sampleNeeds.fatigue, mood: sampleNeeds.mood, social: sampleNeeds.social, safety: sampleNeeds.safety || 50 }
+          : { hunger: 50, fatigue: 50, mood: 50, social: 50, safety: 50 };
+
+        // 如果是按某需求分组，强制设置该需求为低值以提高匹配率
+        if (needKey !== '_all' && needKey !== '_default' && sampleNeeds) {
+          (l1Needs as any)[needKey] = Math.min((l1Needs as any)[needKey], 35);
+        }
+
+        const l1Result = this.sceneLib.matchL1({
+          profession,
+          gridId,
+          needs: l1Needs,
+          groupSize: subIds.length,
+          worldContext: worldCtx,
+          actorPersonality: sampleIdentity?.personality || [],
+          nearbyProfessions,
+          groupFactionTypes: groupFactionTypes.length > 0 ? groupFactionTypes : undefined,
+          avgMood: moodCount > 0 ? totalMood / moodCount : undefined,
+        });
+
+        if (l1Result) {
+          // 应用效果到子组内每个NPC（±20%随机差异）
+          for (const eid of subIds) {
+            const n = this.em.getComponent(eid, 'Needs');
+            const w = this.em.getComponent(eid, 'Wallet');
+            if (n) {
+              for (const [k, v] of Object.entries(l1Result.outcome.avgEffects)) {
+                if (k in n) {
+                  const variation = v * (0.8 + Math.random() * 0.4);
+                  (n as any)[k] = Math.max(0, Math.min(100, (n as any)[k] + variation));
+                }
+              }
+            }
+            if (l1Result.outcome.copperPoolChange && w) {
+              const baseShare = l1Result.outcome.copperPoolChange / subIds.length;
+              const share = Math.floor(baseShare * (0.8 + Math.random() * 0.4));
+              w.copper = Math.max(0, w.copper + share);
             }
           }
-          if (l1Result.outcome.copperPoolChange && w) {
-            const share = Math.floor(l1Result.outcome.copperPoolChange / entityIds.length);
-            w.copper = Math.max(0, w.copper + share);
+
+          // 格式化叙事
+          const narrative = l1Result.outcome.narrative
+            .replace(/\{count\}/g, String(subIds.length))
+            .replace(/\{professionName\}/g, PROFESSION_DISPLAY[profession] || profession)
+            .replace(/\{location\}/g, gridDisplayName(gridId));
+
+          l1Highlights.push(narrative);
+          this.logEvent('npc', 'l1_scene', narrative);
+        } else {
+          // 无场景匹配 → fallback
+          for (const eid of subIds.slice(0, 2)) {
+            const n = this.em.getComponent(eid, 'Needs');
+            const v = this.em.getComponent(eid, 'Vital');
+            if (n && v) {
+              const result = this.simulateL1Decision(eid, n, v);
+              if (result) l1Highlights.push(result.narrative);
+            }
           }
         }
 
-        // 格式化叙事
-        const narrative = l1Result.outcome.narrative
-          .replace(/\{count\}/g, String(entityIds.length))
-          .replace(/\{professionName\}/g, PROFESSION_DISPLAY[profession] || profession)
-          .replace(/\{location\}/g, gridDisplayName(gridId));
+        // ── L1 Spotlight: 为子组中最极端的NPC匹配个体L0场景 ──
+        if (subIds.length >= 2 && Math.random() < 0.4) {
+          let spotlightId = -1;
+          let spotlightWorst = 100;
+          for (const eid of subIds) {
+            const n = this.em.getComponent(eid, 'Needs');
+            if (!n) continue;
+            const worst = Math.min(n.hunger, n.fatigue, n.mood, n.social, n.safety || 100);
+            if (worst < spotlightWorst) { spotlightWorst = worst; spotlightId = eid; }
+          }
+          if (spotlightId >= 0 && spotlightWorst < 60) {
+            const spotResult = this.matchL0ForL1Spotlight(spotlightId);
+            if (spotResult) {
+              const scale = 0.6;
+              const spotNeeds = this.em.getComponent(spotlightId, 'Needs');
+              const spotWallet = this.em.getComponent(spotlightId, 'Wallet');
+              if (spotNeeds && spotResult.effects) {
+                for (const [k, v] of Object.entries(spotResult.effects)) {
+                  if (k in spotNeeds) {
+                    (spotNeeds as any)[k] = Math.max(0, Math.min(100, (spotNeeds as any)[k] + v * scale));
+                  }
+                }
+              }
+              if (spotWallet && spotResult.effects?.copper) {
+                spotWallet.copper = Math.max(0, spotWallet.copper + Math.floor((spotResult.effects.copper || 0) * scale));
+              }
 
-        l1Highlights.push(narrative);
-        this.logEvent('npc', 'l1_scene', narrative);
-      } else {
-        // 无场景匹配 → 用旧决策引擎 fallback
-        for (const eid of entityIds.slice(0, 3)) {
-          const n = this.em.getComponent(eid, 'Needs');
-          const v = this.em.getComponent(eid, 'Vital');
-          if (n && v) {
-            const result = this.simulateL1Decision(eid, n, v);
-            if (result) l1Highlights.push(result.narrative);
+              const spotIdentity = this.em.getComponent(spotlightId, 'Identity');
+              const spotNarrative = `[聚光灯] ${spotIdentity?.name || '某人'}: ${spotResult.narrative}`;
+              l1Highlights.push(spotNarrative);
+              this.logEventEx('npc', 'l1_spotlight', spotNarrative, {
+                sourceEntityId: spotlightId,
+                sceneLevel: 'L1',
+              });
+
+              const actionState = this.em.getComponent(spotlightId, 'ActionState');
+              if (actionState) {
+                actionState.currentGoal = spotResult.goalCategory;
+                actionState.currentAction = spotResult.sceneName;
+                actionState.actionHistory.push({
+                  turn: this.time.tick,
+                  day: this.time.day,
+                  shichen: this.time.shichenName,
+                  goalId: spotResult.goalCategory,
+                  actionId: spotResult.sceneId,
+                  narrative: spotResult.narrative,
+                });
+                if (actionState.actionHistory.length > 5) {
+                  actionState.actionHistory = actionState.actionHistory.slice(-5);
+                }
+              }
+            }
           }
         }
       }
@@ -2724,6 +3081,227 @@ export class WorldEngine {
       highlights.push(summary);
     }
     return { total: actions, highlights };
+  }
+
+  // ══════════════════════════════════════════
+  // 组织主动回合 — 每个组织根据状态执行行动
+  // ══════════════════════════════════════════
+
+  private simulateFactionTurn(): void {
+    for (const [factionId, faction] of this.factions) {
+      // 获取可用行动
+      const available = getAvailableFactionActions(
+        faction.type,
+        { treasury: faction.treasury, mood: faction.mood, influence: faction.influence, members: faction.members },
+        this.time.season,
+        this.time.tick,
+      );
+
+      if (available.length === 0) continue;
+
+      // 按权重随机选择一个行动
+      const action = weightedRandomSelect(available);
+
+      // ── 应用效果 ──
+
+      // 组织自身属性
+      if (action.effects.treasuryChange) {
+        faction.treasury += action.effects.treasuryChange;
+      }
+      if (action.effects.influenceChange) {
+        faction.influence = Math.max(0, Math.min(100, faction.influence + action.effects.influenceChange));
+      }
+      if (action.effects.moodChange) {
+        faction.mood = Math.max(0, Math.min(100, faction.mood + action.effects.moodChange));
+      }
+
+      // 成员NPC效果
+      if (action.effects.memberMoodEffect || action.effects.memberCopperEffect) {
+        for (const memberId of faction.members) {
+          if (action.effects.memberMoodEffect) {
+            const vital = this.em.getComponent(memberId, 'Vital');
+            if (vital) vital.mood = Math.max(0, Math.min(100, vital.mood + action.effects.memberMoodEffect));
+            const needs = this.em.getComponent(memberId, 'Needs');
+            if (needs) needs.mood = Math.max(0, Math.min(100, needs.mood + action.effects.memberMoodEffect));
+          }
+          if (action.effects.memberCopperEffect) {
+            const wallet = this.em.getComponent(memberId, 'Wallet');
+            if (wallet) wallet.copper = Math.max(0, wallet.copper + action.effects.memberCopperEffect);
+          }
+          // Phase 4: 写入NPC记忆
+          const memory = this.em.getComponent(memberId, 'Memory');
+          if (memory) {
+            memory.recentEvents.push({
+              content: `${faction.name}${action.name}`,
+              tick: this.time.tick,
+            });
+            if (memory.recentEvents.length > 20) {
+              memory.recentEvents = memory.recentEvents.slice(-20);
+            }
+          }
+        }
+      }
+
+      // 领地安全效果
+      if (action.effects.territorySafetyEffect) {
+        // 通过修改领地grid中NPC的safety来体现
+        for (const gridId of faction.territory) {
+          const gridNpcs = this.worldMap.getEntitiesInGrid(gridId);
+          for (const geid of gridNpcs) {
+            const needs = this.em.getComponent(geid, 'Needs');
+            if (needs && needs.safety !== undefined) {
+              needs.safety = Math.max(0, Math.min(100, needs.safety + action.effects.territorySafetyEffect! * 0.3));
+            }
+          }
+        }
+      }
+
+      // 经济价格效果
+      if (action.effects.priceEffect) {
+        this.economy.applyPriceMultiplier(
+          action.effects.priceEffect.good,
+          action.effects.priceEffect.multiplier,
+          5,
+        );
+      }
+
+      // 敌对势力关系效果
+      if (action.effects.rivalRelationEffect) {
+        for (const otherId of Object.keys(faction.relations)) {
+          const score = faction.relations[Number(otherId)];
+          if (score < -20) {
+            faction.relations[Number(otherId)] = score + action.effects.rivalRelationEffect;
+            const otherFaction = this.factions.get(Number(otherId));
+            if (otherFaction) {
+              otherFaction.relations[Number(factionId)] = (otherFaction.relations[Number(factionId)] || 0) + action.effects.rivalRelationEffect;
+            }
+          }
+        }
+      }
+
+      // 标记冷却
+      markFactionActionUsed(action.id, this.time.tick);
+
+      // 记录事件
+      const narrative = action.narrative
+        .replace(/\{factionName\}/g, faction.name)
+        .replace(/\{treasuryChange\}/g, String(Math.abs(action.effects.treasuryChange || 0)));
+
+      this.logEventEx('npc', 'faction_action', narrative, {
+        factionId: Number(factionId),
+        sceneLevel: 'L0',
+      });
+    }
+  }
+
+  /** L1 Spotlight: 为单个L1 NPC匹配L0场景 */
+  private matchL0ForL1Spotlight(entityId: number): SceneDecisionResult | null {
+    const identity = this.em.getComponent(entityId, 'Identity');
+    const needs = this.em.getComponent(entityId, 'Needs');
+    const vital = this.em.getComponent(entityId, 'Vital');
+    const wallet = this.em.getComponent(entityId, 'Wallet');
+    const pos = this.em.getComponent(entityId, 'Position');
+    if (!identity || !needs || !pos) return null;
+
+    // 从needs推断emotion和stress
+    const worstNeed = Math.min(needs.hunger, needs.fatigue, needs.mood, needs.social, needs.safety || 100);
+    const emotion = worstNeed < 30 ? 'tense' as EmotionType : worstNeed < 50 ? 'bored' as EmotionType : 'happy' as EmotionType;
+
+    // 构建L0ActorContext
+    const actorContext: L0ActorContext = {
+      traits: identity.personality,
+      profession: identity.profession,
+      npcName: identity.name,
+      copper: wallet?.copper || 0,
+      health: vital?.health || 100,
+      emotion,
+      stress: Math.max(0, 100 - worstNeed),
+      currentGrid: pos.gridId,
+      shichen: this.time.shichenName,
+      weather: this.weather.weather,
+      season: this.time.season,
+      day: this.time.day,
+      tick: this.time.tick,
+      factionId: this.getNpcFaction(entityId)?.id,
+      nearbyCount: this.worldMap.getEntitiesInGrid(pos.gridId).length - 1,
+      activeWhimCategories: new Set(),
+    };
+
+    // 从worst need映射到GoalCategory
+    const NEED_TO_GOAL: Record<string, GoalCategory> = {
+      hunger: 'survival', fatigue: 'move', health: 'survival',
+      mood: 'leisure', safety: 'move', social: 'social',
+    };
+    let worstKey = '';
+    let worstVal = 100;
+    for (const [k, v] of Object.entries({ hunger: needs.hunger, fatigue: needs.fatigue, mood: needs.mood, social: needs.social, safety: needs.safety || 100 })) {
+      if (v < worstVal) { worstVal = v; worstKey = k; }
+    }
+    const categories: GoalCategory[] = [NEED_TO_GOAL[worstKey] || 'leisure'];
+    if (needs.social < 40 && !categories.includes('social')) categories.push('social');
+    if (needs.hunger < 40 && !categories.includes('survival')) categories.push('survival');
+
+    // 收集附近NPC信息
+    const gridNpcIds = this.worldMap.getEntitiesInGrid(pos.gridId);
+    const nearbyNpcs: NearbyNpcInfo[] = [];
+    for (const nid of gridNpcIds) {
+      if (nid === entityId) continue;
+      const nIdent = this.em.getComponent(nid, 'Identity');
+      const nWallet = this.em.getComponent(nid, 'Wallet');
+      const nVital = this.em.getComponent(nid, 'Vital');
+      if (!nIdent) continue;
+      const rel = this.em.getComponent(entityId, 'Relationship');
+      const relEntry = rel?.relations[nid];
+      nearbyNpcs.push({
+        id: nid,
+        name: nIdent.name,
+        profession: nIdent.profession,
+        personality: nIdent.personality,
+        copper: nWallet?.copper || 0,
+        health: nVital?.health || 50,
+        relationScore: relEntry?.score || 0,
+        relationType: relEntry?.type || 'stranger',
+        factionId: this.getNpcFaction(nid)?.id,
+      });
+    }
+
+    // 构建actorStats
+    const actorStats: Record<string, number> = {
+      bravery: identity.personality.includes('勇敢') ? 80 : 40,
+      cunning: identity.personality.includes('狡猾') ? 80 : 40,
+      eloquence: identity.personality.includes('健谈') ? 80 : 40,
+      cleverness: identity.personality.includes('机灵') ? 80 : 40,
+      medicine: identity.profession === 'doctor' ? 80 : 40,
+      patience: identity.personality.includes('温和') ? 80 : 40,
+      courage: identity.personality.includes('勇敢') ? 80 : 40,
+      social: needs.social,
+      pity: identity.personality.includes('善良') ? 80 : 40,
+      aggression: identity.personality.includes('暴躁') ? 80 : 40,
+      strength: vital?.health || 50,
+      wallet: wallet?.copper || 0,
+      loyalty: 50,
+      honor: 50,
+    };
+
+    const targetStatsLookup = (targetId: number): Record<string, number> => {
+      const target = nearbyNpcs.find(n => n.id === targetId);
+      return {
+        alertness: target?.personality.includes('精明') ? 80 : 40,
+        cleverness: target?.personality.includes('机灵') ? 80 : 40,
+        courage: target?.personality.includes('勇敢') ? 80 : 40,
+        kindness: target?.personality.includes('善良') ? 80 : 40,
+        judgment: target?.personality.includes('精明') ? 80 : 40,
+        disease: target ? 100 - target.health : 50,
+        wallet: target?.copper || 50,
+        shyness: target?.personality.includes('胆小') ? 80 : 40,
+        talent: target?.personality.includes('勤劳') ? 80 : 40,
+        strength: target?.health || 50,
+        stinginess: target?.personality.includes('吝啬') ? 80 : 40,
+      };
+    };
+
+    // 通过SceneLibraryManager的L1 Spotlight方法匹配
+    return this.sceneLib.matchL0ForL1(entityId, categories, actorContext, nearbyNpcs, actorStats, targetStatsLookup);
   }
 
   /** L1 NPC 简化决策引擎（只取最紧急需求，一句话叙事） */
@@ -2805,7 +3383,7 @@ export class WorldEngine {
       }
     }
 
-    return { narrative: `${name}${decision.narrative}` };
+    return { narrative: decision.narrative };
   }
 
   /** NPC 移动到指定 grid */
@@ -2900,8 +3478,272 @@ export class WorldEngine {
     return result;
   }
 
-  /** 执行玩家操作 → 完整 Tick，返回丰富场景描述 */
-  executePlayerAction(playerId: number, actionId: string, params: any): TickResult {
+  // ============================================================
+  // 玩家多步骤场景系统
+  // ============================================================
+
+  /** 尝试触发玩家多步骤场景 */
+  private tryTriggerPlayerScene(playerId: number, actionId: string, _params: any): ScenePhaseResult | null {
+    // 已有活跃场景则不再触发
+    if (this.sceneLib.hasActivePlayerScene()) return null;
+
+    // 触发概率：对NPC交互 40%，endTurn 8%，其他 5%
+    let triggerChance = 0.05;
+    const npcInteractActions = ['talk_to', 'ask_rumor', 'trade_buy', 'trade_sell', 'share_food', 'help_request', 'gift', 'provoke', 'sworn_brothers', 'learn_skill', 'invite_travel'];
+    if (npcInteractActions.includes(actionId)) triggerChance = 0.40;
+    else if (actionId === 'end_turn') triggerChance = 0.08;
+    if (Math.random() > triggerChance) return null;
+
+    // 构建玩家 actorContext
+    const pos = this.em.getComponent(playerId, 'Position');
+    const vital = this.em.getComponent(playerId, 'Vital');
+    const wallet = this.em.getComponent(playerId, 'Wallet');
+    const identity = this.em.getComponent(playerId, 'Identity');
+    const hiddenTraits = this.em.getComponent(playerId, 'HiddenTraits');
+
+    const actorContext = {
+      traits: identity?.personality || [],
+      profession: identity?.profession || 'wanderer',
+      npcName: identity?.name || '你',
+      copper: wallet?.copper ?? 0,
+      health: vital?.health ?? 80,
+      emotion: 'happy' as string,
+      stress: 0,
+      currentGrid: pos?.gridId || 'center_street',
+      shichen: this.time.shichenName,
+      weather: this.weather.weather,
+      season: this.time.season,
+      day: this.time.day,
+      tick: this.time.tick,
+      nearbyCount: this.worldMap.getEntitiesInGrid(pos?.gridId || '').length,
+    };
+
+    // 收集附近 NPC
+    const nearbyIds = this.worldMap.getEntitiesInGrid(pos?.gridId || '')
+      .filter((id: number) => id !== playerId && this.em.getType(id) === 'npc');
+    const nearbyNpcs = nearbyIds.map((nid: number) => {
+      const nIdentity = this.em.getComponent(nid, 'Identity') as any;
+      const nWallet = this.em.getComponent(nid, 'Wallet') as any;
+      const nVital = this.em.getComponent(nid, 'Vital') as any;
+      return {
+        id: nid,
+        name: nIdentity?.name || `NPC${nid}`,
+        profession: nIdentity?.profession || 'laborer',
+        personality: nIdentity?.personality || [],
+        copper: nWallet?.copper || 0,
+        health: nVital?.health || 100,
+        relationScore: this.relationshipSys.getScore(playerId, nid),
+        relationType: this.relationshipSys.getType(playerId, nid),
+      };
+    });
+
+    // 构建玩家属性（用于条件检查）
+    const playerStats: Record<string, number> = {
+      copper: wallet?.copper ?? 0,
+      health: vital?.health ?? 80,
+      mood: vital?.mood ?? 50,
+      hunger: vital?.hunger ?? 50,
+      fatigue: vital?.fatigue ?? 50,
+      ...(hiddenTraits ? {
+        greed: hiddenTraits.greed,
+        honor: hiddenTraits.honor,
+        ambition: hiddenTraits.ambition,
+        rationality: hiddenTraits.rationality,
+        loyalty: hiddenTraits.loyalty,
+      } : {}),
+    };
+
+    const result = this.sceneLib.matchPlayerScene(actorContext, nearbyNpcs, playerStats, this.time.tick);
+    if (!result) return null;
+
+    // 记录场景开始
+    this.logEventEx('scene', 'player_scene', `玩家触发场景: ${result.scene.name}`, {
+      sourceEntityId: playerId,
+      targetEntityId: result.state.participantNpcIds[0],
+      sceneLevel: 'player_scene',
+    });
+
+    // 构建参与者名字列表
+    const participantNames = result.state.participantNpcIds.map(id => {
+      const ident = this.em.getComponent(id, 'Identity');
+      return ident?.name || '某人';
+    });
+
+    // 构建玩家状态快照
+    const apData = this.getPlayerAP(playerId);
+    const ps = {
+      hunger: vital?.hunger ?? 50,
+      fatigue: vital?.fatigue ?? 50,
+      health: vital?.health ?? 80,
+      mood: vital?.mood ?? 50,
+      copper: wallet?.copper ?? 0,
+      ap: apData.current,
+      apMax: apData.max,
+    };
+    const ws = {
+      tick: this.time.tick,
+      shichen: this.time.shichenName,
+      day: this.time.day,
+      season: this.time.season,
+      weather: this.weather.weather,
+      weatherDesc: this.weather.getDescription(),
+      prices: this.economy.getPrices(),
+    };
+
+    return {
+      isScenePhase: true,
+      sceneId: result.scene.id,
+      narrative: result.openingNarrative,
+      choices: result.choices.map(c => ({
+        id: c.id,
+        text: c.text,
+        conditionMet: !c.condition || this.checkPlayerChoiceCondition(playerStats, identity?.personality || [], c.condition),
+      })),
+      participantNpcIds: result.state.participantNpcIds,
+      participantNames,
+      playerState: ps,
+      worldState: ws,
+    };
+  }
+
+  /** 检查玩家选项条件 */
+  private checkPlayerChoiceCondition(
+    playerStats: Record<string, number>,
+    personality: string[],
+    condition: any,
+  ): boolean {
+    if (!condition) return true;
+    const field = condition.field as string;
+    const op = condition.operator as string;
+    const value = condition.value as number | string;
+    let fieldValue: number | string | undefined;
+    if (field === 'personality') {
+      fieldValue = personality.includes(value as string) ? 1 : 0;
+    } else if (field === 'hiddenTrait') {
+      fieldValue = playerStats[String(value).toLowerCase()] ?? 0;
+    } else {
+      fieldValue = playerStats[field] ?? 0;
+    }
+    if (op === 'gte') return (fieldValue as number) >= (value as number);
+    if (op === 'lte') return (fieldValue as number) <= (value as number);
+    if (op === 'includes') return personality.includes(value as string);
+    if (op === 'notIncludes') return !personality.includes(value as string);
+    return true;
+  }
+
+  /** 处理玩家场景选择 */
+  resolvePlayerSceneChoice(playerId: number, choiceId: string): ScenePhaseResult | TickResult {
+    const wallet = this.em.getComponent(playerId, 'Wallet');
+    const vital = this.em.getComponent(playerId, 'Vital');
+    const hiddenTraits = this.em.getComponent(playerId, 'HiddenTraits');
+    const identity = this.em.getComponent(playerId, 'Identity');
+
+    const playerStats: Record<string, number> = {
+      copper: wallet?.copper ?? 0,
+      health: vital?.health ?? 80,
+      mood: vital?.mood ?? 50,
+      hunger: vital?.hunger ?? 50,
+      fatigue: vital?.fatigue ?? 50,
+      ...(hiddenTraits ? {
+        greed: hiddenTraits.greed, honor: hiddenTraits.honor,
+        ambition: hiddenTraits.ambition, rationality: hiddenTraits.rationality,
+        loyalty: hiddenTraits.loyalty,
+      } : {}),
+    };
+
+    const result = this.sceneLib.resolvePlayerChoice(choiceId, playerStats);
+    if (!result) {
+      this.sceneLib.cancelPlayerScene();
+      return this.executePlayerAction(playerId, 'look_around', {});
+    }
+
+    // 应用效果到玩家
+    if (result.effects) {
+      for (const [key, value] of Object.entries(result.effects)) {
+        if (key === 'copper' && wallet) wallet.copper = Math.max(0, wallet.copper + value);
+        else if (key === 'health' && vital) vital.health = Math.max(0, Math.min(100, vital.health + value));
+        else if (key === 'mood' && vital) vital.mood = Math.max(0, Math.min(100, vital.mood + value));
+        else if (key === 'fatigue' && vital) vital.fatigue = Math.max(0, Math.min(100, vital.fatigue + value));
+        else if (key === 'hunger' && vital) vital.hunger = Math.max(0, Math.min(100, vital.hunger + value));
+      }
+    }
+
+    // 应用关系到参与NPC
+    const activeScene = this.sceneLib.getActivePlayerScene();
+    if (activeScene && result.effects) {
+      const relChange = result.effects['relationChange'];
+      if (relChange && relChange !== 0) {
+        for (const npcId of activeScene.participantNpcIds) {
+          this.relationshipSys.modifyRelation(playerId, npcId, relChange, this.time.tick);
+        }
+      }
+      // 应用效果到参与NPC
+      for (const npcId of activeScene.participantNpcIds) {
+        const tVital = this.em.getComponent(npcId, 'Vital');
+        const tWallet = this.em.getComponent(npcId, 'Wallet');
+        if (result.effects['targetMood'] && tVital) tVital.mood = Math.max(0, Math.min(100, tVital.mood + result.effects['targetMood']));
+        if (result.effects['targetCopper'] && tWallet) tWallet.copper = Math.max(0, tWallet.copper + result.effects['targetCopper']);
+      }
+    }
+
+    // 记录场景步骤
+    this.logEventEx('scene', 'player_scene_choice', result.narrative, {
+      sourceEntityId: playerId,
+      targetEntityId: activeScene?.participantNpcIds[0],
+      sceneLevel: 'player_scene',
+    });
+
+    // 场景结束 → 推进世界
+    if (result.finished) {
+      this.resetAP(playerId);
+      const simResult = this.simulateTurn();
+      const pos = this.em.getComponent(playerId, 'Position');
+      const gridId = pos?.gridId || 'center_street';
+      const template = this.getSceneTemplate(gridId);
+      const sceneCtx = this.getSceneContext(playerId, simResult.causalEvents);
+      const apData = this.getPlayerAP(playerId);
+      const distantNews = this.generateDistantNews();
+      const briefing = this.generateBriefing(gridId, simResult.priceChanges, distantNews);
+      const recentEvents = this.getEvents(20);
+      const tickEvents = recentEvents.filter(e => e.tick === this.time.tick).length;
+
+      return {
+        success: true,
+        message: result.narrative,
+        sceneDescription: template.getDescription(sceneCtx),
+        sceneLocation: template.locationName,
+        options: [],
+        npcMessages: [result.narrative],
+        timings: { total: 0, playerAction: 0, l0GOAP: 0, l1BehaviorTree: 0, l2Statistics: 0, economy: 0, perception: 0, vitalDecay: 0, assemble: 0 },
+        perception: this.perception.getPerceptionData(playerId),
+        worldState: { tick: this.time.tick, shichen: this.time.shichenName, day: this.time.day, season: this.time.season, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), prices: this.economy.getPrices() },
+        playerState: { hunger: vital?.hunger ?? 50, fatigue: vital?.fatigue ?? 50, health: vital?.health ?? 80, mood: vital?.mood ?? 50, copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max },
+        turnSummary: { shichen: this.time.shichenName, day: this.time.day, tick: this.time.tick, l0Actions: simResult.l0Actions, l1Summary: simResult.l1Summary, majorEvents: simResult.majorEvents, weatherChange: simResult.weatherChange, priceChanges: simResult.enrichedPriceChanges, totalEvents: tickEvents, npcActions: simResult.npcActions, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), events: tickEvents },
+        distantNews,
+        briefing,
+      };
+    }
+
+    // 场景继续 → 返回下一阶段
+    const apData = this.getPlayerAP(playerId);
+    return {
+      isScenePhase: true,
+      sceneId: activeScene!.sceneId,
+      narrative: result.narrative,
+      choices: (result.choices || []).map(c => ({
+        id: c.id,
+        text: c.text,
+        conditionMet: !c.condition || this.checkPlayerChoiceCondition(playerStats, identity?.personality || [], c.condition),
+      })),
+      participantNpcIds: activeScene!.participantNpcIds,
+      participantNames: activeScene!.participantNpcIds.map(id => this.em.getComponent(id, 'Identity')?.name || '某人'),
+      playerState: { hunger: vital?.hunger ?? 50, fatigue: vital?.fatigue ?? 50, health: vital?.health ?? 80, mood: vital?.mood ?? 50, copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max },
+      worldState: { tick: this.time.tick, shichen: this.time.shichenName, day: this.time.day, season: this.time.season, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), prices: this.economy.getPrices() },
+    };
+  }
+
+  /** 执行玩家操作 → 完整 Tick，返回丰富场景描述（可能被场景中断） */
+  executePlayerAction(playerId: number, actionId: string, params: any): TickResult | ScenePhaseResult {
     const timings: TickTimings = {
       total: 0, playerAction: 0, l0GOAP: 0, l1BehaviorTree: 0,
       l2Statistics: 0, economy: 0, perception: 0, vitalDecay: 0, assemble: 0,
@@ -2951,6 +3793,10 @@ export class WorldEngine {
         briefing: this.generateBriefing(gridId, {}, []),
       };
     }
+
+    // 0. 尝试触发多步骤场景（在执行动作之前）
+    const sceneCheck = this.tryTriggerPlayerScene(playerId, actionId, params);
+    if (sceneCheck) return sceneCheck;
 
     // 1. 执行玩家操作
     let t0 = performance.now();
@@ -3070,9 +3916,15 @@ export class WorldEngine {
   }
 
   /** 结束回合（不执行玩家行动，推进世界） */
-  endTurn(playerId: number): TickResult {
+  endTurn(playerId: number): TickResult | ScenePhaseResult {
     // 重置 AP
     this.resetAP(playerId);
+
+    // 随机触发场景（8%概率）
+    if (Math.random() < 0.08) {
+      const sceneCheck = this.tryTriggerPlayerScene(playerId, 'end_turn', {});
+      if (sceneCheck) return sceneCheck;
+    }
 
     // 推进世界
     const simResult = this.simulateTurn();

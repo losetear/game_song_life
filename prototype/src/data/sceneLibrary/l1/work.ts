@@ -17,6 +17,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['merchant'],
       dominantNeed: 'safety',
+      actorTraits: ['精明', '口才好'],
+      actorForbiddenTraits: ['害羞'],
     },
     outcome: {
       narrative: '{count}个商贩在{location}激烈讨价还价，唾沫横飞争得面红耳赤，最后一拍桌成交。',
@@ -35,6 +37,7 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['merchant'],
       dominantNeed: 'safety',
       timeOfDay: 'dawn',
+      actorTraits: ['勤劳', '精明'],
     },
     outcome: {
       narrative: '{count}个商贩在黎明前支起了摊位，油布一抖铺开货物，趁着天刚亮抢占最好的位置。',
@@ -55,6 +58,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['farmer'],
       dominantNeed: 'safety',
       timeOfDay: 'day',
+      actorTraits: ['勤劳', '坚韧'],
+      actorForbiddenTraits: ['懒惰'],
     },
     outcome: {
       narrative: '{count}个农夫在田里耕地，犁铧翻起黑褐色的泥土，汗珠滴在地里无声无息。',
@@ -72,6 +77,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['farmer'],
       dominantNeed: 'safety',
+      actorTraits: ['坚韧', '合作'],
+      requireNearbyRelation: 'neighbor',
     },
     outcome: {
       narrative: '{count}个农夫修理水渠，泥巴糊了满手满脸，清渠中的水终于又畅快地流了起来。',
@@ -91,6 +98,9 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['guard'],
       dominantNeed: 'safety',
+      actorTraits: ['严肃', '正义'],
+      actorForbiddenTraits: ['懒惰'],
+      requireFactionType: ['official'],
     },
     outcome: {
       narrative: '一队{count}个衙役在{location}穿街过巷，甲胄碰撞叮当作响，路人纷纷让道。',
@@ -109,6 +119,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['guard'],
       dominantNeed: 'safety',
       timeOfDay: 'day',
+      actorTraits: ['严肃', '坚韧'],
+      requireFactionType: ['official'],
     },
     outcome: {
       narrative: '{count}个衙役在城门值守，盘查进出行人车辆，长枪立在身旁纹丝不动。',
@@ -128,6 +140,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['doctor'],
       dominantNeed: 'safety',
+      actorTraits: ['仁慈', '细心'],
+      actorForbiddenTraits: ['冷漠'],
     },
     outcome: {
       narrative: '{count}个大夫在{location}巡诊，药箱背在肩上挨家挨户查看病人，望闻问切一丝不苟。',
@@ -145,6 +159,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['doctor'],
       dominantNeed: 'safety',
+      actorTraits: ['精明', '细心'],
+      requireNearbyProfession: ['merchant'],
     },
     outcome: {
       narrative: '{count}个大夫在药市采购，挑拣当归黄芪仔细辨别成色，跟药商就分量讨价还价。',
@@ -165,6 +181,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['hunter'],
       dominantNeed: 'safety',
       timeOfDay: 'dawn',
+      actorTraits: ['勇敢', '坚韧'],
+      actorForbiddenTraits: ['软弱'],
     },
     outcome: {
       narrative: '{count}个猎人结伴进山，弓箭上弦刀在腰间，踏着露水往密林深处走去。',
@@ -182,6 +200,7 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['hunter'],
       dominantNeed: 'safety',
+      actorTraits: ['耐心', '细心'],
     },
     outcome: {
       narrative: '{count}个猎人在检查陷阱，翻山越岭挨个查看套索和兽夹，运气好的话能带回去几只野兔。',
@@ -201,6 +220,9 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['blacksmith'],
       dominantNeed: 'safety',
+      actorTraits: ['坚韧', '勤劳'],
+      actorForbiddenTraits: ['懒惰'],
+      dominantMood: 'focused',
     },
     outcome: {
       narrative: '{count}个铁匠守着炉火叮叮当当地打铁，火星四溅映红了黝黑的脸膛，锤起锤落毫不含糊。',
@@ -218,6 +240,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['blacksmith'],
       dominantNeed: 'safety',
+      actorTraits: ['踏实'],
+      requireNearbyProfession: ['farmer', 'guard'],
     },
     outcome: {
       narrative: '{count}个铁匠送新打的农具，锄头镰刀用草绳捆了背在肩上，挨家挨户交货收钱。',
@@ -238,6 +262,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['chef'],
       dominantNeed: 'safety',
       timeOfDay: 'day',
+      actorTraits: ['勤劳', '细心'],
+      dominantMood: 'focused',
     },
     outcome: {
       narrative: '{count}个厨子在灶台前忙得热火朝天，蒸笼叠了三层高，炒勺翻飞油烟呛得人直流泪。',
@@ -256,6 +282,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['chef'],
       dominantNeed: 'safety',
       timeOfDay: 'dawn',
+      actorTraits: ['精明', '勤劳'],
+      requireNearbyProfession: ['farmer', 'merchant'],
     },
     outcome: {
       narrative: '{count}个厨子在市场采购食材，掐掐菜叶闻闻鱼肉，挑最鲜的买，跟摊贩熟络地打着招呼。',
@@ -276,6 +304,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['teacher'],
       dominantNeed: 'safety',
       timeOfDay: 'day',
+      actorTraits: ['博学', '耐心'],
+      actorForbiddenTraits: ['暴躁'],
     },
     outcome: {
       narrative: '{count}个先生在教一群学童念书，戒尺拍着桌面打拍子，稚嫩的童声摇头晃脑地跟着念。',
@@ -293,6 +323,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['teacher'],
       dominantNeed: 'safety',
+      actorTraits: ['严肃', '博学'],
+      dominantMood: 'focused',
     },
     outcome: {
       narrative: '{count}个先生在主持考试，试卷发了下去便在堂上来回踱步，目光扫过埋头苦写的学童。',
@@ -313,6 +345,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['laborer'],
       dominantNeed: 'safety',
       timeOfDay: 'day',
+      actorTraits: ['坚韧', '勤劳'],
+      actorForbiddenTraits: ['懒惰'],
     },
     outcome: {
       narrative: '{count}个苦力在码头搬麻袋，肩上的绳子勒进肉里，一步一步踏着跳板往船上走。',
@@ -330,6 +364,8 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['laborer'],
       dominantNeed: 'safety',
+      actorTraits: ['坚韧', '合作'],
+      requireNearbyRelation: 'neighbor',
     },
     outcome: {
       narrative: '{count}个苦力在帮人盖房，扛木料和泥浆砌砖墙，喊着号子一起使劲把大梁抬上了墙头。',
@@ -349,6 +385,9 @@ export const L1_WORK_SCENES: L1Scene[] = [
     conditions: {
       profession: ['rogue'],
       dominantNeed: 'safety',
+      actorTraits: ['狡猾', '懒惰'],
+      actorForbiddenTraits: ['正义', '勤劳'],
+      dominantMood: 'bored',
     },
     outcome: {
       narrative: '{count}个混混在街角游荡，双手插在怀里东张西望，路过的行人都不自觉地加快了脚步。',
@@ -367,6 +406,9 @@ export const L1_WORK_SCENES: L1Scene[] = [
       profession: ['rogue'],
       dominantNeed: 'safety',
       timeOfDay: 'night',
+      actorTraits: ['狡猾', '精明'],
+      actorForbiddenTraits: ['正义'],
+      requireFactionType: ['gang'],
     },
     outcome: {
       narrative: '{count}个混混在暗处交换不明来路的物品，压低嗓门快速交割，银货两讫便各自散去。',

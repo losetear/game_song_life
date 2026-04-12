@@ -16,6 +16,9 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       needThreshold: 30,
+      actorTraits: ['暴躁', '冲动'],
+      actorForbiddenTraits: ['冷静'],
+      dominantMood: 'angry',
     },
     outcome: {
       narrative: '{count}个{professionName}在{location}的市场里打成一团，摊子被掀翻菜果撒了一地，围观的人吓得四散。',
@@ -33,6 +36,8 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
     conditions: {
       profession: ['guard', 'rogue'],
       dominantNeed: 'safety',
+      actorTraits: ['正义', '勇敢'],
+      requireFactionType: ['official', 'gang'],
     },
     outcome: {
       narrative: '{count}个衙役和混混在街头对峙，衙役举着棍棒驱散闹事者，混混们嘴上不饶人脚底却抹了油。',
@@ -51,6 +56,9 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
       profession: ['farmer', 'merchant'],
       dominantNeed: 'mood',
       needThreshold: 35,
+      actorTraits: ['固执', '精明'],
+      actorForbiddenTraits: ['随和'],
+      dominantMood: 'angry',
     },
     outcome: {
       narrative: '{count}个农夫和商贩因地界争端吵得不可开交，一方指着界碑一方拿着地契，谁也不肯退让半步。',
@@ -69,6 +77,9 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
       profession: ['merchant'],
       dominantNeed: 'mood',
       needThreshold: 40,
+      actorTraits: ['精明', '贪婪'],
+      actorForbiddenTraits: ['随和'],
+      requireFactionType: ['guild'],
     },
     outcome: {
       narrative: '{count}个商贩爆发了压价竞争，你降一文我降两文，互相拆台骂骂咧咧，利润被压缩到了骨头里。',
@@ -88,6 +99,9 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       needThreshold: 25,
       timeOfDay: 'night',
+      actorTraits: ['暴躁', '冲动'],
+      actorForbiddenTraits: ['自律', '冷静'],
+      dominantMood: 'angry',
     },
     outcome: {
       narrative: '{count}个{professionName}喝多了在酒肆门口斗殴，拳脚无眼桌子板凳砸得稀烂，酒气混着血腥味弥漫开来。',
@@ -106,6 +120,9 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'mood',
       needThreshold: 40,
+      actorTraits: ['正义', '勇敢'],
+      actorForbiddenTraits: ['冷漠', '胆小'],
+      dominantMood: 'angry',
     },
     outcome: {
       narrative: '{count}个{professionName}追打一个窃贼，抓贼声响彻整条街，众人抄起家伙围追堵截，小偷被按在地上揍了个鼻青脸肿。',
@@ -125,6 +142,9 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
       dominantNeed: 'mood',
       needThreshold: 35,
       season: ['summer'],
+      actorTraits: ['暴躁', '固执'],
+      dominantMood: 'angry',
+      requireNearbyProfession: ['farmer'],
     },
     outcome: {
       narrative: '{count}个农夫和苦力为争水起了冲突，大旱天谁家的田都得浇，锄头扁担对上了，水渠边吵得不可开交。',
@@ -142,6 +162,10 @@ export const L1_CONFLICT_SCENES: L1Scene[] = [
     conditions: {
       profession: ['rogue', 'merchant'],
       dominantNeed: 'safety',
+      actorTraits: ['狡猾', '霸道'],
+      actorForbiddenTraits: ['正义'],
+      requireFactionType: ['gang'],
+      dominantMood: 'fearful',
     },
     outcome: {
       narrative: '{count}个混混在{location}向商贩收保护费，笑里藏刀地拍着柜台，商贩们敢怒不敢言地掏出铜板。',

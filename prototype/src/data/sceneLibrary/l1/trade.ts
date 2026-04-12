@@ -15,6 +15,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
     conditions: {
       profession: ALL_PROFESSIONS,
       dominantNeed: 'safety',
+      actorTraits: ['精明', '合作'],
+      actorForbiddenTraits: ['暴躁'],
     },
     outcome: {
       narrative: '{count}个{professionName}在{location}以物易物，一篮鸡蛋换两尺布，半袋米换一壶酒，各取所需皆大欢喜。',
@@ -33,6 +35,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'hunger',
       needThreshold: 35,
+      actorForbiddenTraits: ['从容'],
+      dominantMood: 'anxious',
     },
     outcome: {
       narrative: '{count}个{professionName}涌向粮市抢购粮食，听说米价要涨的消息传遍了大街小巷，人人提着麻袋往回扛。',
@@ -51,6 +55,9 @@ export const L1_TRADE_SCENES: L1Scene[] = [
       profession: ['merchant', 'laborer'],
       dominantNeed: 'safety',
       timeOfDay: 'dawn',
+      actorTraits: ['勤劳'],
+      requireNearbyProfession: ['merchant'],
+      requireFactionType: ['guild'],
     },
     outcome: {
       narrative: '{count}个商贩和苦力在卸货，骆驼和骡车停在仓库门口，绸缎茶叶香料一箱箱往下搬。',
@@ -68,6 +75,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
     conditions: {
       profession: ['blacksmith', 'merchant'],
       dominantNeed: 'safety',
+      actorTraits: ['精明', '踏实'],
+      requireNearbyProfession: ['farmer', 'guard'],
     },
     outcome: {
       narrative: '{count}个铁匠和商贩摆出了新打的铁器，锄头镰刀菜刀排了一排，锃亮的刃口在日头下闪光。',
@@ -85,6 +94,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
     conditions: {
       profession: ['doctor', 'hunter'],
       dominantNeed: 'safety',
+      actorTraits: ['精明', '细心'],
+      requireNearbyProfession: ['doctor'],
     },
     outcome: {
       narrative: '{count}个大夫和猎人在做药材生意，鹿茸麝香虫草摆在柜台上，品相好的被一抢而空。',
@@ -103,6 +114,9 @@ export const L1_TRADE_SCENES: L1Scene[] = [
       profession: ['merchant', 'chef'],
       dominantNeed: 'fatigue',
       timeOfDay: 'dusk',
+      actorTraits: ['精明'],
+      actorForbiddenTraits: ['懒惰'],
+      requireNearbyProfession: ['farmer'],
     },
     outcome: {
       narrative: '{count}个商贩和厨子在日落前收摊清仓，剩下的菜和果子便宜处理，街坊们闻讯赶来捡漏。',
@@ -120,6 +134,9 @@ export const L1_TRADE_SCENES: L1Scene[] = [
     conditions: {
       profession: ['merchant'],
       dominantNeed: 'safety',
+      actorTraits: ['精明', '口才好'],
+      actorForbiddenTraits: ['暴躁'],
+      requireFactionType: ['guild'],
     },
     outcome: {
       narrative: '{count}个商贩在做丝绸买卖，锦缎铺展开来流光溢彩，买家用指尖摩挲着细细辨别质地。',
@@ -138,6 +155,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
       profession: ['farmer'],
       dominantNeed: 'safety',
       timeOfDay: 'dawn',
+      actorTraits: ['勤劳'],
+      requireNearbyProfession: ['merchant'],
     },
     outcome: {
       narrative: '{count}个农夫在路边摆摊卖菜，新鲜的瓜果蔬菜还带着晨露，赶早市的人围上来挑挑拣拣。',
@@ -156,6 +175,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
       profession: ALL_PROFESSIONS,
       dominantNeed: 'hunger',
       needThreshold: 30,
+      actorForbiddenTraits: ['骄傲'],
+      dominantMood: 'sad',
     },
     outcome: {
       narrative: '{count}个{professionName}在当铺门口排着队，手里攥着首饰旧衣铜盆银镯，换几个铜板好撑过这段日子。',
@@ -173,6 +194,8 @@ export const L1_TRADE_SCENES: L1Scene[] = [
     conditions: {
       profession: ['hunter', 'merchant'],
       dominantNeed: 'safety',
+      actorTraits: ['精明', '勇敢'],
+      requireNearbyProfession: ['merchant'],
     },
     outcome: {
       narrative: '{count}个猎人和商贩在做皮毛交易，狐皮鹿皮兔皮挂了一排，猎人比划着讲猎获的过程，商贩精明地估着价。',

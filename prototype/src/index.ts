@@ -9,6 +9,8 @@ import { runAllBenchmarks, printReport } from './benchmark/runner';
 import { generateEntities, generateFactions } from './data/entities';
 import { PropagationEngine } from './propagation/propagationEngine';
 import { BenchmarkReport } from './server/protocol';
+import { PLAYER_SOCIAL_SCENES } from './data/sceneLibrary/player/social';
+import { PLAYER_CRISIS_SCENES } from './data/sceneLibrary/player/crisis';
 
 const args = process.argv.slice(2);
 const isBenchmarkOnly = args.includes('--benchmark');
@@ -40,6 +42,9 @@ engine.regionSim.update('summer', 1.0);
 // 生成 12 个组织实体
 const factionGen = generateFactions(engine.em, gen.l0Ids, gen.l1Ids);
 engine.registerFactions(factionGen.factions);
+
+// 注册玩家多步骤场景
+engine.sceneLib.registerPlayerScenes([...PLAYER_SOCIAL_SCENES, ...PLAYER_CRISIS_SCENES]);
 
 // 构建关系网
 const propEngine = new PropagationEngine();
