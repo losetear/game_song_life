@@ -35,6 +35,7 @@ import { ALL_L1_SCENES } from '../data/sceneLibrary/l1';
 import { ALL_L2_SCENES } from '../data/sceneLibrary/l2';
 import { PROFESSION_DISPLAY, gridDisplayName } from '../ai/sceneLibrary/narrativeFormatter';
 import { getAvailableFactionActions, markFactionActionUsed, weightedRandomSelect, FactionAction } from '../data/factionActions';
+import { buildRichNarrative } from '../data/narrativeTemplates';
 
 // === 重大事件 ===
 export interface MajorEvent {
@@ -2495,48 +2496,55 @@ export class WorldEngine {
       };
     }
 
-    // ── 演出库未命中，使用基础生存行为 ──
-    // 不再使用旧的decide()引擎，直接执行基于需求的基础行为
-    // ── 演出库未命中，使用基础生存行为（已移除旧decide引擎）──
-    // 找最紧迫的需求，直接调整
+    // ── 演出库未命中，基于真实环境生成丰富叙事 ──
+    // 找最紧迫的需求
     let worst = "hunger"; let worstVal = 100;
     for (const k of ["hunger","fatigue","health","mood","social","safety"]) {
       if ((needs as any)[k] < worstVal) { worstVal = (needs as any)[k]; worst = k; }
     }
-    
-    let basicDesc = "";
-    let basicEffect: Record<string, number> = {};
-    
-    switch(worst) {
-      case "hunger":
-        basicDesc = name + "找了点东西填肚子";
-        basicEffect = { hunger: 15, copper: -3 };
-        break;
-      case "fatigue":
-        basicDesc = name + "停下来休息了一会儿";
-        basicEffect = { fatigue: 20 };
-        break;
-      case "health":
-        basicDesc = name + "感觉不太舒服，去找了点药";
-        basicEffect = { health: 10, copper: -5 };
-        break;
-      case "mood":
-        basicDesc = name + "在街上随便逛了逛";
-        basicEffect = { mood: 8 };
-        break;
-      case "social":
-        basicDesc = name + "和路人说了几句话";
-        basicEffect = { social: 8 };
-        break;
-      case "safety":
-        basicDesc = name + "回到了安全的地方";
-        basicEffect = { safety: 15 };
-        break;
+
+    // 需求对应的基础动作和效果
+    const NEED_ACTION_MAP: Record<string, { desc: string; effects: Record<string, number>; category: string }> = {
+      hunger:  { desc: `${name}在路边找了个小摊，买了两个热腾腾的炊饼，蹲在墙根下大口吃了起来。`, effects: { hunger: 15, copper: -3 }, category: 'survival' },
+      fatigue: { desc: `${name}找了个僻静的角落坐下来，靠着墙闭目养神。`, effects: { fatigue: 20 }, category: 'leisure' },
+      health:  { desc: `${name}面色有些苍白，去药铺买了些草药，就着温水服下。`, effects: { health: 10, copper: -5 }, category: 'survival' },
+      mood:    { desc: `${name}漫无目的地在街上走着，看看这看看那，心中渐渐舒展开来。`, effects: { mood: 8 }, category: 'leisure' },
+      social:  { desc: `${name}在路边拦住一个相熟的面孔，两人站在路边聊了好一会儿。`, effects: { social: 8 }, category: 'social' },
+      safety:  { desc: `${name}警惕地四下看了看，快步走向人多的地方。`, effects: { safety: 15 }, category: 'move' },
+    };
+
+    const actionInfo = NEED_ACTION_MAP[worst] || NEED_ACTION_MAP['mood'];
+
+    // 收集环境上下文
+    const fallbackPos = this.em.getComponent(entityId, 'Position');
+    const fallbackGridId = fallbackPos?.gridId || 'center_street';
+    const gridNpcIds = this.worldMap.getEntitiesInGrid(fallbackGridId);
+    const nearbyNames: string[] = [];
+    for (const nid of gridNpcIds) {
+      if (nid === entityId) continue;
+      const nIdent = this.em.getComponent(nid, 'Identity');
+      if (nIdent) nearbyNames.push(nIdent.name);
+      if (nearbyNames.length >= 2) break;
     }
-    
+
+    // 组装丰富叙事
+    const richNarrative = buildRichNarrative({
+      baseNarrative: actionInfo.desc,
+      weather: this.weather.weather,
+      shichen: this.time.shichenName,
+      gridId: fallbackGridId,
+      nearbyNames,
+      personality: identity.personality,
+      actionCategory: actionInfo.category,
+      npcId: entityId,
+      tick: this.time.tick,
+    });
+
     // 应用效果
-    for (const [key, value] of Object.entries(basicEffect)) {
-      if (key in needs) {
+    for (const [key, value] of Object.entries(actionInfo.effects)) {
+      if (key === 'copper') {
+        if (wallet) wallet.copper = Math.max(0, wallet.copper + value);
+      } else if (key in needs) {
         (needs as any)[key] = Math.max(0, Math.min(100, (needs as any)[key] + value));
       }
     }
@@ -2544,27 +2552,24 @@ export class WorldEngine {
     vital.fatigue = needs.fatigue;
     vital.health = needs.health;
     vital.mood = needs.mood;
-    if (basicEffect.copper && wallet) {
-      wallet.copper = Math.max(0, wallet.copper + basicEffect.copper);
-    }
-    
+
     this.eventLog.push({
       tick: this.time.tick,
       time: new Date().toISOString(),
       type: "npc",
-      category: "basic_action",
-      message: basicDesc,
+      category: "contextual_action",
+      message: richNarrative,
       cause: worst,
       source: identity.name,
     });
     this.lastTickEvents++;
-    
+
     const bhistory = this.npcHistory.get(entityId) || [];
     bhistory.push({
       tick: this.time.tick,
       shichen: this.time.shichenName,
-      action: "basic_" + worst,
-      description: basicDesc,
+      action: "contextual_" + worst,
+      description: richNarrative,
       result: "完成",
       cause: worst,
       stateBefore,
@@ -2572,11 +2577,11 @@ export class WorldEngine {
     });
     if (bhistory.length > 20) bhistory.shift();
     this.npcHistory.set(entityId, bhistory);
-    
+
     return {
       npcName: name,
-      action: basicDesc,
-      result: basicDesc,
+      action: `contextual_${worst}`,
+      result: richNarrative,
       majorEvents: [],
     };
   }
@@ -3383,7 +3388,30 @@ export class WorldEngine {
       }
     }
 
-    return { narrative: decision.narrative };
+    // 生成丰富叙事（非一句话）
+    const pos2 = this.em.getComponent(entityId, 'Position');
+    const gridId2 = pos2?.gridId || 'center_street';
+    const gridNpcIds2 = this.worldMap.getEntitiesInGrid(gridId2);
+    const nearbyNames2: string[] = [];
+    for (const nid of gridNpcIds2) {
+      if (nid === entityId) continue;
+      const nIdent = this.em.getComponent(nid, 'Identity');
+      if (nIdent) nearbyNames2.push(nIdent.name);
+      if (nearbyNames2.length >= 2) break;
+    }
+    const richNarrative = buildRichNarrative({
+      baseNarrative: decision.narrative,
+      weather: this.weather.weather,
+      shichen: this.time.shichenName,
+      gridId: gridId2,
+      nearbyNames: nearbyNames2,
+      personality: identity?.personality || [],
+      actionCategory: decision.actionId?.split('_')[0] || 'work',
+      npcId: entityId,
+      tick: this.time.tick,
+    });
+
+    return { narrative: richNarrative };
   }
 
   /** NPC 移动到指定 grid */

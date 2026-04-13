@@ -142,10 +142,9 @@ export function matchL0Scene(
       // 无目标场景不需要附近NPC，跳过null检查
     }
 
-    // 评分
+    // 评分（确定性，基于环境）
     let score = scene.weight
-      + (scene.priority || 0) * 0.5
-      + Math.random() * 2;
+      + (scene.priority || 0) * 0.5;
 
     // 情绪-标签协同加分
     const tags = scene.tags || [];
@@ -170,10 +169,9 @@ export function matchL0Scene(
 
   if (candidates.length === 0) return null;
 
-  // 排序取top-3，随机选一个
+  // 排序取最高分（确定性选择，基于真实环境）
   candidates.sort((a, b) => b.score - a.score);
-  const top = candidates.slice(0, Math.min(3, candidates.length));
-  const chosen = top[Math.floor(Math.random() * top.length)];
+  const chosen = candidates[0];
   return { scene: chosen.scene, target: chosen.target };
 }
 
@@ -255,10 +253,9 @@ export function matchL1Scene(
       if (range && (avgMood < range[0] || avgMood > range[1])) continue;
     }
 
-    // 评分（降低随机噪声，让权重和属性主导）
+    // 评分（确定性，基于属性和环境）
     const score = scene.weight
-      + (100 - (needValue || 50)) * 0.1
-      + Math.random() * 0.5;
+      + (100 - (needValue || 50)) * 0.1;
 
     candidates.push({ scene, score });
   }

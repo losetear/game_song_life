@@ -356,22 +356,21 @@ export function decide(ctx: DecisionContext): DecisionResult {
       }
     }
 
-    // 2m. 微量随机性（±10%）
-    score *= 0.9 + Math.random() * 0.2;
+    // 2m. 确定性评分（无随机噪声）
+    // score保持纯环境驱动
 
     candidates.push({ action, score });
   }
 
-  // 3. 排序选最优
+  // 3. 排序选最优（确定性选择）
   candidates.sort((a, b) => b.score - a.score);
 
   if (candidates.length === 0) {
     return fallbackAction(ctx);
   }
 
-  // 4. softmax 温度选择从 top-5 中选
-  const temperature = getTemperature(ctx.personality);
-  const chosen = softmaxSelect(candidates, temperature);
+  // 4. 直接取最高分（确定性选择，基于真实环境）
+  const chosen = candidates[0];
 
   // 5. 检查是否完成心愿
   let completedWhim: { name: string; moodReward: number } | undefined;
