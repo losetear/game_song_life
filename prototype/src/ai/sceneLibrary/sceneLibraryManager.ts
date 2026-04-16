@@ -10,10 +10,12 @@ import {
   L2Scene, L2RegionStats, L2MatchResult,
   GoalCategory,
   PlayerScene, PlayerSceneState, PlayerSceneMatchResult, PlayerSceneChoice,
+  L0PhaseScene,
 } from './types';
 import { matchL0Scene, matchL1Scene, matchL2Scenes } from './matcher';
 import { resolveScene, resolveSceneV2, selectTieredOutcome, ResolveContext } from './resolver';
 import { formatNarrative } from './narrativeFormatter';
+import { ActiveSceneManager } from './activeSceneManager';
 
 // 按类别索引的场景缓存
 let l0ByCategory: Map<GoalCategory, L0Scene[]> | null = null;
@@ -60,6 +62,9 @@ export class SceneLibraryManager {
   // 玩家场景运行时状态
   private activePlayerScene: PlayerSceneState | null = null;
   private playerSceneCooldown: Map<string, number> = new Map();
+
+  // 多步演出管理器
+  readonly activeSceneManager = new ActiveSceneManager();
 
   registerL0(scenes: L0Scene[]): void {
     this.l0Scenes = scenes;
@@ -116,6 +121,36 @@ export class SceneLibraryManager {
 
     const { scene, target } = match;
     const targetStats = target ? targetStatsLookup(target.id) : {};
+
+    // === 多步演出：启动而非即时判定 ===
+    if ('isMultiStep' in scene && scene.isMultiStep) {
+      const phaseScene = scene as L0PhaseScene;
+      const state = this.activeSceneManager.startScene(
+        phaseScene,
+        actorContext.npcName as any, // actorEntityId 会在 worldEngine 层面传入
+        actorContext.npcName,
+        target?.id as any,
+        target?.name,
+        actorContext.tick,
+      );
+      const entryPhase = phaseScene.phases[phaseScene.entryPhase];
+      const openingNarrative = formatNarrative(
+        phaseScene.openingNarrative + (entryPhase ? '\n' + entryPhase.narrative : ''),
+        { npcName: actorContext.npcName, targetName: target?.name || '某人', location: actorContext.currentGrid },
+      );
+      this.updateL0Cooldown(actorContext.tick, scene.id);
+      return {
+        sceneId: scene.id,
+        sceneName: scene.name,
+        goalCategory: scene.goalCategory,
+        narrative: openingNarrative,
+        success: true,
+        effects: {},
+        targetName: target?.name,
+        isMultiStep: true,
+        instanceId: state.instanceId,
+      };
+    }
 
     // === 新版多属性判定 + 多层级结果 ===
     if (scene.resolution && scene.tieredOutcomes) {

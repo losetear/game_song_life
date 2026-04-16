@@ -1,6 +1,6 @@
 // ════════════════════════════════════════
 // L0 精细演出库 — 统一导出
-// 共 16 个类别，约 260 个场景
+// 共 16 个类别，约 260 个场景 + 多步演出
 // ════════════════════════════════════════
 
 import { L0Scene } from '../../../ai/sceneLibrary/types';
@@ -21,6 +21,8 @@ import { CREATIVITY_SCENES } from './creativity';
 import { FACTION_SCENES } from './faction';
 import { SECRETS_SCENES } from './secrets';
 import { SEASONAL_SCENES } from './seasonal';
+import { MULTISTEP_CONFLICT_SCENES } from './multistep_social';
+import { MULTISTEP_TRADE_SCENES } from './multistep_trade';
 
 export const ALL_L0_SCENES: L0Scene[] = [
   ...SURVIVAL_SCENES,
@@ -39,6 +41,9 @@ export const ALL_L0_SCENES: L0Scene[] = [
   ...FACTION_SCENES,
   ...SECRETS_SCENES,
   ...SEASONAL_SCENES,
+  // 多步演出（L0PhaseScene extends L0Scene，兼容旧接口）
+  ...MULTISTEP_CONFLICT_SCENES,
+  ...MULTISTEP_TRADE_SCENES,
 ];
 
 export {
@@ -46,4 +51,5 @@ export {
   WORK_SCENES, LEISURE_SCENES, TRADE_SCENES, MOVE_SCENES,
   FAMILY_SCENES, ROMANCE_SCENES, NATURE_SCENES, SPIRITUAL_SCENES,
   CREATIVITY_SCENES, FACTION_SCENES, SECRETS_SCENES, SEASONAL_SCENES,
+  MULTISTEP_CONFLICT_SCENES, MULTISTEP_TRADE_SCENES,
 };

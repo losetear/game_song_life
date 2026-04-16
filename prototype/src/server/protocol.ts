@@ -65,10 +65,13 @@ export interface EntityAction {
 }
 
 export interface ClientMessage {
-  type: 'action';
-  actionId: string;
-  params: Record<string, any>;
+  type: 'action' | 'scene_choice' | 'l0_scene_choice';
+  actionId?: string;
+  params?: Record<string, any>;
   seqId: number;
+  // 多步演出：玩家选择
+  instanceId?: string;
+  choiceId?: string;
 }
 
 export interface SceneOption {
@@ -88,7 +91,7 @@ export interface SceneOption {
 }
 
 export interface ServerMessage {
-  type: 'actionResult' | 'error' | 'welcome' | 'benchmarkResult';
+  type: 'actionResult' | 'error' | 'welcome' | 'benchmarkResult' | 'scene_update';
   seqId?: number;
   data?: {
     message?: string;
@@ -96,6 +99,17 @@ export interface ServerMessage {
     sceneLocation?: string;      // 当前位置名
     options?: SceneOption[];     // 可选行动
     npcMessages?: string[];      // NPC 对话
+    /** 附近可见的多步演出 */
+    activeL0Scenes?: {
+      instanceId: string;
+      sceneName: string;
+      narrative: string;
+      phaseType?: string;
+      actorName: string;
+      targetName?: string;
+      phasesCompleted: number;
+      finished: boolean;
+    }[];
     worldState?: {
       tick: number;
       shichen: string;

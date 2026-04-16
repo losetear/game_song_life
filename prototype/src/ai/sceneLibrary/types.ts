@@ -383,6 +383,95 @@ export interface PlayerSceneMatchResult {
 }
 
 // ════════════════════════════════════════
+// L0 多步演出（漫野奇谭式连续事件）
+// ════════════════════════════════════════
+
+/** L0 多步演出中的选项 */
+export interface L0SceneChoice {
+  id: string;
+  text: string;                       // 描述选项的模板文本
+  /** 由谁做出此选择 */
+  chooser: 'actor' | 'target';
+  /** 选项条件（可选，不满足则不可用） */
+  condition?: PlayerChoiceCondition;  // 复用现有条件类型
+  /** 选择后的后果 */
+  consequence: L0SceneConsequence;
+}
+
+/** L0 多步演出中的后果 */
+export interface L0SceneConsequence {
+  /** 直接效果（铜钱、生命等） */
+  immediateEffects?: Record<string, number>;
+  /** 关系变化 */
+  relationChange?: number;
+  /** 目标效果 */
+  targetEffects?: Record<string, number>;
+  /** 下一步 phaseId，null 表示演出结束 */
+  nextPhase: string | null;
+  /** 结束叙事（如果 nextPhase=null） */
+  endingNarrative?: string;
+  /** 触发的场景结果 */
+  outcome?: L0SceneOutcome;
+  /** 判定（可选：选择后仍需判定） */
+  resolution?: SceneResolution;
+  /** 多层级判定结果（与 resolution 配合） */
+  tieredResults?: Record<string, { narrative: string; effects: Record<string, number>; targetEffects?: Record<string, number> }>;
+}
+
+/** L0 多步演出中的一个阶段 */
+export interface L0ScenePhase {
+  phaseId: string;
+  /** 阶段类型标记 */
+  phaseType?: 'narration' | 'dialogue' | 'contested' | 'reaction';
+  /** 叙事文本（模板变量同 L0: {npcName}, {targetName}, {location} 等） */
+  narrative: string;
+  /** 可用选择（NPC 根据 AI 自动选择） */
+  choices: L0SceneChoice[];
+}
+
+/** L0 多步演出定义（扩展 L0Scene） */
+export interface L0PhaseScene extends L0Scene {
+  /** 标记为多步演出 */
+  isMultiStep: true;
+  /** 开场叙事 */
+  openingNarrative: string;
+  /** 所有步骤（phaseId -> phase） */
+  phases: Record<string, L0ScenePhase>;
+  /** 起始步骤ID */
+  entryPhase: string;
+}
+
+/** L0 多步演出运行时状态 */
+export interface L0SceneRuntimeState {
+  /** 唯一实例 ID */
+  instanceId: string;
+  /** 场景定义 */
+  scene: L0PhaseScene;
+  /** 行动者 NPC 实体 ID */
+  actorEntityId: number;
+  /** 行动者名字（缓存） */
+  actorName: string;
+  /** 目标 NPC 实体 ID */
+  targetEntityId?: number;
+  /** 目标名字（缓存） */
+  targetName?: string;
+  /** 当前阶段 ID */
+  currentPhase: string;
+  /** 选择历史 */
+  history: { phaseId: string; choiceId: string; chooser: string; tick: number }[];
+  /** 演出开始的 tick */
+  startTick: number;
+  /** 累积效果（延迟到演出结束统一应用） */
+  pendingEffects: Record<string, number>;
+  /** 累积目标效果 */
+  pendingTargetEffects: Record<string, number>;
+  /** 累积关系变化 */
+  pendingRelationChange: number;
+  /** 已完成的阶段数 */
+  phasesCompleted: number;
+}
+
+// ════════════════════════════════════════
 // 决策结果（兼容旧接口）
 // ════════════════════════════════════════
 
@@ -406,4 +495,7 @@ export interface SceneDecisionResult {
   // 漫野奇谭化扩展
   tier?: OutcomeTier;
   score?: number;
+  // 多步演出扩展
+  isMultiStep?: boolean;
+  instanceId?: string;
 }

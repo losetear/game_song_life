@@ -155,7 +155,7 @@ export function resolveSceneV2(
 }
 
 /** 分数 → 结果等级 */
-function scoreToTier(score: number): OutcomeTier {
+export function scoreToTier(score: number): OutcomeTier {
   if (score >= 90) return 'critical_success';
   if (score >= 60) return 'success';
   if (score >= 40) return 'partial_success';

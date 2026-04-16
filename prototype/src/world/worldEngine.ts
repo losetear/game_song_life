@@ -50,6 +50,7 @@ interface L0ActionResult {
   npcName: string;
   action: string;
   result: string;
+  narrative?: string;
   majorEvents: MajorEvent[];
 }
 
@@ -68,7 +69,7 @@ export interface WorldEvent {
   targetEntityId?: number;    // 目标实体ID
   factionId?: number;         // 涉及的组织ID
   buildingId?: number;        // 涉及的建筑ID
-  sceneLevel?: 'L0' | 'L1' | 'L2' | 'player_scene';
+  sceneLevel?: 'L0' | 'L1' | 'L2' | 'player_scene' | 'L0_multistep' | 'L0_multistep_start';
 }
 
 // === NPC 行为历史记录 ===
@@ -1981,6 +1982,122 @@ export class WorldEngine {
       }
     }
 
+    // 3.5. 多步演出每 tick 推进
+    const activeSceneResults = this.sceneLib.activeSceneManager.processTick(
+      this.time.tick,
+      (eid) => {
+        // 构建 NPCChoiceContext
+        const nIdentity = this.em.getComponent(eid, 'Identity') as any;
+        const nVital = this.em.getComponent(eid, 'Vital') as any;
+        const nNeeds = this.em.getComponent(eid, 'Needs') as any;
+        const nEmotion = this.em.getComponent(eid, 'Emotion') as any;
+        const nStress = this.em.getComponent(eid, 'Stress') as any;
+        const nWallet = this.em.getComponent(eid, 'Wallet') as any;
+        const nHidden = this.em.getComponent(eid, 'HiddenTraits') as any;
+        if (!nIdentity || !nNeeds) return null;
+        const activeState = this.sceneLib.activeSceneManager.getActiveScene(eid);
+        return {
+          traits: nIdentity.personality || [],
+          profession: nIdentity.profession || '',
+          emotion: nEmotion?.current || 'happy',
+          needs: { hunger: nNeeds.hunger, fatigue: nNeeds.fatigue, health: nNeeds.health, mood: nNeeds.mood ?? 50, safety: nNeeds.safety ?? 50, social: nNeeds.social ?? 50 },
+          hiddenTraits: nHidden || { rationality: 50, greed: 50, honor: 50, ambition: 50, loyalty: 50 },
+          stress: nStress?.level || 0,
+          copper: nWallet?.copper || 0,
+          relationToTarget: activeState?.targetEntityId
+            ? this.relationshipSys.getScore(eid, activeState.targetEntityId!)
+            : undefined,
+          history: activeState?.history.map(h => ({ choiceId: h.choiceId, chooser: h.chooser })) || [],
+        };
+      },
+      (eid) => {
+        const nIdentity = this.em.getComponent(eid, 'Identity') as any;
+        const nVital = this.em.getComponent(eid, 'Vital') as any;
+        const nHidden = this.em.getComponent(eid, 'HiddenTraits') as any;
+        const nWallet = this.em.getComponent(eid, 'Wallet') as any;
+        return {
+          health: nVital?.health ?? 80,
+          bravery: nIdentity?.personality?.includes('勇敢') ? 80 : 40,
+          cunning: nIdentity?.personality?.includes('狡猾') ? 80 : 40,
+          strength: nVital?.health ?? 50,
+          copper: nWallet?.copper ?? 0,
+          honor: nHidden?.honor ?? 50,
+          greed: nHidden?.greed ?? 50,
+        };
+      },
+      (eid) => {
+        const tIdentity = this.em.getComponent(eid, 'Identity') as any;
+        const tVital = this.em.getComponent(eid, 'Vital') as any;
+        return {
+          health: tVital?.health ?? 80,
+          vigilance: tIdentity?.personality?.includes('精明') ? 80 : 40,
+          strength: tVital?.health ?? 50,
+        };
+      },
+    );
+
+    // 记录多步演出推进
+    for (const resolved of activeSceneResults.autoResolved) {
+      if (resolved.result.narrative) {
+        const rIdentity = this.em.getComponent(resolved.npcEntityId, 'Identity') as any;
+        l0Actions.push({
+          npcName: rIdentity?.name || 'NPC',
+          action: `[演出推进]`,
+          result: resolved.result.narrative.slice(0, 80),
+        });
+      }
+    }
+
+    // 应用已结束演出的累积效果
+    for (const finished of activeSceneResults.finished) {
+      const fIdentity = this.em.getComponent(finished.npcEntityId, 'Identity') as any;
+      const fVital = this.em.getComponent(finished.npcEntityId, 'Vital') as any;
+      const fNeeds = this.em.getComponent(finished.npcEntityId, 'Needs') as any;
+      const fWallet = this.em.getComponent(finished.npcEntityId, 'Wallet') as any;
+
+      // 应用累积效果
+      if (fNeeds && finished.pendingEffects) {
+        for (const [key, value] of Object.entries(finished.pendingEffects)) {
+          if (key in fNeeds) (fNeeds as any)[key] = Math.max(0, Math.min(100, (fNeeds as any)[key] + value));
+        }
+        if (fVital) {
+          fVital.hunger = fNeeds.hunger;
+          fVital.fatigue = fNeeds.fatigue;
+          fVital.health = fNeeds.health;
+          fVital.mood = fNeeds.mood;
+        }
+        if (fWallet && finished.pendingEffects.copper) {
+          fWallet.copper = Math.max(0, fWallet.copper + finished.pendingEffects.copper);
+        }
+      }
+
+      // 应用目标效果和关系
+      const fState = finished as any;
+      if (fState.targetEntityId !== undefined) {
+        const tVital = this.em.getComponent(fState.targetEntityId, 'Vital') as any;
+        const tWallet = this.em.getComponent(fState.targetEntityId, 'Wallet') as any;
+        if (tVital && finished.pendingTargetEffects) {
+          for (const [key, value] of Object.entries(finished.pendingTargetEffects)) {
+            if (key in tVital) tVital[key] = Math.max(0, Math.min(100, tVital[key] + value));
+          }
+        }
+        if (tWallet && finished.pendingTargetEffects?.copper) {
+          tWallet.copper = Math.max(0, tWallet.copper + finished.pendingTargetEffects.copper);
+        }
+        if (finished.pendingRelationChange) {
+          this.relationshipSys.modifyRelation(finished.npcEntityId, fState.targetEntityId, finished.pendingRelationChange, this.time.tick);
+        }
+      }
+
+      if (finished.endingNarrative) {
+        l0Actions.push({
+          npcName: fIdentity?.name || 'NPC',
+          action: `[演出结束]`,
+          result: finished.endingNarrative.slice(0, 80),
+        });
+      }
+    }
+
     // 4. L1 NPC 批量行动 (简化模拟)
     const l1Summary = this.simulateL1Batch();
 
@@ -2197,6 +2314,19 @@ export class WorldEngine {
     const pos = this.em.getComponent(entityId, 'Position');
     const copper = wallet?.copper ?? 0;
 
+    // ──── 多步演出：检查是否有活跃演出 ────
+    if (this.sceneLib.activeSceneManager.hasActiveScene(entityId)) {
+      // NPC 正在多步演出中，跳过本 tick 决策（演出由 processTick 推进）
+      const activeState = this.sceneLib.activeSceneManager.getActiveScene(entityId)!;
+      return {
+        npcName: name,
+        action: `[演出中] ${activeState.scene.name}`,
+        result: `正在演出第${activeState.phasesCompleted + 1}阶段`,
+        narrative: '',
+        majorEvents: [],
+      };
+    }
+
     // 需求衰减：使用个性化衰减（性格影响衰减率）
     this.vital.decayNeedsWithPersonality(needs, identity.personality);
 
@@ -2356,7 +2486,22 @@ export class WorldEngine {
     const stateBefore = { hunger: vital.hunger, fatigue: vital.fatigue, copper, mood: vital.mood ?? 50 };
 
     if (sceneResult) {
-      // 演出库命中 — 使用演出结果
+      // 多步演出：仅记录日志，不立即应用效果（由 processTick 管理）
+      if (sceneResult.isMultiStep) {
+        this.logEventEx('npc', `scene:${sceneResult.goalCategory}`, sceneResult.narrative, {
+          sourceEntityId: entityId,
+          sceneLevel: 'L0_multistep_start',
+        });
+        return {
+          npcName: name,
+          action: sceneResult.sceneName,
+          result: `开始演出: ${sceneResult.narrative.slice(0, 50)}...`,
+          narrative: sceneResult.narrative,
+          majorEvents: [],
+        };
+      }
+
+      // 演出库命中 — 使用演出结果（即时路径）
       for (const [key, value] of Object.entries(sceneResult.effects)) {
         if (key in needs) {
           (needs as any)[key] = Math.max(0, Math.min(100, (needs as any)[key] + value));

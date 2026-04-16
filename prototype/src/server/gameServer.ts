@@ -997,7 +997,7 @@ export class GameServer {
               return;
             }
 
-            const result = this.engine.executePlayerAction(this.playerId, msg.actionId, msg.params);
+            const result = this.engine.executePlayerAction(this.playerId, msg.actionId || 'look', msg.params || {});
 
             // 检查是否被多步骤场景中断
             if (result && 'isScenePhase' in result) {
@@ -1034,6 +1034,8 @@ export class GameServer {
                 turnSummary: result.turnSummary,
                 distantNews: result.distantNews,
                 briefing: result.briefing,
+                // 附近可见的多步演出
+                activeL0Scenes: this.getActiveL0ScenesForPlayer(),
               },
               timings: result.timings,
             };
@@ -1044,6 +1046,28 @@ export class GameServer {
         }
       });
     });
+  }
+
+  /** 获取玩家附近可见的多步演出 */
+  private getActiveL0ScenesForPlayer() {
+    const playerPos = this.engine.em.getComponent(this.playerId, 'Position') as any;
+    if (!playerPos) return [];
+    const playerGrid = playerPos.gridId;
+    return this.engine.sceneLib.activeSceneManager.getVisibleScenes(
+      playerGrid,
+      (id) => {
+        const pos = this.engine.em.getComponent(id, 'Position') as any;
+        return pos?.gridId ?? null;
+      },
+    ).map(state => ({
+      instanceId: state.instanceId,
+      sceneName: state.scene.name,
+      narrative: `第${state.phasesCompleted + 1}阶段进行中`,
+      actorName: state.actorName,
+      targetName: state.targetName,
+      phasesCompleted: state.phasesCompleted,
+      finished: false,
+    }));
   }
 
   /** 创建玩家实体 */

@@ -2121,6 +2121,198 @@ body::before {
 .action-record { padding: 4px 0; border-bottom: 1px solid rgba(44,24,16,0.05); font-size: 11px; line-height: 1.6; }
 .action-time { color: rgba(44,24,16,0.3); font-size: 10px; }
 .action-name { color: var(--indigo); font-weight: 600; font-size: 10px; }
+
+/* ===== 演出面板 ===== */
+.scene-overlay {
+  position: fixed;
+  top: 0; right: -400px;
+  width: 380px; height: 100vh;
+  background: var(--paper);
+  border-left: 3px solid var(--vermillion);
+  box-shadow: -4px 0 20px var(--shadow-strong);
+  z-index: 100;
+  transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  font-family: 'Noto Serif SC', serif;
+  display: flex;
+  flex-direction: column;
+}
+.scene-overlay.active { right: 0; }
+
+.scene-overlay-header {
+  background: linear-gradient(135deg, var(--ink) 0%, #3a2a1a 100%);
+  color: var(--paper);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.scene-overlay-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.scene-overlay-close {
+  background: none; border: none;
+  color: var(--paper-light);
+  font-size: 20px; cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.scene-overlay-close:hover { opacity: 1; }
+
+.scene-phase-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--paper-dark);
+  border-bottom: 1px solid rgba(44,24,16,0.1);
+  flex-shrink: 0;
+}
+.scene-phase-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(44,24,16,0.15);
+  transition: background 0.3s;
+}
+.scene-phase-dot.completed { background: var(--jade); }
+.scene-phase-dot.current { background: var(--vermillion); animation: phasePulse 1.5s infinite; }
+@keyframes phasePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+.scene-phase-label {
+  font-size: 11px;
+  color: rgba(44,24,16,0.5);
+  margin-left: 8px;
+}
+.scene-type-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: auto;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+.scene-type-badge.npc { background: var(--indigo); color: #fff; }
+.scene-type-badge.player { background: var(--vermillion); color: #fff; }
+
+.scene-participants {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(44,24,16,0.08);
+  flex-shrink: 0;
+}
+.scene-participant {
+  font-size: 12px;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+.scene-participant-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.scene-participant-role {
+  font-size: 10px;
+  color: rgba(44,24,16,0.4);
+}
+
+.scene-narrative-area {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.scene-narrative-area .typing-cursor {
+  display: inline-block;
+  width: 2px; height: 14px;
+  background: var(--vermillion);
+  animation: blink 0.8s infinite;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.scene-choices-area {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(44,24,16,0.1);
+  background: var(--paper-dark);
+  flex-shrink: 0;
+}
+.scene-choices-area.hidden { display: none; }
+.scene-choice-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--paper-light);
+  border: 1px solid rgba(44,24,16,0.15);
+  border-radius: 6px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.scene-choice-btn:hover {
+  background: #fff;
+  border-color: var(--vermillion);
+  transform: translateX(4px);
+}
+.scene-choice-btn:active {
+  transform: translateX(2px);
+}
+.scene-choice-timer {
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 3px;
+  background: var(--vermillion);
+  transition: width linear;
+}
+
+.scene-history-log {
+  padding: 0 16px 16px;
+  max-height: 150px;
+  overflow-y: auto;
+  border-top: 1px dashed rgba(44,24,16,0.1);
+  flex-shrink: 0;
+}
+.scene-history-entry {
+  font-size: 11px;
+  color: rgba(44,24,16,0.4);
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(44,24,16,0.03);
+}
+.scene-history-entry .choice-text {
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+/* 手机适配 */
+@media (max-width: 767px) {
+  .scene-overlay {
+    width: 100%;
+    right: -100%;
+    top: auto;
+    bottom: 0;
+    height: 55vh;
+    border-left: none;
+    border-top: 3px solid var(--vermillion);
+    transition: bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .scene-overlay.active { right: 0; bottom: 0; }
+}
 </style>
 </head>
 <body>
@@ -2661,6 +2853,23 @@ body::before {
   市井录 · 第零阶段技术验证原型 · <a href="https://github.com" target="_blank">源码</a>
 </div>
 
+<!-- 演出面板 -->
+<div id="scene-overlay" class="scene-overlay">
+  <div class="scene-overlay-header">
+    <h3 id="scene-title">演出</h3>
+    <button class="scene-overlay-close" onclick="hideSceneOverlay()">&times;</button>
+  </div>
+  <div class="scene-phase-indicator">
+    <div id="scene-phase-dots"></div>
+    <span class="scene-phase-label" id="scene-phase-label"></span>
+    <span class="scene-type-badge npc" id="scene-type-badge">NPC演出</span>
+  </div>
+  <div class="scene-participants" id="scene-participants"></div>
+  <div class="scene-narrative-area" id="scene-narrative"></div>
+  <div class="scene-choices-area hidden" id="scene-choices"></div>
+  <div class="scene-history-log" id="scene-history"></div>
+</div>
+
 <script>
 // ============================================================
 // 全局状态
@@ -3080,6 +3289,10 @@ function connectWS() {
         handleWelcome(msg);
         return;
       }
+      if (msg.type === 'scene_update') {
+        handleSceneUpdate(msg);
+        return;
+      }
       if (msg.type === 'actionResult') {
         handleServerResponse(msg);
       }
@@ -3108,6 +3321,160 @@ function updateConnStatus(status) {
   else if (status === 'connecting') text.textContent = '正在连接…';
   else text.textContent = '离线模式 · 本地模拟';
   renderOptions();
+}
+
+// ════════════════════════════════════════
+// 演出面板 UI
+// ════════════════════════════════════════
+
+let activeSceneData = null;
+let sceneNarrativeQueue = [];
+let sceneTypingTimer = null;
+let sceneCountdownTimer = null;
+
+function showSceneOverlay(sceneData) {
+  if (!sceneData) return;
+  activeSceneData = sceneData;
+  const overlay = document.getElementById('scene-overlay');
+  const title = document.getElementById('scene-title');
+  const narrative = document.getElementById('scene-narrative');
+  const choicesArea = document.getElementById('scene-choices');
+  const participants = document.getElementById('scene-participants');
+  const phaseDots = document.getElementById('scene-phase-dots');
+  const phaseLabel = document.getElementById('scene-phase-label');
+  const typeBadge = document.getElementById('scene-type-badge');
+
+  title.textContent = sceneData.sceneName || '演出';
+
+  // Phase indicator
+  const completed = sceneData.phasesCompleted || 0;
+  phaseDots.innerHTML = '';
+  for (let i = 0; i < Math.max(completed + 1, 3); i++) {
+    const dot = document.createElement('span');
+    dot.className = 'scene-phase-dot' +
+      (i < completed ? ' completed' : '') +
+      (i === completed ? ' current' : '');
+    phaseDots.appendChild(dot);
+  }
+  phaseLabel.textContent = `第${completed + 1}阶段`;
+
+  // Type badge
+  typeBadge.textContent = 'NPC演出';
+  typeBadge.className = 'scene-type-badge npc';
+
+  // Participants
+  participants.innerHTML = '';
+  if (sceneData.actorName) {
+    participants.innerHTML += `<div class="scene-participant"><div class="scene-participant-name">${sceneData.actorName}</div><div class="scene-participant-role">行动者</div></div>`;
+  }
+  if (sceneData.targetName) {
+    participants.innerHTML += `<div class="scene-participant"><div class="scene-participant-name">${sceneData.targetName}</div><div class="scene-participant-role">对方</div></div>`;
+  }
+
+  // Narrative (with typewriter effect)
+  const narrativeText = sceneData.narrative || '';
+  if (narrativeText) {
+    narrative.innerHTML = '';
+    typeSceneNarrative(narrativeText, narrative);
+  }
+
+  // NPC-NPC scenes: no choices, auto-advancing
+  choicesArea.className = 'scene-choices-area hidden';
+  choicesArea.innerHTML = '';
+
+  // Show overlay
+  overlay.classList.add('active');
+}
+
+function typeSceneNarrative(text, el) {
+  if (sceneTypingTimer) clearInterval(sceneTypingTimer);
+  el.innerHTML = '';
+  let idx = 0;
+  const cursor = document.createElement('span');
+  cursor.className = 'typing-cursor';
+  sceneTypingTimer = setInterval(() => {
+    if (idx < text.length) {
+      // Add text before cursor
+      const ch = text[idx];
+      if (ch === '\n') {
+        el.insertBefore(document.createElement('br'), cursor);
+      } else {
+        el.insertBefore(document.createTextNode(ch), cursor);
+      }
+      idx++;
+    } else {
+      clearInterval(sceneTypingTimer);
+      sceneTypingTimer = null;
+      if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
+    }
+  }, 30);
+  el.appendChild(cursor);
+}
+
+function updateSceneOverlay(sceneData) {
+  if (!sceneData) return;
+  const narrative = document.getElementById('scene-narrative');
+  const phaseDots = document.getElementById('scene-phase-dots');
+  const phaseLabel = document.getElementById('scene-phase-label');
+  const choicesArea = document.getElementById('scene-choices');
+  const historyLog = document.getElementById('scene-history');
+
+  const completed = sceneData.phasesCompleted || 0;
+
+  // Update phase dots
+  phaseDots.innerHTML = '';
+  for (let i = 0; i < Math.max(completed + 1, 3); i++) {
+    const dot = document.createElement('span');
+    dot.className = 'scene-phase-dot' +
+      (i < completed ? ' completed' : '') +
+      (i === completed ? ' current' : '');
+    phaseDots.appendChild(dot);
+  }
+  phaseLabel.textContent = `第${completed + 1}阶段`;
+
+  // Append new narrative (add separator then new text)
+  if (sceneData.narrative) {
+    const sep = document.createElement('div');
+    sep.style.cssText = 'border-top:1px dashed rgba(44,24,16,0.1);margin:12px 0;';
+    narrative.appendChild(sep);
+    typeSceneNarrative(sceneData.narrative, narrative);
+  }
+
+  // Add to history
+  if (sceneData.lastChoice) {
+    const entry = document.createElement('div');
+    entry.className = 'scene-history-entry';
+    entry.innerHTML = `→ <span class="choice-text">${sceneData.lastChoice}</span>`;
+    historyLog.appendChild(entry);
+    historyLog.scrollTop = historyLog.scrollHeight;
+  }
+}
+
+function hideSceneOverlay() {
+  const overlay = document.getElementById('scene-overlay');
+  overlay.classList.remove('active');
+  if (sceneTypingTimer) { clearInterval(sceneTypingTimer); sceneTypingTimer = null; }
+  if (sceneCountdownTimer) { clearInterval(sceneCountdownTimer); sceneCountdownTimer = null; }
+  activeSceneData = null;
+}
+
+function handleSceneUpdate(msg) {
+  if (!msg.data) return;
+  const d = msg.data;
+  if (d.finished) {
+    // Scene ended — show final narrative then close after delay
+    if (d.narrative) {
+      updateSceneOverlay({ narrative: d.narrative, phasesCompleted: d.phasesCompleted, lastChoice: d.lastChoice });
+    }
+    setTimeout(() => hideSceneOverlay(), 3000);
+    return;
+  }
+  // Scene phase advanced
+  updateSceneOverlay({
+    narrative: d.narrative,
+    phasesCompleted: d.phasesCompleted,
+    lastChoice: d.lastChoice,
+  });
 }
 
 function handleServerResponse(msg) {
@@ -3155,6 +3522,10 @@ function handleServerResponse(msg) {
   // Refresh nearby entities after action
   setTimeout(() => loadNearbyEntities(), 300);
   setTimeout(() => loadMoveOptions(), 400);
+  // Handle active L0 scenes
+  if (data.activeL0Scenes && data.activeL0Scenes.length > 0) {
+    showSceneOverlay(data.activeL0Scenes[0]);
+  }
 }
 
 function renderTurnSummary(summary, distantNews) {
