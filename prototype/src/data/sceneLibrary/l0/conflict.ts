@@ -120,6 +120,7 @@ export const CONFLICT_SCENES: L0Scene[] = [
     weight: 3,
     cooldownTicks: 10,
     tags: ['violence', 'street'],
+    narrativeWeight: 'minor',
   },
   {
     id: 'c_shout_match',
@@ -253,6 +254,9 @@ export const CONFLICT_SCENES: L0Scene[] = [
           targetEffects: { health: -35, mood: -25 },
           relationChange: -40,
           memoryTag: '刀伤惨胜',
+          transformations: [
+            { type: 'gain_narrative_tag', value: '刀伤惨胜', description: '{npcName}以刀伤取胜，这将是永久的记忆' },
+          ],
         },
       },
       {
@@ -295,12 +299,17 @@ export const CONFLICT_SCENES: L0Scene[] = [
           effects: { health: -30, mood: -30, social: -10 },
           relationChange: -40,
           memoryTag: '被缴械',
+          transformations: [
+            { type: 'gain_narrative_tag', value: 'scarred', description: '{npcName}脖子上留下了一道永久的伤痕' },
+            { type: 'gain_narrative_tag', value: '被缴械', description: '{npcName}曾被夺刀威胁，成为挥之不去的耻辱' },
+          ],
         },
       },
     ],
     weight: 1,
     cooldownTicks: 20,
     tags: ['violence', 'weapon', 'lethal'],
+    narrativeWeight: 'major',
   },
 
   // ──── 新增的15个场景 ────
@@ -473,6 +482,10 @@ export const CONFLICT_SCENES: L0Scene[] = [
       targetEffects: { health: -25, mood: -15 },
       relationChange: -25,
       memoryTag: '决斗胜利',
+      transformations: [
+        { type: 'gain_narrative_tag', value: '决斗胜利', description: '{npcName}在黎明决斗中获胜，名传四方' },
+        { type: 'title_change', value: '决斗者', description: '因决斗获胜而得的名号' },
+      ],
     },
     failure: {
       narrative: '晨雾中，{targetName}的刀锋精准地划过{npcName}的手臂。鲜血渗出袖口，滴在青草上。"承让。"{targetName}收刀转身走了。{npcName}跪在露水里，伤口的刺痛远不及心头的不甘。',
@@ -485,6 +498,7 @@ export const CONFLICT_SCENES: L0Scene[] = [
     cooldownTicks: 20,
     priority: 8,
     tags: ['honor', 'weapon', 'lethal'],
+    narrativeWeight: 'milestone',
   },
   {
     id: 'c_protect_stranger',
@@ -561,6 +575,7 @@ export const CONFLICT_SCENES: L0Scene[] = [
     cooldownTicks: 15,
     priority: 6,
     tags: ['violence', 'revenge'],
+    narrativeWeight: 'major',
   },
   {
     id: 'c_intervene_theft',

@@ -25,6 +25,20 @@ export type L2Category = 'harvest' | 'hunting' | 'fishing' | 'disaster' | 'prosp
 export type TimeOfDay = 'day' | 'night' | 'dawn' | 'dusk';
 
 // ════════════════════════════════════════
+// 漫野奇谭化：叙事标签 + 重要性分层 + 角色变形
+// ════════════════════════════════════════
+
+/** 场景叙事重要性分层 */
+export type NarrativeWeight = 'flavor' | 'minor' | 'major' | 'milestone';
+
+/** 角色变形效果（场景结果的永久变化） */
+export interface CharacterTransformation {
+  type: 'gain_narrative_tag' | 'lose_narrative_tag' | 'gain_trait' | 'lose_trait' | 'title_change' | 'reputation_change';
+  value: string | number;
+  description: string;
+}
+
+// ════════════════════════════════════════
 // L0 精细场景（个体NPC）
 // ════════════════════════════════════════
 
@@ -62,6 +76,13 @@ export interface L0SceneCondition {
   // 群体场景（新增）
   minNearbyNpcs?: number;            // 同格最少NPC数
   maxNearbyNpcs?: number;            // 同格最多NPC数
+
+  // 叙事标签条件（漫野奇谭化：人物经历驱动场景匹配）
+  requiredNarrativeTags?: string[];      // AND：要求角色拥有全部这些叙事标签
+  forbiddenNarrativeTags?: string[];     // 禁止角色拥有这些标签
+  requiredAnyNarrativeTags?: string[];   // OR：要求至少拥有其中一个
+  targetRequiredNarrativeTags?: string[];
+  targetForbiddenNarrativeTags?: string[];
 }
 
 export interface L0SceneOutcome {
@@ -75,6 +96,8 @@ export interface L0SceneOutcome {
   stressChange?: number;             // 直接压力修改
   traitReveal?: 'greed' | 'honor' | 'ambition' | 'rationality' | 'loyalty';
   triggerChainReaction?: string;     // 触发连锁反应规则ID
+  // 角色变形（漫野奇谭化：永久改变角色，解锁新场景）
+  transformations?: CharacterTransformation[];
 }
 
 export interface L0Scene {
@@ -95,6 +118,7 @@ export interface L0Scene {
   // === 漫野奇谭化扩展 ===
   resolution?: SceneResolution;      // 多属性判定（替代 contestedStat）
   tieredOutcomes?: TieredOutcome[];  // 多层级结果（替代 success/failure 二元）
+  narrativeWeight?: NarrativeWeight; // 叙事重要性分层（默认 'flavor'）
 }
 
 export interface NearbyNpcInfo {
@@ -107,6 +131,7 @@ export interface NearbyNpcInfo {
   relationScore: number;
   relationType: string;
   factionId?: number;                // 新增
+  narrativeTags?: string[];          // 目标NPC的叙事标签
 }
 
 export interface L0ActorContext {
@@ -128,6 +153,7 @@ export interface L0ActorContext {
   factionId?: number;
   nearbyCount: number;
   activeWhimCategories?: Set<string>;
+  narrativeTags?: string[];          // 角色累积的叙事标签（来自 memoryTag）
 }
 
 // ════════════════════════════════════════
@@ -416,6 +442,8 @@ export interface L0SceneConsequence {
   resolution?: SceneResolution;
   /** 多层级判定结果（与 resolution 配合） */
   tieredResults?: Record<string, { narrative: string; effects: Record<string, number>; targetEffects?: Record<string, number> }>;
+  /** 角色变形（漫野奇谭化） */
+  transformations?: CharacterTransformation[];
 }
 
 /** L0 多步演出中的一个阶段 */
@@ -498,4 +526,6 @@ export interface SceneDecisionResult {
   // 多步演出扩展
   isMultiStep?: boolean;
   instanceId?: string;
+  // 角色变形（漫野奇谭化）
+  transformations?: CharacterTransformation[];
 }

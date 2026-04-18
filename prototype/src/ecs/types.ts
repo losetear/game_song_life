@@ -137,6 +137,8 @@ export interface MemoryComponent {
   // 涌现叙事：短期/长期记忆（带情绪强度）
   shortTermMemories: MemoryEntry[];
   longTermMemories: MemoryEntry[];
+  // 漫野奇谭化：叙事标签（场景结果永久标记，驱动后续场景匹配）
+  narrativeTags: string[];
 }
 
 export interface MemoryEntry {

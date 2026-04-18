@@ -51,6 +51,7 @@ interface L0ActionResult {
   action: string;
   result: string;
   narrative?: string;
+  targetName?: string;
   majorEvents: MajorEvent[];
 }
 
@@ -128,7 +129,7 @@ export interface TickResult {
     day: number;
     tick: number;
     // L0 NPC 具体行动
-    l0Actions: { npcName: string; action: string; result: string }[];
+    l0Actions: { npcName: string; action: string; result: string; targetName?: string; narrative?: string; sceneName?: string }[];
     // L1 批量行动摘要
     l1Summary: { total: number; highlights: string[] };
     // 重大事件（分等级）
@@ -1953,14 +1954,14 @@ export class WorldEngine {
     npcActions: number;
     priceChanges: Record<string, string>;
     causalEvents: CausalEvent[];
-    l0Actions: { npcName: string; action: string; result: string }[];
+    l0Actions: { npcName: string; action: string; result: string; targetName?: string; narrative?: string; sceneName?: string }[];
     l1Summary: { total: number; highlights: string[] };
     majorEvents: MajorEvent[];
     weatherChange: string | null;
     enrichedPriceChanges: Record<string, { change: string; reason: string }>;
   } {
     // 结算数据收集
-    const l0Actions: { npcName: string; action: string; result: string }[] = [];
+    const l0Actions: { npcName: string; action: string; result: string; targetName?: string; narrative?: string; sceneName?: string }[] = [];
     const majorEvents: MajorEvent[] = [];
 
     // 保存当前物价
@@ -1977,7 +1978,7 @@ export class WorldEngine {
     for (const entityId of this.l0Entities) {
       const l0Result = this.simulateL0Action(entityId);
       if (l0Result) {
-        l0Actions.push({ npcName: l0Result.npcName, action: l0Result.action, result: l0Result.result });
+        l0Actions.push({ npcName: l0Result.npcName, action: l0Result.action, result: l0Result.result, targetName: l0Result.targetName, narrative: l0Result.narrative || l0Result.result, sceneName: l0Result.action });
         majorEvents.push(...l0Result.majorEvents);
       }
     }
@@ -2008,6 +2009,7 @@ export class WorldEngine {
             ? this.relationshipSys.getScore(eid, activeState.targetEntityId!)
             : undefined,
           history: activeState?.history.map(h => ({ choiceId: h.choiceId, chooser: h.chooser })) || [],
+          narrativeTags: (this.em.getComponent(eid, 'Memory') as any)?.narrativeTags || [],
         };
       },
       (eid) => {
@@ -2044,6 +2046,8 @@ export class WorldEngine {
           npcName: rIdentity?.name || 'NPC',
           action: `[演出推进]`,
           result: resolved.result.narrative.slice(0, 80),
+          narrative: resolved.result.narrative,
+          sceneName: `[演出推进]`,
         });
       }
     }
@@ -2094,7 +2098,21 @@ export class WorldEngine {
           npcName: fIdentity?.name || 'NPC',
           action: `[演出结束]`,
           result: finished.endingNarrative.slice(0, 80),
+          narrative: finished.endingNarrative,
+          sceneName: `[演出结束]`,
         });
+      }
+
+      // 漫野奇谭化：多步演出结束时写入叙事标签
+      if (finished.endingNarrative) {
+        const fMemory = this.em.getComponent(finished.npcEntityId, 'Memory') as any;
+        const narrativeTag = (finished as any).endingNarrative?.includes('伤') ? 'scarred' : undefined;
+        if (narrativeTag && fMemory) {
+          if (!fMemory.narrativeTags) fMemory.narrativeTags = [];
+          if (!fMemory.narrativeTags.includes(narrativeTag)) {
+            fMemory.narrativeTags.push(narrativeTag);
+          }
+        }
       }
     }
 
@@ -2251,6 +2269,48 @@ export class WorldEngine {
 
   /** L0 NPC 单个行动模拟（需求驱动决策引擎 / 旧GOAP fallback） */
   /** 生成目标视角的行动描述 */
+  /** 漫野奇谭化：应用角色变形效果 */
+  private applyTransformations(entityId: number, transformations: Array<{ type: string; value: string | number; description: string }>): void {
+    const identity = this.em.getComponent(entityId, 'Identity') as any;
+    const memory = this.em.getComponent(entityId, 'Memory') as any;
+
+    for (const t of transformations) {
+      switch (t.type) {
+        case 'gain_narrative_tag':
+          if (memory) {
+            if (!memory.narrativeTags) memory.narrativeTags = [];
+            if (!memory.narrativeTags.includes(t.value as string)) {
+              memory.narrativeTags.push(t.value as string);
+            }
+          }
+          break;
+        case 'lose_narrative_tag':
+          if (memory?.narrativeTags) {
+            memory.narrativeTags = memory.narrativeTags.filter((tag: string) => tag !== t.value);
+          }
+          break;
+        case 'gain_trait':
+          if (identity?.personality && !identity.personality.includes(t.value as string)) {
+            identity.personality.push(t.value as string);
+          }
+          break;
+        case 'lose_trait':
+          if (identity?.personality) {
+            identity.personality = identity.personality.filter((p: string) => p !== t.value);
+          }
+          break;
+        case 'title_change':
+          if (identity) {
+            identity.title = t.value as string;
+          }
+          break;
+        case 'reputation_change':
+          // 声望调整可通过faction或全局系统实现
+          break;
+      }
+    }
+  }
+
   private getTargetPerspectiveAction(sceneId: string, success: boolean): string {
     const map: Record<string, string> = {
       s_friend_meal: '蹭了顿饭',
@@ -2416,6 +2476,8 @@ export class WorldEngine {
 
     // ──── 隐藏特征初始化 ────
     let hiddenTraits = this.em.getComponent(entityId, 'HiddenTraits');
+    // ──── 叙事标签（漫野奇谭化）────
+    const memory = this.em.getComponent(entityId, 'Memory') as any;
     if (!hiddenTraits) {
       hiddenTraits = {
         rationality: 30 + Math.floor(Math.random() * 50),
@@ -2459,6 +2521,8 @@ export class WorldEngine {
       stressLevel: stress.level,
       hiddenTraits,
       nearbyRelations: this.relationshipSys.getNearbyRelations(entityId, nearNpcIds),
+      // 漫野奇谭化：叙事标签
+      narrativeTags: memory?.narrativeTags || [],
     };
 
     // ── 优先使用演出库决策（漫野奇谭式）────
@@ -2466,6 +2530,7 @@ export class WorldEngine {
       const nWallet = this.em.getComponent(nid, 'Wallet') as any;
       const nIdentity = this.em.getComponent(nid, 'Identity') as any;
       const nVital = this.em.getComponent(nid, 'Vital') as any;
+      const nMemory = this.em.getComponent(nid, 'Memory') as any;
       const relScore = this.relationshipSys.getScore(entityId, nid);
       const relType = this.relationshipSys.getType(entityId, nid);
       return {
@@ -2477,10 +2542,11 @@ export class WorldEngine {
         health: nVital?.health || 100,
         relationScore: relScore,
         relationType: relType,
+        narrativeTags: nMemory?.narrativeTags || [],
       };
     });
 
-    const sceneResult = decideWithScene(ctx, nearbyNpcInfos, this.sceneLib, this.time.season, this.time.tick);
+    const sceneResult = decideWithScene(ctx, nearbyNpcInfos, this.sceneLib, this.time.season, this.time.tick, entityId);
 
     // 记录决策前的状态
     const stateBefore = { hunger: vital.hunger, fatigue: vital.fatigue, copper, mood: vital.mood ?? 50 };
@@ -2497,6 +2563,7 @@ export class WorldEngine {
           action: sceneResult.sceneName,
           result: `开始演出: ${sceneResult.narrative.slice(0, 50)}...`,
           narrative: sceneResult.narrative,
+          targetName: sceneResult.targetName,
           majorEvents: [],
         };
       }
@@ -2539,6 +2606,20 @@ export class WorldEngine {
         if (targetNpc) {
           this.relationshipSys.modifyRelation(entityId, targetNpc.id, sceneResult.relationChange, this.time.tick);
         }
+      }
+
+      // 漫野奇谭化：叙事标签写入 + 角色变形
+      if (sceneResult.memoryTag && memory) {
+        if (!memory.narrativeTags) memory.narrativeTags = [];
+        if (!memory.narrativeTags.includes(sceneResult.memoryTag)) {
+          memory.narrativeTags.push(sceneResult.memoryTag);
+        }
+      }
+      if (sceneResult.stressChange) {
+        stress.level = Math.max(0, Math.min(100, stress.level + sceneResult.stressChange));
+      }
+      if (sceneResult.transformations) {
+        this.applyTransformations(entityId, sceneResult.transformations);
       }
 
       // 记录到世界事件日志（发起者视角，带实体引用）
@@ -2637,6 +2718,8 @@ export class WorldEngine {
         npcName: name,
         action: sceneResult.sceneName,
         result: sceneResult.narrative,
+        narrative: sceneResult.narrative,
+        targetName: sceneResult.targetName,
         majorEvents: [],
       };
     }
@@ -2727,6 +2810,7 @@ export class WorldEngine {
       npcName: name,
       action: `contextual_${worst}`,
       result: richNarrative,
+      narrative: richNarrative,
       majorEvents: [],
     };
   }
@@ -3375,6 +3459,7 @@ export class WorldEngine {
       factionId: this.getNpcFaction(entityId)?.id,
       nearbyCount: this.worldMap.getEntitiesInGrid(pos.gridId).length - 1,
       activeWhimCategories: new Set(),
+      narrativeTags: (this.em.getComponent(entityId, 'Memory') as any)?.narrativeTags || [],
     };
 
     // 从worst need映射到GoalCategory
@@ -3660,12 +3745,10 @@ export class WorldEngine {
     // 已有活跃场景则不再触发
     if (this.sceneLib.hasActivePlayerScene()) return null;
 
-    // 触发概率：对NPC交互 40%，endTurn 8%，其他 5%
-    let triggerChance = 0.05;
+    // 所有NPC交互动作都尝试触发，不再随机概率
     const npcInteractActions = ['talk_to', 'ask_rumor', 'trade_buy', 'trade_sell', 'share_food', 'help_request', 'gift', 'provoke', 'sworn_brothers', 'learn_skill', 'invite_travel'];
-    if (npcInteractActions.includes(actionId)) triggerChance = 0.40;
-    else if (actionId === 'end_turn') triggerChance = 0.08;
-    if (Math.random() > triggerChance) return null;
+    const isNpcInteract = npcInteractActions.includes(actionId);
+    if (!isNpcInteract && actionId !== 'end_turn') return null;
 
     // 构建玩家 actorContext
     const pos = this.em.getComponent(playerId, 'Position');
@@ -3777,6 +3860,142 @@ export class WorldEngine {
       playerState: ps,
       worldState: ws,
     };
+  }
+
+  /** 用 L0 演出库为玩家-NPC交互生成丰富叙事（漫野奇谭式） */
+  private tryL0SceneForPlayer(playerId: number, actionId: string, params: any): SceneDecisionResult | null {
+    const targetId = params?.targetId ? Number(params.targetId) : 0;
+    if (!targetId || !this.em.isAlive(targetId)) return null;
+
+    // actionId → goalCategory 映射
+    const ACTION_TO_GOALS: Record<string, GoalCategory[]> = {
+      talk_to: ['social', 'leisure'],
+      ask_rumor: ['social', 'secrets'],
+      trade_buy: ['trade'],
+      trade_sell: ['trade'],
+      share_food: ['social', 'survival'],
+      help_request: ['social'],
+      gift: ['social', 'romance'],
+      provoke: ['conflict'],
+      sworn_brothers: ['social', 'faction'],
+      learn_skill: ['work', 'creativity'],
+      invite_travel: ['leisure', 'move'],
+    };
+    const goals = ACTION_TO_GOALS[actionId];
+    if (!goals) return null;
+
+    // 构建玩家 actorContext
+    const pos = this.em.getComponent(playerId, 'Position');
+    const identity = this.em.getComponent(playerId, 'Identity');
+    const vital = this.em.getComponent(playerId, 'Vital');
+    const wallet = this.em.getComponent(playerId, 'Wallet');
+    const hiddenTraits = this.em.getComponent(playerId, 'HiddenTraits');
+
+    const actorContext = {
+      traits: identity?.personality || [],
+      profession: identity?.profession || 'wanderer',
+      npcName: identity?.name || '你',
+      copper: wallet?.copper ?? 0,
+      health: vital?.health ?? 80,
+      emotion: 'neutral' as string,
+      stress: 0,
+      currentGrid: pos?.gridId || 'center_street',
+      shichen: this.time.shichenName,
+      weather: this.weather.weather,
+      season: this.time.season,
+      day: this.time.day,
+      tick: this.time.tick,
+      nearbyCount: this.worldMap.getEntitiesInGrid(pos?.gridId || '').length,
+    };
+
+    // 收集附近 NPC（包含目标）
+    const nearbyIds = this.worldMap.getEntitiesInGrid(pos?.gridId || '')
+      .filter((id: number) => id !== playerId && this.em.getType(id) === 'npc');
+    const nearbyNpcs = nearbyIds.map((nid: number) => {
+      const nIdentity = this.em.getComponent(nid, 'Identity') as any;
+      const nWallet = this.em.getComponent(nid, 'Wallet') as any;
+      const nVital = this.em.getComponent(nid, 'Vital') as any;
+      return {
+        id: nid,
+        name: nIdentity?.name || `NPC${nid}`,
+        profession: nIdentity?.profession || 'laborer',
+        personality: nIdentity?.personality || [],
+        copper: nWallet?.copper || 0,
+        health: nVital?.health || 100,
+        relationScore: this.relationshipSys.getScore(playerId, nid),
+        relationType: this.relationshipSys.getType(playerId, nid),
+      };
+    });
+
+    // 如果目标不在附近列表中，添加它
+    if (!nearbyNpcs.find(n => n.id === targetId)) {
+      const tIdentity = this.em.getComponent(targetId, 'Identity') as any;
+      const tWallet = this.em.getComponent(targetId, 'Wallet') as any;
+      const tVital = this.em.getComponent(targetId, 'Vital') as any;
+      nearbyNpcs.push({
+        id: targetId,
+        name: tIdentity?.name || `NPC${targetId}`,
+        profession: tIdentity?.profession || 'laborer',
+        personality: tIdentity?.personality || [],
+        copper: tWallet?.copper || 0,
+        health: tVital?.health || 100,
+        relationScore: this.relationshipSys.getScore(playerId, targetId),
+        relationType: this.relationshipSys.getType(playerId, targetId),
+      });
+    }
+
+    // 构建玩家属性
+    const actorStats: Record<string, number> = {
+      bravery: (identity?.personality || []).includes('勇敢') ? 80 : 40,
+      cunning: (identity?.personality || []).includes('狡猾') ? 80 : 40,
+      eloquence: (identity?.personality || []).includes('健谈') ? 80 : 40,
+      cleverness: (identity?.personality || []).includes('机灵') ? 80 : 40,
+      patience: (identity?.personality || []).includes('温和') ? 80 : 40,
+      courage: (identity?.personality || []).includes('勇敢') ? 80 : 40,
+      social: vital?.mood ?? 50,
+      pity: (identity?.personality || []).includes('善良') ? 80 : 40,
+      aggression: (identity?.personality || []).includes('暴躁') ? 80 : 40,
+      strength: vital?.health ?? 80,
+      wallet: wallet?.copper ?? 0,
+      loyalty: hiddenTraits?.loyalty ?? 50,
+      honor: hiddenTraits?.honor ?? 50,
+    };
+
+    const targetStatsLookup = (tid: number): Record<string, number> => {
+      const target = nearbyNpcs.find(n => n.id === tid);
+      return {
+        alertness: (target?.personality || []).includes('精明') ? 80 : 40,
+        cleverness: (target?.personality || []).includes('机灵') ? 80 : 40,
+        courage: (target?.personality || []).includes('勇敢') ? 80 : 40,
+        kindness: (target?.personality || []).includes('善良') ? 80 : 40,
+        judgment: (target?.personality || []).includes('精明') ? 80 : 40,
+        disease: target ? 100 - target.health : 50,
+        wallet: target?.copper || 50,
+        shyness: (target?.personality || []).includes('胆小') ? 80 : 40,
+        strength: target?.health || 50,
+        stinginess: (target?.personality || []).includes('吝啬') ? 80 : 40,
+      };
+    };
+
+    // 调用 L0 演出库匹配
+    const result = this.sceneLib.matchL0(goals, actorContext, nearbyNpcs, actorStats, targetStatsLookup, undefined, playerId);
+    console.log(`[L0-Player] action=${actionId} target=${targetId} goals=${JSON.stringify(goals)} grid=${actorContext.currentGrid} shichen=${actorContext.shichen} nearby=${nearbyNpcs.length} match=${!!result}`);
+
+    if (result) {
+      // 记录演出事件
+      this.logEventEx('scene', 'L0', `玩家演出: ${result.sceneName}`, {
+        sourceEntityId: playerId,
+        targetEntityId: targetId,
+        sceneLevel: 'L0',
+      });
+
+      // 应用关系到目标NPC
+      if (result.effects && result.effects['relationChange']) {
+        this.relationshipSys.modifyRelation(playerId, targetId, result.effects['relationChange'], this.time.tick);
+      }
+    }
+
+    return result;
   }
 
   /** 检查玩家选项条件 */
@@ -3970,6 +4189,70 @@ export class WorldEngine {
     // 0. 尝试触发多步骤场景（在执行动作之前）
     const sceneCheck = this.tryTriggerPlayerScene(playerId, actionId, params);
     if (sceneCheck) return sceneCheck;
+
+    // 0.5 尝试用 L0 演出库为玩家-NPC交互生成丰富叙事
+    const l0SceneResult = this.tryL0SceneForPlayer(playerId, actionId, params);
+    if (l0SceneResult) {
+      // L0 演出匹配成功，用演出叙事替代简单文本
+      let t0 = performance.now();
+      const simResult = this.simulateTurn();
+      timings.l0GOAP = performance.now() - t0;
+
+      t0 = performance.now();
+      const percData = this.perception.getPerceptionData(playerId);
+      timings.perception = performance.now() - t0;
+
+      t0 = performance.now();
+      const pos = this.em.getComponent(playerId, 'Position');
+      const gridId = pos?.gridId || 'center_street';
+      const template = this.getSceneTemplate(gridId);
+      const sceneCtx = this.getSceneContext(playerId, simResult.causalEvents);
+      const sceneDescription = template.getDescription(sceneCtx);
+      const sceneLocation = template.locationName;
+      const apData = this.getPlayerAP(playerId);
+      const vital = this.em.getComponent(playerId, 'Vital');
+      const wallet = this.em.getComponent(playerId, 'Wallet');
+      const distantNews = this.generateDistantNews();
+      const briefing = this.generateBriefing(gridId, simResult.priceChanges, distantNews);
+      timings.assemble = performance.now() - t0;
+      timings.total = performance.now() - startTotal;
+
+      const recentEvents = this.getEvents(20);
+      const tickEvents = recentEvents.filter(e => e.tick === this.time.tick).length;
+
+      // 应用 L0 演出效果
+      if (l0SceneResult.effects) {
+        for (const [key, value] of Object.entries(l0SceneResult.effects)) {
+          if (key === 'copper' && wallet) wallet.copper = Math.max(0, wallet.copper + value);
+          else if (key === 'health' && vital) vital.health = Math.max(0, Math.min(100, vital.health + value));
+          else if (key === 'mood' && vital) vital.mood = Math.max(0, Math.min(100, vital.mood + value));
+          else if (key === 'fatigue' && vital) vital.fatigue = Math.max(0, Math.min(100, vital.fatigue + value));
+          else if (key === 'hunger' && vital) vital.hunger = Math.max(0, Math.min(100, vital.hunger + value));
+        }
+      }
+
+      const npcMessages: string[] = [];
+      for (const ce of simResult.causalEvents) {
+        if (ce.spreadRadius <= 1) npcMessages.push(ce.message);
+      }
+      npcMessages.unshift(l0SceneResult.narrative);
+
+      return {
+        success: true,
+        message: l0SceneResult.narrative,
+        sceneDescription,
+        sceneLocation,
+        options: [],
+        npcMessages,
+        timings,
+        perception: percData,
+        worldState: { tick: this.time.tick, shichen: this.time.shichenName, day: this.time.day, season: this.time.season, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), prices: this.economy.getPrices() },
+        playerState: { hunger: vital?.hunger ?? 50, fatigue: vital?.fatigue ?? 50, health: vital?.health ?? 80, mood: vital?.mood ?? 50, copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max },
+        turnSummary: { shichen: this.time.shichenName, day: this.time.day, tick: this.time.tick, l0Actions: simResult.l0Actions, l1Summary: simResult.l1Summary, majorEvents: simResult.majorEvents, weatherChange: simResult.weatherChange, priceChanges: simResult.enrichedPriceChanges, totalEvents: tickEvents, npcActions: simResult.npcActions, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), events: tickEvents },
+        distantNews,
+        briefing,
+      };
+    }
 
     // 1. 执行玩家操作
     let t0 = performance.now();

@@ -3331,6 +3331,8 @@ let activeSceneData = null;
 let sceneNarrativeQueue = [];
 let sceneTypingTimer = null;
 let sceneCountdownTimer = null;
+let l0SceneQueue = [];        // L0 NPC 行动演出队列
+let l0SceneTimer = null;      // 自动推进定时器
 
 function showSceneOverlay(sceneData) {
   if (!sceneData) return;
@@ -3411,6 +3413,112 @@ function typeSceneNarrative(text, el) {
   el.appendChild(cursor);
 }
 
+// ===== L0 NPC 行动演出队列 =====
+function queueL0SceneActions(l0Actions) {
+  if (!l0Actions || l0Actions.length === 0) return;
+  for (const act of l0Actions) {
+    const narrative = act.narrative || act.result || '';
+    if (!narrative || narrative.startsWith('正在演出') || narrative.startsWith('开始演出')) continue;
+    l0SceneQueue.push({
+      sceneName: act.sceneName || act.action || 'NPC行动',
+      narrative: narrative,
+      actorName: act.npcName,
+      targetName: act.targetName || undefined,
+      phasesCompleted: 0,
+    });
+  }
+  // 如果没有正在展示的场景，立即开始
+  if (!document.getElementById('scene-overlay').classList.contains('active')) {
+    showNextL0Scene();
+  }
+}
+
+function showNextL0Scene() {
+  if (l0SceneTimer) { clearTimeout(l0SceneTimer); l0SceneTimer = null; }
+  if (l0SceneQueue.length === 0) {
+    // 队列清空，关闭面板
+    const overlay = document.getElementById('scene-overlay');
+    overlay.classList.remove('active');
+    return;
+  }
+  const sceneData = l0SceneQueue.shift();
+  showSceneOverlay(sceneData);
+  // 3.5秒后自动推进下一个
+  l0SceneTimer = setTimeout(() => showNextL0Scene(), 3500);
+}
+
+function closeL0SceneQueue() {
+  if (l0SceneTimer) { clearTimeout(l0SceneTimer); l0SceneTimer = null; }
+  l0SceneQueue = [];
+  const overlay = document.getElementById('scene-overlay');
+  overlay.classList.remove('active');
+}
+
+/** 显示玩家多步骤场景（演出库模式 — 带选择按钮） */
+function showPlayerSceneOverlay(scenePhaseData) {
+  if (!scenePhaseData) return;
+  const overlay = document.getElementById('scene-overlay');
+  const title = document.getElementById('scene-title');
+  const narrative = document.getElementById('scene-narrative');
+  const choicesArea = document.getElementById('scene-choices');
+  const participants = document.getElementById('scene-participants');
+  const phaseDots = document.getElementById('scene-phase-dots');
+  const phaseLabel = document.getElementById('scene-phase-label');
+  const typeBadge = document.getElementById('scene-type-badge');
+
+  title.textContent = scenePhaseData.sceneId || '故事';
+  phaseDots.innerHTML = '<span class="scene-phase-dot current"></span>';
+  phaseLabel.textContent = '选择';
+  typeBadge.textContent = '故事';
+  typeBadge.className = 'scene-type-badge player';
+
+  // 参与者
+  participants.innerHTML = '<div class="scene-participant"><div class="scene-participant-name">你</div><div class="scene-participant-role">主角</div></div>';
+  if (scenePhaseData.participantNames) {
+    for (const name of scenePhaseData.participantNames) {
+      participants.innerHTML += `<div class="scene-participant"><div class="scene-participant-name">${name}</div><div class="scene-participant-role">参与者</div></div>`;
+    }
+  }
+
+  // 叙事
+  narrative.innerHTML = '';
+  const narrativeText = scenePhaseData.narrative || '';
+  if (narrativeText) {
+    typeSceneNarrative(narrativeText, narrative);
+  }
+
+  // 选项按钮
+  choicesArea.innerHTML = '';
+  if (scenePhaseData.choices && scenePhaseData.choices.length > 0) {
+    for (const choice of scenePhaseData.choices) {
+      const btn = document.createElement('button');
+      btn.className = 'scene-choice-btn' + (choice.conditionMet === false ? ' disabled' : '');
+      btn.textContent = choice.text;
+      btn.disabled = choice.conditionMet === false;
+      btn.onclick = () => {
+        // 发送选择到服务端
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'action', actionId: 'scene_choice', params: { choiceId: choice.id }, seqId: ++seqId }));
+        } else {
+          // REST fallback
+          fetch('/api/scene-choice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choiceId: choice.id }) })
+            .then(r => r.json()).then(data => {
+              if (data.scenePhaseData) showPlayerSceneOverlay(data.scenePhaseData);
+              else hideSceneOverlay();
+            });
+        }
+        choicesArea.innerHTML = '<div style="text-align:center;color:#8b7355;">等待结果...</div>';
+      };
+      choicesArea.appendChild(btn);
+    }
+    choicesArea.className = 'scene-choices-area';
+  } else {
+    choicesArea.className = 'scene-choices-area hidden';
+  }
+
+  overlay.classList.add('active');
+}
+
 function updateSceneOverlay(sceneData) {
   if (!sceneData) return;
   const narrative = document.getElementById('scene-narrative');
@@ -3451,6 +3559,7 @@ function updateSceneOverlay(sceneData) {
 }
 
 function hideSceneOverlay() {
+  closeL0SceneQueue();
   const overlay = document.getElementById('scene-overlay');
   overlay.classList.remove('active');
   if (sceneTypingTimer) { clearInterval(sceneTypingTimer); sceneTypingTimer = null; }
@@ -3519,12 +3628,20 @@ function handleServerResponse(msg) {
   if (data.briefing) {
     renderBriefing(data.briefing);
   }
+  // 处理玩家多步骤场景（演出库模式）
+  if (data.scenePhaseData) {
+    showPlayerSceneOverlay(data.scenePhaseData);
+  }
   // Refresh nearby entities after action
   setTimeout(() => loadNearbyEntities(), 300);
   setTimeout(() => loadMoveOptions(), 400);
-  // Handle active L0 scenes
+  // Handle active L0 scenes (多步演出 — 优先展示)
   if (data.activeL0Scenes && data.activeL0Scenes.length > 0) {
     showSceneOverlay(data.activeL0Scenes[0]);
+  }
+  // 将 turnSummary.l0Actions 加入演出队列
+  else if (data.turnSummary && data.turnSummary.l0Actions && data.turnSummary.l0Actions.length > 0) {
+    queueL0SceneActions(data.turnSummary.l0Actions);
   }
 }
 

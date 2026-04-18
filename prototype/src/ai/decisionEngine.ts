@@ -48,6 +48,8 @@ export interface DecisionContext {
   stressLevel?: number;
   hiddenTraits?: HiddenTraitsComponent;
   nearbyRelations?: { targetId: number; score: number; type: string }[];
+  // 漫野奇谭化：叙事标签
+  narrativeTags?: string[];
 }
 
 export interface DecisionResult {
@@ -494,6 +496,7 @@ export function decideWithScene(
   sceneLib?: SceneLibraryManager,
   season?: string,
   tick?: number,
+  actorEntityId?: number,
 ): SceneDecisionResult | null {
   // 如果没有传入 SceneLibraryManager，回退到空（不使用演出库）
   if (!sceneLib) return null;
@@ -539,6 +542,7 @@ export function decideWithScene(
     factionId: ctx.factionId,
     nearbyCount: ctx.nearNpcCount,
     activeWhimCategories,
+    narrativeTags: ctx.narrativeTags || [],
   };
 
   // 构建 stat lookup
@@ -577,7 +581,7 @@ export function decideWithScene(
   };
 
   // 通过 SceneLibraryManager 匹配
-  const result = sceneLib.matchL0(categories, actorContext, nearbyNpcs, actorStats, targetStatsLookup);
+  const result = sceneLib.matchL0(categories, actorContext, nearbyNpcs, actorStats, targetStatsLookup, undefined, actorEntityId);
 
   if (result) {
     // 重新格式化叙事，用真实NPC名字
@@ -589,7 +593,7 @@ export function decideWithScene(
       shichen: ctx.shichen,
       day: String(ctx.day),
     };
-    result.narrative = formatNarrative(result.narrative, vars);
+    result.narrative = formatNarrative(result.narrative, vars, ctx.narrativeTags);
   }
 
   return result;

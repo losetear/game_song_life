@@ -2,9 +2,27 @@
 //
 // 将模板字符串中的占位符替换为实际值
 // 支持 L0/L1/L2 三层的所有模板变量
+// 漫野奇谭化：支持条件性叙事块 {if hasTag:xxx}...{/if}
 
-export function formatNarrative(template: string, vars: Record<string, string>): string {
+export function formatNarrative(template: string, vars: Record<string, string>, narrativeTags?: string[]): string {
   let result = template;
+
+  // 处理条件性叙事块 {if hasTag:xxx}content{/if}
+  result = result.replace(/\{if\s+hasTag:(\w+)\}([\s\S]*?)\{\/if\}/g, (_match, tag: string, content: string) => {
+    if (narrativeTags && narrativeTags.includes(tag)) {
+      return content;
+    }
+    return '';
+  });
+
+  // 处理条件性叙事块 {if notTag:xxx}content{/if}
+  result = result.replace(/\{if\s+notTag:(\w+)\}([\s\S]*?)\{\/if\}/g, (_match, tag: string, content: string) => {
+    if (!narrativeTags || !narrativeTags.includes(tag)) {
+      return content;
+    }
+    return '';
+  });
+
   for (const [key, val] of Object.entries(vars)) {
     result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
   }
@@ -58,4 +76,33 @@ export function statValueDesc(value: number): string {
   if (value < 0.6) return '一般';
   if (value < 0.8) return '良好';
   return '极好';
+}
+
+/** 叙事标签描述（用于UI展示） */
+export function narrativeTagDesc(tag: string): string {
+  const map: Record<string, string> = {
+    '被攻击': '曾遭殴打',
+    '被打': '曾被打败',
+    '惨败街头': '曾惨败于街头',
+    '被缴械': '曾被缴械',
+    '被侮辱': '曾受辱',
+    '被羞辱': '曾被当众羞辱',
+    '刀伤': '有刀伤',
+    '刀伤惨胜': '曾以刀伤取胜',
+    '互刃': '曾互以兵刃相向',
+    '互殴': '曾参与互殴',
+    '完胜街头打架': '曾在街头完胜',
+    '酒馆斗殴': '曾参与酒馆斗殴',
+    '荣誉挑战': '曾发起荣誉挑战',
+    '决斗胜利': '曾在决斗中获胜',
+    '决斗失败': '曾在决斗中落败',
+    '复仇': '曾实施复仇',
+    'scarred': '有伤疤',
+    'trusted_by_guard': '受衙门信任',
+    'reformed': '已改过自新',
+    '受恩': '曾受人恩惠',
+    '施恩': '曾施恩于人',
+    '偷窃': '曾犯偷窃',
+  };
+  return map[tag] || tag;
 }

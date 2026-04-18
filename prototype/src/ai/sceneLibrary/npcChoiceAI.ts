@@ -21,6 +21,8 @@ export interface NPCChoiceContext {
   relationToTarget?: number;  // 关系分数 -100 ~ +100
   /** 演出中之前的选择历史 */
   history: { choiceId: string; chooser: string }[];
+  /** 角色叙事标签（漫野奇谭化） */
+  narrativeTags: string[];
 }
 
 // ════════════════════════════════════════
@@ -362,6 +364,33 @@ function scoreChoice(choice: L0SceneChoice, ctx: NPCChoiceContext): number {
         score += 1 * 0.5;
         break;
       }
+    }
+  }
+
+  // 7. 戏剧潜力 (权重 0.8) — 漫野奇谭化：选择应推动故事发展
+  // 有变形效果的选择更有戏剧价值
+  if (choice.consequence.transformations?.length) {
+    score += 3 * 0.8;
+  }
+  // 导致关系大变化的选项加分（戏剧张力）
+  if (Math.abs(choice.consequence.relationChange || 0) > 10) {
+    score += 2 * 0.8;
+  }
+  // 与已有叙事标签产生张力的选择加分
+  const narrTags = ctx.narrativeTags || [];
+  if (narrTags.length > 0) {
+    // 被攻击/被羞辱过的人选择复仇 = 戏剧张力
+    if ((narrTags.includes('被攻击') || narrTags.includes('被缴械') || narrTags.includes('被侮辱')) &&
+        (choice.text.includes('报') || choice.text.includes('还') || choice.text.includes('仇'))) {
+      score += 2 * 0.8;
+    }
+    // 伤疤相关的选择
+    if (narrTags.includes('scarred') && choice.text.includes('伤')) {
+      score += 1.5 * 0.8;
+    }
+    // 曾受恩惠的人选择报恩
+    if (narrTags.includes('受恩') && (choice.text.includes('报') || choice.text.includes('还') || choice.text.includes('谢'))) {
+      score += 2 * 0.8;
     }
   }
 

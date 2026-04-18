@@ -65,7 +65,7 @@ export class StressMemorySystem {
   ensureMemoryExtended(npcId: number): MemoryComponent {
     let mem = this.em.getComponent(npcId, 'Memory');
     if (!mem) {
-      mem = { recentEvents: [], impressions: {}, shortTermMemories: [], longTermMemories: [] };
+      mem = { recentEvents: [], impressions: {}, shortTermMemories: [], longTermMemories: [], narrativeTags: [] };
       this.em.addComponent(npcId, 'Memory', mem);
     }
     if (!mem.shortTermMemories) mem.shortTermMemories = [];

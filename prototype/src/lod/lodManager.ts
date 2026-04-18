@@ -57,6 +57,7 @@ export class LODManager {
         impressions: {},
         shortTermMemories: [],
         longTermMemories: [],
+        narrativeTags: [],
       });
     }
     if (!this.em.hasComponent(entityId, 'Relations')) {

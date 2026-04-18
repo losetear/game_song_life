@@ -23,6 +23,7 @@ import { SECRETS_SCENES } from './secrets';
 import { SEASONAL_SCENES } from './seasonal';
 import { MULTISTEP_CONFLICT_SCENES } from './multistep_social';
 import { MULTISTEP_TRADE_SCENES } from './multistep_trade';
+import { NARRATIVE_DRIVEN_SCENES } from './narrative';
 
 export const ALL_L0_SCENES: L0Scene[] = [
   ...SURVIVAL_SCENES,
@@ -44,6 +45,8 @@ export const ALL_L0_SCENES: L0Scene[] = [
   // 多步演出（L0PhaseScene extends L0Scene，兼容旧接口）
   ...MULTISTEP_CONFLICT_SCENES,
   ...MULTISTEP_TRADE_SCENES,
+  // 漫野奇谭化：叙事驱动场景（依赖叙事标签触发）
+  ...NARRATIVE_DRIVEN_SCENES,
 ];
 
 export {
@@ -52,4 +55,5 @@ export {
   FAMILY_SCENES, ROMANCE_SCENES, NATURE_SCENES, SPIRITUAL_SCENES,
   CREATIVITY_SCENES, FACTION_SCENES, SECRETS_SCENES, SEASONAL_SCENES,
   MULTISTEP_CONFLICT_SCENES, MULTISTEP_TRADE_SCENES,
+  NARRATIVE_DRIVEN_SCENES,
 };

@@ -100,6 +100,18 @@ function matchesL0Condition(
   if (cond.minNearbyNpcs !== undefined && ctx.nearbyCount < cond.minNearbyNpcs) return null;
   if (cond.maxNearbyNpcs !== undefined && ctx.nearbyCount > cond.maxNearbyNpcs) return null;
 
+  // 叙事标签条件（漫野奇谭化：人物经历驱动场景匹配）
+  const tags = ctx.narrativeTags || [];
+  if (cond.requiredNarrativeTags && cond.requiredNarrativeTags.length > 0) {
+    if (!cond.requiredNarrativeTags.every(t => tags.includes(t))) return null;
+  }
+  if (cond.forbiddenNarrativeTags && cond.forbiddenNarrativeTags.length > 0) {
+    if (cond.forbiddenNarrativeTags.some(t => tags.includes(t))) return null;
+  }
+  if (cond.requiredAnyNarrativeTags && cond.requiredAnyNarrativeTags.length > 0) {
+    if (!cond.requiredAnyNarrativeTags.some(t => tags.includes(t))) return null;
+  }
+
   // 目标NPC
   if (!cond.targetRequired) return nearbyNpcs.length > 0 ? nearbyNpcs[0] : null; // 占位，不实际使用
 
@@ -113,6 +125,14 @@ function matchesL0Condition(
     // 阵营匹配（新增）
     if (cond.targetSameFaction && ctx.factionId !== undefined && npc.factionId !== ctx.factionId) return false;
     if (cond.targetDifferentFaction && ctx.factionId !== undefined && npc.factionId === ctx.factionId) return false;
+    // 目标叙事标签（漫野奇谭化）
+    const targetTags = npc.narrativeTags || [];
+    if (cond.targetRequiredNarrativeTags && cond.targetRequiredNarrativeTags.length > 0) {
+      if (!cond.targetRequiredNarrativeTags.every(t => targetTags.includes(t))) return false;
+    }
+    if (cond.targetForbiddenNarrativeTags && cond.targetForbiddenNarrativeTags.length > 0) {
+      if (cond.targetForbiddenNarrativeTags.some(t => targetTags.includes(t))) return false;
+    }
     return true;
   });
 
@@ -156,6 +176,17 @@ export function matchL0Scene(
 
     // 奇想匹配加分
     if (actorContext.activeWhimCategories?.has(scene.goalCategory)) score += 5;
+
+    // 叙事重要性加分（漫野奇谭化：越重要的场景匹配权重越高）
+    const weightBonus: Record<string, number> = { flavor: 0, minor: 2, major: 5, milestone: 10 };
+    score += weightBonus[scene.narrativeWeight || 'flavor'];
+
+    // 叙事标签协同加分（漫野奇谭化：有相关叙事经历的场景更容易触发）
+    if (scene.tags) {
+      const narrativeTags = actorContext.narrativeTags || [];
+      const tagOverlap = scene.tags.filter(t => narrativeTags.includes(t));
+      score += tagOverlap.length * 2;
+    }
 
     // 近期同类惩罚
     const similarCount = recentSceneIds.filter(id => {

@@ -101,6 +101,7 @@ export class SceneLibraryManager {
     actorStats: Record<string, number>,
     targetStatsLookup: (targetId: number) => Record<string, number>,
     resolveContext?: ResolveContext,
+    actorEntityId?: number,
   ): SceneDecisionResult | null {
     // 获取该NPC的cooldown列表
     const npcRecent = this.l0Recent.get(actorContext.tick) || [];
@@ -127,7 +128,7 @@ export class SceneLibraryManager {
       const phaseScene = scene as L0PhaseScene;
       const state = this.activeSceneManager.startScene(
         phaseScene,
-        actorContext.npcName as any, // actorEntityId 会在 worldEngine 层面传入
+        actorEntityId ?? 0,
         actorContext.npcName,
         target?.id as any,
         target?.name,
@@ -170,7 +171,7 @@ export class SceneLibraryManager {
         targetName: target?.name || '某人',
         location: actorContext.currentGrid,
       };
-      const narrative = formatNarrative(outcome.narrative, vars);
+      const narrative = formatNarrative(outcome.narrative, vars, actorContext.narrativeTags);
 
       this.updateL0Cooldown(actorContext.tick, scene.id);
 
@@ -191,6 +192,7 @@ export class SceneLibraryManager {
         triggerChainReaction: outcome.triggerChainReaction,
         tier: tieredResult.tier,
         score: resolveResult.score,
+        transformations: outcome.transformations,
       };
     }
 
@@ -211,7 +213,7 @@ export class SceneLibraryManager {
       targetName: target?.name || '某人',
       location: actorContext.currentGrid,
     };
-    const narrative = formatNarrative(outcome.narrative, vars);
+    const narrative = formatNarrative(outcome.narrative, vars, actorContext.narrativeTags);
 
     this.updateL0Cooldown(actorContext.tick, scene.id);
 
@@ -230,6 +232,7 @@ export class SceneLibraryManager {
       stressChange: outcome.stressChange,
       traitReveal: outcome.traitReveal,
       triggerChainReaction: outcome.triggerChainReaction,
+      transformations: outcome.transformations,
     };
   }
 

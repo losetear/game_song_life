@@ -134,7 +134,7 @@ export interface ServerMessage {
       day: number;
       tick: number;
       // L0 NPC 具体行动
-      l0Actions: { npcName: string; action: string; result: string }[];
+      l0Actions: { npcName: string; action: string; result: string; targetName?: string; narrative?: string; sceneName?: string }[];
       // L1 批量行动摘要
       l1Summary: { total: number; highlights: string[] };
       // 重大事件（分等级）
