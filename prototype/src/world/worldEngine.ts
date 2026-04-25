@@ -3747,9 +3747,9 @@ export class WorldEngine {
 
   /** 尝试触发玩家多步骤场景 */
   private tryTriggerPlayerScene(playerId: number, actionId: string, _params: any): ScenePhaseResult | null {
-    // 已有活跃场景则不再触发
+    // 已有活跃场景 → 清理旧场景，允许新触发（避免场景卡住阻塞所有交互）
     if (this.sceneLib.hasActivePlayerScene()) {
-      return null;
+      this.sceneLib.cancelPlayerScene();
     }
 
     // 任何有 targetId 且目标是 NPC 的动作都尝试触发演出场景
