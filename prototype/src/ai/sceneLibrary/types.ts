@@ -350,11 +350,31 @@ export interface PlayerSceneChoice {
   consequence: PlayerSceneConsequence;
 }
 
+/** 场景阶段的视觉元数据（漫野奇谭式演出） */
+export interface SceneVisualMeta {
+  /** 背景：market|alley|teahouse|courtyard|night_street|palace|dungeon */
+  background: string;
+  /** 位置显示名，如 '汴京 · 东市' */
+  location: string;
+  /** 场景中的角色 */
+  characters: {
+    id: string;
+    name: string;
+    glyph: string;                    // 头像单字
+    position: 'left' | 'center' | 'right';
+    mood: 'neutral' | 'angry' | 'happy' | 'sad';
+  }[];
+  /** 分离的对话（区别于旁白 narration） */
+  dialogue?: { speaker: string; text: string }[];
+}
+
 /** 玩家场景的每一步 */
 export interface PlayerSceneStep {
   phaseId: string;                    // 阶段标识
   narrative: string;                  // 当前阶段的叙事文本（模板变量同 L0）
   choices: PlayerSceneChoice[];       // 玩家可选的操作
+  /** 视觉演出元数据（可选，用于驱动漫画面板） */
+  visual?: SceneVisualMeta;
 }
 
 /** 玩家场景的参与者 */
@@ -389,6 +409,8 @@ export interface PlayerScene {
   cooldownTicks: number;
   priority?: number;
   tags?: string[];
+  /** 开场视觉元数据（可选，用于驱动漫画面板） */
+  openingVisual?: SceneVisualMeta;
 }
 
 /** 玩家场景运行时状态 */
@@ -406,6 +428,8 @@ export interface PlayerSceneMatchResult {
   state: PlayerSceneState;
   openingNarrative: string;
   choices: PlayerSceneChoice[];
+  /** 视觉演出元数据 */
+  visual?: SceneVisualMeta;
 }
 
 // ════════════════════════════════════════

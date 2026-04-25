@@ -153,12 +153,17 @@ export interface TickResult {
 export interface ScenePhaseResult {
   isScenePhase: true;
   sceneId: string;
+  sceneName?: string;
   narrative: string;
   choices: { id: string; text: string; conditionMet: boolean }[];
   participantNpcIds: number[];
   participantNames: string[];
+  totalPhases?: number;
+  currentPhaseIndex?: number;
   playerState: TickResult['playerState'];
   worldState: TickResult['worldState'];
+  /** 漫野奇谭式视觉演出元数据 */
+  visual?: import('../ai/sceneLibrary/types').SceneVisualMeta;
 }
 
 // ============================================================
@@ -3743,11 +3748,14 @@ export class WorldEngine {
   /** 尝试触发玩家多步骤场景 */
   private tryTriggerPlayerScene(playerId: number, actionId: string, _params: any): ScenePhaseResult | null {
     // 已有活跃场景则不再触发
-    if (this.sceneLib.hasActivePlayerScene()) return null;
+    if (this.sceneLib.hasActivePlayerScene()) {
+      return null;
+    }
 
-    // 所有NPC交互动作都尝试触发，不再随机概率
-    const npcInteractActions = ['talk_to', 'ask_rumor', 'trade_buy', 'trade_sell', 'share_food', 'help_request', 'gift', 'provoke', 'sworn_brothers', 'learn_skill', 'invite_travel'];
-    const isNpcInteract = npcInteractActions.includes(actionId);
+    // 任何有 targetId 且目标是 NPC 的动作都尝试触发演出场景
+    const targetId = _params?.targetId ? Number(_params.targetId) : 0;
+    const isNpcInteract = targetId > 0 && this.em.isAlive(targetId) && this.em.getType(targetId) === 'npc';
+
     if (!isNpcInteract && actionId !== 'end_turn') return null;
 
     // 构建玩家 actorContext
@@ -3774,9 +3782,13 @@ export class WorldEngine {
       nearbyCount: this.worldMap.getEntitiesInGrid(pos?.gridId || '').length,
     };
 
-    // 收集附近 NPC
-    const nearbyIds = this.worldMap.getEntitiesInGrid(pos?.gridId || '')
+    // 收集附近 NPC（有 targetId 时优先聚焦目标 NPC）
+    const allNearbyIds = this.worldMap.getEntitiesInGrid(pos?.gridId || '')
       .filter((id: number) => id !== playerId && this.em.getType(id) === 'npc');
+    // 如果指定了 targetId，确保目标在列表中并优先排列
+    const nearbyIds = (targetId && allNearbyIds.includes(targetId))
+      ? [targetId, ...allNearbyIds.filter((id: number) => id !== targetId)]
+      : allNearbyIds;
     const nearbyNpcs = nearbyIds.map((nid: number) => {
       const nIdentity = this.em.getComponent(nid, 'Identity') as any;
       const nWallet = this.em.getComponent(nid, 'Wallet') as any;
@@ -3810,17 +3822,27 @@ export class WorldEngine {
     };
 
     const result = this.sceneLib.matchPlayerScene(actorContext, nearbyNpcs, playerStats, this.time.tick);
-    if (!result) return null;
+
+    // 预定义场景未匹配时，尝试动态生成多幕场景（仅NPC交互动作）
+    let finalResult = result;
+    if (!finalResult && isNpcInteract && nearbyNpcs.length > 0) {
+      finalResult = this.sceneLib.startDynamicScene(actionId, actorContext, nearbyNpcs, playerStats, this.time.tick);
+    }
+
+    if (!finalResult) return null;
+
+    // 计算总幕数（用于进度显示）
+    const phaseCount = Object.keys(finalResult.scene.phases).length;
 
     // 记录场景开始
-    this.logEventEx('scene', 'player_scene', `玩家触发场景: ${result.scene.name}`, {
+    this.logEventEx('scene', 'player_scene', `玩家触发场景: ${finalResult.scene.name}`, {
       sourceEntityId: playerId,
-      targetEntityId: result.state.participantNpcIds[0],
+      targetEntityId: finalResult.state.participantNpcIds[0],
       sceneLevel: 'player_scene',
     });
 
     // 构建参与者名字列表
-    const participantNames = result.state.participantNpcIds.map(id => {
+    const participantNames = finalResult.state.participantNpcIds.map(id => {
       const ident = this.em.getComponent(id, 'Identity');
       return ident?.name || '某人';
     });
@@ -3848,15 +3870,19 @@ export class WorldEngine {
 
     return {
       isScenePhase: true,
-      sceneId: result.scene.id,
-      narrative: result.openingNarrative,
-      choices: result.choices.map(c => ({
+      sceneId: finalResult.scene.id,
+      sceneName: finalResult.scene.name,
+      narrative: finalResult.openingNarrative,
+      choices: finalResult.choices.map(c => ({
         id: c.id,
         text: c.text,
         conditionMet: !c.condition || this.checkPlayerChoiceCondition(playerStats, identity?.personality || [], c.condition),
       })),
-      participantNpcIds: result.state.participantNpcIds,
+      participantNpcIds: finalResult.state.participantNpcIds,
       participantNames,
+      totalPhases: phaseCount,
+      currentPhaseIndex: 1,
+      visual: finalResult.visual,
       playerState: ps,
       worldState: ws,
     };
@@ -4118,6 +4144,8 @@ export class WorldEngine {
 
     // 场景继续 → 返回下一阶段
     const apData = this.getPlayerAP(playerId);
+    // 计算当前进度
+    const historyLen = activeScene!.history.length;
     return {
       isScenePhase: true,
       sceneId: activeScene!.sceneId,
@@ -4129,6 +4157,8 @@ export class WorldEngine {
       })),
       participantNpcIds: activeScene!.participantNpcIds,
       participantNames: activeScene!.participantNpcIds.map(id => this.em.getComponent(id, 'Identity')?.name || '某人'),
+      currentPhaseIndex: historyLen + 1,
+      visual: result.visual,
       playerState: { hunger: vital?.hunger ?? 50, fatigue: vital?.fatigue ?? 50, health: vital?.health ?? 80, mood: vital?.mood ?? 50, copper: wallet?.copper ?? 0, ap: apData.current, apMax: apData.max },
       worldState: { tick: this.time.tick, shichen: this.time.shichenName, day: this.time.day, season: this.time.season, weather: this.weather.weather, weatherDesc: this.weather.getDescription(), prices: this.economy.getPrices() },
     };
@@ -4187,7 +4217,11 @@ export class WorldEngine {
     }
 
     // 0. 尝试触发多步骤场景（在执行动作之前）
-    const sceneCheck = this.tryTriggerPlayerScene(playerId, actionId, params);
+    let sceneCheck: ScenePhaseResult | null = null;
+    try {
+      sceneCheck = this.tryTriggerPlayerScene(playerId, actionId, params);
+      console.log('[scene-trigger]', actionId, 'target:', params?.targetId || 0, sceneCheck ? 'matched' : 'skip');
+    } catch (e) { console.error('[tryTriggerPlayerScene] ERROR:', e); }
     if (sceneCheck) return sceneCheck;
 
     // 0.5 尝试用 L0 演出库为玩家-NPC交互生成丰富叙事

@@ -54,7 +54,25 @@ export class GameServer {
           this.ensurePlayer();
         }
         const result = this.engine.executePlayerAction(this.playerId, actionId, params || {});
-        res.json(result);
+        // ScenePhaseResult 需要包装为 scenePhaseData
+        if (result && (result as any).isScenePhase) {
+          const sr = result as any;
+          res.json({
+            ...sr,
+            scenePhaseData: {
+              sceneId: sr.sceneId,
+              sceneName: sr.sceneName,
+              narrative: sr.narrative,
+              choices: sr.choices,
+              participantNames: sr.participantNames,
+              totalPhases: sr.totalPhases,
+              currentPhaseIndex: sr.currentPhaseIndex,
+              visual: sr.visual,
+            },
+          });
+        } else {
+          res.json(result);
+        }
       } catch (err) {
         res.status(500).json({ error: String(err) });
       }
@@ -769,7 +787,25 @@ export class GameServer {
         const { choiceId } = req.body;
         if (!choiceId) { res.status(400).json({ success: false, message: '缺少choiceId参数' }); return; }
         const result = this.engine.resolvePlayerSceneChoice(this.playerId, choiceId);
-        res.json(result);
+        // ScenePhaseResult 需要包装为 scenePhaseData
+        if (result && (result as any).isScenePhase) {
+          const sr = result as any;
+          res.json({
+            ...sr,
+            scenePhaseData: {
+              sceneId: sr.sceneId,
+              sceneName: sr.sceneName,
+              narrative: sr.narrative,
+              choices: sr.choices,
+              participantNames: sr.participantNames,
+              totalPhases: sr.totalPhases,
+              currentPhaseIndex: sr.currentPhaseIndex,
+              visual: sr.visual,
+            },
+          });
+        } else {
+          res.json(result);
+        }
       } catch (err) {
         res.status(500).json({ success: false, message: String(err) });
       }
@@ -965,9 +1001,13 @@ export class GameServer {
                     message: sr.narrative,
                     scenePhaseData: {
                       sceneId: sr.sceneId,
+                      sceneName: sr.sceneName,
                       narrative: sr.narrative,
                       choices: sr.choices,
                       participantNames: sr.participantNames,
+                      totalPhases: sr.totalPhases,
+                      currentPhaseIndex: sr.currentPhaseIndex,
+                      visual: sr.visual,
                     },
                     worldState: sr.worldState,
                     playerState: sr.playerState,
@@ -1009,9 +1049,13 @@ export class GameServer {
                   message: sr.narrative,
                   scenePhaseData: {
                     sceneId: sr.sceneId,
+                    sceneName: sr.sceneName,
                     narrative: sr.narrative,
                     choices: sr.choices,
                     participantNames: sr.participantNames,
+                    totalPhases: sr.totalPhases,
+                    currentPhaseIndex: sr.currentPhaseIndex,
+                    visual: sr.visual,
                   },
                   worldState: sr.worldState,
                   playerState: sr.playerState,

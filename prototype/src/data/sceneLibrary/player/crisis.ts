@@ -17,6 +17,14 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
       { role: '受灾者', minCount: 1, maxCount: 2, requiredRelationType: 'any' },
     ],
     openingNarrative: '你突然闻到一股焦糊味。抬头一看，不远处浓烟滚滚——有人家着火了！街坊们慌作一团，到处是喊叫声。',
+    openingVisual: {
+      background: 'courtyard',
+      location: '汴京 · 居民坊',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+      ],
+      dialogue: [],
+    },
     entryPhase: 'phase1',
     phases: {
       phase1: {
@@ -57,6 +65,17 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'alley',
+          location: '汴京 · 着火的民宅',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+            { id: 'oldwoman', name: '老妇人', glyph: '妇', position: 'left', mood: 'sad' },
+          ],
+          dialogue: [
+            { speaker: '老妇人', text: '我的孙子！我的孙子还在里面！' },
+          ],
+        },
       },
       phase2a: {
         phaseId: 'phase2a',
@@ -83,6 +102,13 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'alley',
+          location: '汴京 · 火场内部',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'sad' },
+          ],
+        },
       },
       phase2b: {
         phaseId: 'phase2b',
@@ -110,6 +136,13 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'courtyard',
+          location: '汴京 · 街坊灭火',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'angry' },
+          ],
+        },
       },
       phase2c: {
         phaseId: 'phase2c',
@@ -136,6 +169,13 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'courtyard',
+          location: '汴京 · 你家门前',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+          ],
+        },
       },
     },
     weight: 2,
@@ -157,6 +197,15 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
       { role: '受害者', minCount: 1, requiredTraits: ['善良', '胆小'] },
     ],
     openingNarrative: '你在{location}闲逛时，眼角余光瞥见一个鬼鬼祟祟的身影正悄悄靠近一个路人，一只手已经伸向了对方的钱袋。',
+    openingVisual: {
+      background: 'market',
+      location: '汴京 · 东市',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+        { id: 'thief', name: '可疑人', glyph: '贼', position: 'center', mood: 'neutral' },
+        { id: 'victim', name: '路人', glyph: '客', position: 'right', mood: 'neutral' },
+      ],
+    },
     entryPhase: 'phase1',
     phases: {
       phase1: {
@@ -193,6 +242,16 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 东市',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'thief', name: '可疑人', glyph: '贼', position: 'center', mood: 'neutral' },
+            { id: 'victim', name: '路人', glyph: '客', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [],
+        },
       },
       phase2a: {
         phaseId: 'phase2a',
@@ -220,6 +279,17 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'alley',
+          location: '汴京 · 东市巷弄',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'angry' },
+            { id: 'thief', name: '小偷', glyph: '贼', position: 'right', mood: 'angry' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '抓小偷！' },
+          ],
+        },
       },
       phase2b: {
         phaseId: 'phase2b',
@@ -236,6 +306,14 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 东市',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'victim', name: '受害者', glyph: '客', position: 'center', mood: 'happy' },
+          ],
+        },
       },
       phase2c: {
         phaseId: 'phase2c',
@@ -252,6 +330,14 @@ export const PLAYER_CRISIS_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 东市',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'angry' },
+            { id: 'thief', name: '小偷', glyph: '贼', position: 'right', mood: 'angry' },
+          ],
+        },
       },
     },
     weight: 3,

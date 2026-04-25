@@ -2199,6 +2199,18 @@ body::before {
 .scene-type-badge.npc { background: var(--indigo); color: #fff; }
 .scene-type-badge.player { background: var(--vermillion); color: #fff; }
 
+#scene-visual-stage {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(44,24,16,0.1);
+}
+@keyframes charEnter {
+  0% { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 .scene-participants {
   display: flex;
   gap: 12px;
@@ -3329,64 +3341,112 @@ function updateConnStatus(status) {
 
 let activeSceneData = null;
 let sceneNarrativeQueue = [];
-let sceneTypingTimer = null;
-let sceneCountdownTimer = null;
-let l0SceneQueue = [];        // L0 NPC 行动演出队列
-let l0SceneTimer = null;      // 自动推进定时器
 
-function showSceneOverlay(sceneData) {
-  if (!sceneData) return;
-  activeSceneData = sceneData;
-  const overlay = document.getElementById('scene-overlay');
-  const title = document.getElementById('scene-title');
-  const narrative = document.getElementById('scene-narrative');
-  const choicesArea = document.getElementById('scene-choices');
-  const participants = document.getElementById('scene-participants');
-  const phaseDots = document.getElementById('scene-phase-dots');
-  const phaseLabel = document.getElementById('scene-phase-label');
-  const typeBadge = document.getElementById('scene-type-badge');
+// ===== 视觉舞台公共函数 =====
 
-  title.textContent = sceneData.sceneName || '演出';
+/** 背景渐变映射 */
+const BG_MAP = {
+  market: 'linear-gradient(180deg,#e8d5a8 0%,#d4bc88 100%)',
+  alley: 'linear-gradient(90deg,rgba(44,24,16,0.2) 0%,transparent 15%,transparent 85%,rgba(44,24,16,0.2) 100%),linear-gradient(180deg,#4a4035,#3a3025)',
+  teahouse: 'linear-gradient(180deg,#d4c0a0,#bca880)',
+  courtyard: 'linear-gradient(180deg,#e0d4b8,#d8ccac)',
+  night_street: 'linear-gradient(180deg,#1a1a2e,#0f3460)',
+  palace: 'linear-gradient(180deg,#8b0000 0%,#a02020 20%,#c8a040 100%)',
+  dungeon: 'linear-gradient(180deg,#0a0a0a,#1a1a1a)',
+};
 
-  // Phase indicator
-  const completed = sceneData.phasesCompleted || 0;
-  phaseDots.innerHTML = '';
-  for (let i = 0; i < Math.max(completed + 1, 3); i++) {
-    const dot = document.createElement('span');
-    dot.className = 'scene-phase-dot' +
-      (i < completed ? ' completed' : '') +
-      (i === completed ? ' current' : '');
-    phaseDots.appendChild(dot);
+const MOOD_COLORS = { neutral: '#3a2a1a', angry: '#c23a2e', happy: '#b8860b', sad: '#3a4f7a' };
+const POS_MAP = { left: '15%', center: '50%', right: '85%' };
+
+/** 渲染漫野奇谭式视觉舞台 */
+function renderVisualStage(visData) {
+  if (!visData) return;
+  let container = document.getElementById('scene-visual-stage');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'scene-visual-stage';
+    const participants = document.getElementById('scene-participants');
+    participants.parentNode.insertBefore(container, participants.nextSibling);
   }
-  phaseLabel.textContent = `第${completed + 1}阶段`;
+  container.style.display = '';
+  container.style.background = BG_MAP[visData.background] || BG_MAP.courtyard;
+  container.innerHTML = '';
 
-  // Type badge
-  typeBadge.textContent = 'NPC演出';
-  typeBadge.className = 'scene-type-badge npc';
+  // 位置标签
+  if (visData.location) {
+    const loc = document.createElement('div');
+    loc.style.cssText = 'position:absolute;top:8px;left:12px;font-size:11px;color:rgba(44,24,16,0.5);background:rgba(245,230,200,0.6);padding:2px 8px;border-radius:3px;';
+    loc.textContent = visData.location;
+    container.appendChild(loc);
+  }
 
-  // Participants
-  participants.innerHTML = '';
+  // 角色
+  (visData.characters || []).forEach(ch => {
+    const el = document.createElement('div');
+    el.style.cssText = `position:absolute;bottom:16px;left:${POS_MAP[ch.position] || '50%'};transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;opacity:0;animation:charEnter 0.4s ease forwards;`;
+    const avatar = document.createElement('div');
+    avatar.style.cssText = `width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Noto Serif SC',serif;font-size:22px;font-weight:900;color:#f5e6c8;border:2px solid ${MOOD_COLORS[ch.mood] || '#2c1810'};background:linear-gradient(135deg,#5a4a3a,#3a2a1a);box-shadow:0 3px 10px rgba(44,24,16,0.3);`;
+    avatar.textContent = ch.glyph || (ch.name ? ch.name[0] : '?');
+    const name = document.createElement('div');
+    name.style.cssText = 'margin-top:4px;font-size:11px;font-weight:700;color:#f5e6c8;background:rgba(44,24,16,0.6);padding:1px 8px;border-radius:8px;font-family:"Noto Serif SC",serif;';
+    name.textContent = ch.name;
+    el.appendChild(avatar);
+    el.appendChild(name);
+    container.appendChild(el);
+  });
+
+  return container;
+}
+
+/** 隐藏视觉舞台 */
+function hideVisualStage() {
+  const c = document.getElementById('scene-visual-stage');
+  if (c) c.style.display = 'none';
+}
+
+/** 从 NPC 场景上下文合成最小 SceneVisualMeta */
+function synthesizeNPCVisual(sceneData) {
+  const name = sceneData.sceneName || sceneData.sceneType || '';
+  let bg = 'courtyard';
+  if (/市|买|卖|商|摊|贩/.test(name)) bg = 'market';
+  else if (/打|架|争|吵|偷|贼|抢|斗|口角/.test(name)) bg = 'alley';
+  else if (/茶|酒|馆|楼/.test(name)) bg = 'teahouse';
+  else if (/夜|黑|暗/.test(name)) bg = 'night_street';
+  else if (/宫|殿|府/.test(name)) bg = 'palace';
+
+  const narrative = sceneData.narrative || '';
+  let mood = 'neutral';
+  if (/打|骂|怒|愤|恨|吵/.test(narrative)) mood = 'angry';
+  else if (/笑|喜|欢|乐/.test(narrative)) mood = 'happy';
+  else if (/哭|悲|伤|叹/.test(narrative)) mood = 'sad';
+
+  const characters = [];
   if (sceneData.actorName) {
-    participants.innerHTML += `<div class="scene-participant"><div class="scene-participant-name">${sceneData.actorName}</div><div class="scene-participant-role">行动者</div></div>`;
+    characters.push({
+      id: 'actor', name: sceneData.actorName,
+      glyph: sceneData.actorName[0],
+      position: 'left', mood: mood,
+    });
   }
   if (sceneData.targetName) {
-    participants.innerHTML += `<div class="scene-participant"><div class="scene-participant-name">${sceneData.targetName}</div><div class="scene-participant-role">对方</div></div>`;
+    characters.push({
+      id: 'target', name: sceneData.targetName,
+      glyph: sceneData.targetName[0],
+      position: 'right', mood: 'neutral',
+    });
+  }
+  if (characters.length === 0) {
+    characters.push({ id: 'unknown', name: '路人', glyph: '人', position: 'center', mood: 'neutral' });
   }
 
-  // Narrative (with typewriter effect)
-  const narrativeText = sceneData.narrative || '';
-  if (narrativeText) {
-    narrative.innerHTML = '';
-    typeSceneNarrative(narrativeText, narrative);
-  }
-
-  // NPC-NPC scenes: no choices, auto-advancing
-  choicesArea.className = 'scene-choices-area hidden';
-  choicesArea.innerHTML = '';
-
-  // Show overlay
-  overlay.classList.add('active');
+  return {
+    background: bg,
+    location: '汴京 · 街坊',
+    characters: characters,
+  };
 }
+let sceneTypingTimer = null;
+let sceneCountdownTimer = null;
 
 function typeSceneNarrative(text, el) {
   if (sceneTypingTimer) clearInterval(sceneTypingTimer);
@@ -3413,47 +3473,6 @@ function typeSceneNarrative(text, el) {
   el.appendChild(cursor);
 }
 
-// ===== L0 NPC 行动演出队列 =====
-function queueL0SceneActions(l0Actions) {
-  if (!l0Actions || l0Actions.length === 0) return;
-  for (const act of l0Actions) {
-    const narrative = act.narrative || act.result || '';
-    if (!narrative || narrative.startsWith('正在演出') || narrative.startsWith('开始演出')) continue;
-    l0SceneQueue.push({
-      sceneName: act.sceneName || act.action || 'NPC行动',
-      narrative: narrative,
-      actorName: act.npcName,
-      targetName: act.targetName || undefined,
-      phasesCompleted: 0,
-    });
-  }
-  // 如果没有正在展示的场景，立即开始
-  if (!document.getElementById('scene-overlay').classList.contains('active')) {
-    showNextL0Scene();
-  }
-}
-
-function showNextL0Scene() {
-  if (l0SceneTimer) { clearTimeout(l0SceneTimer); l0SceneTimer = null; }
-  if (l0SceneQueue.length === 0) {
-    // 队列清空，关闭面板
-    const overlay = document.getElementById('scene-overlay');
-    overlay.classList.remove('active');
-    return;
-  }
-  const sceneData = l0SceneQueue.shift();
-  showSceneOverlay(sceneData);
-  // 3.5秒后自动推进下一个
-  l0SceneTimer = setTimeout(() => showNextL0Scene(), 3500);
-}
-
-function closeL0SceneQueue() {
-  if (l0SceneTimer) { clearTimeout(l0SceneTimer); l0SceneTimer = null; }
-  l0SceneQueue = [];
-  const overlay = document.getElementById('scene-overlay');
-  overlay.classList.remove('active');
-}
-
 /** 显示玩家多步骤场景（演出库模式 — 带选择按钮） */
 function showPlayerSceneOverlay(scenePhaseData) {
   if (!scenePhaseData) return;
@@ -3466,9 +3485,30 @@ function showPlayerSceneOverlay(scenePhaseData) {
   const phaseLabel = document.getElementById('scene-phase-label');
   const typeBadge = document.getElementById('scene-type-badge');
 
-  title.textContent = scenePhaseData.sceneId || '故事';
-  phaseDots.innerHTML = '<span class="scene-phase-dot current"></span>';
-  phaseLabel.textContent = '选择';
+  // === 漫野奇谭式视觉演出 ===
+  const vis = scenePhaseData.visual;
+  if (vis) {
+    renderVisualStage(vis);
+  } else {
+    hideVisualStage();
+  }
+
+  title.textContent = scenePhaseData.sceneName || scenePhaseData.sceneId || '故事';
+  // 幕数进度
+  const totalP = scenePhaseData.totalPhases || 0;
+  const curIdx = scenePhaseData.currentPhaseIndex || 1;
+  if (totalP > 0) {
+    phaseDots.innerHTML = '';
+    for (let i = 1; i <= totalP; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'scene-phase-dot' + (i < curIdx ? ' completed' : '') + (i === curIdx ? ' current' : '');
+      phaseDots.appendChild(dot);
+    }
+    phaseLabel.textContent = '第' + curIdx + '幕/共' + totalP + '幕';
+  } else {
+    phaseDots.innerHTML = '<span class="scene-phase-dot current"></span>';
+    phaseLabel.textContent = '选择';
+  }
   typeBadge.textContent = '故事';
   typeBadge.className = 'scene-type-badge player';
 
@@ -3482,8 +3522,29 @@ function showPlayerSceneOverlay(scenePhaseData) {
 
   // 叙事
   narrative.innerHTML = '';
+  // 如果有分离的对话，先显示旁白再显示对话气泡
   const narrativeText = scenePhaseData.narrative || '';
-  if (narrativeText) {
+  if (vis && vis.dialogue && vis.dialogue.length > 0) {
+    // 叙事文本
+    if (narrativeText) {
+      typeSceneNarrative(narrativeText, narrative);
+    }
+    // 对话气泡（打字完成后追加）
+    const addDialogues = () => {
+      vis.dialogue.forEach((d, i) => {
+        setTimeout(() => {
+          const bubble = document.createElement('div');
+          bubble.style.cssText = 'margin-top:10px;padding:8px 12px;border-left:3px solid #3a4f7a;background:#f5e6c8;border-radius:6px;opacity:0;transform:translateY(8px);transition:all 0.3s ease;';
+          bubble.innerHTML = `<div style="font-size:11px;font-weight:700;color:#c23a2e;margin-bottom:2px;">${d.speaker}</div><div style="font-size:13px;line-height:1.7;color:#2c1810;">${d.text}</div>`;
+          narrative.appendChild(bubble);
+          requestAnimationFrame(() => { bubble.style.opacity = '1'; bubble.style.transform = 'translateY(0)'; });
+          narrative.scrollTop = narrative.scrollHeight;
+        }, 400 + i * 500);
+      });
+    };
+    // 延迟追加对话（等打字机大致完成）
+    setTimeout(addDialogues, narrativeText.length * 30 + 200);
+  } else if (narrativeText) {
     typeSceneNarrative(narrativeText, narrative);
   }
 
@@ -3503,8 +3564,24 @@ function showPlayerSceneOverlay(scenePhaseData) {
           // REST fallback
           fetch('/api/scene-choice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choiceId: choice.id }) })
             .then(r => r.json()).then(data => {
-              if (data.scenePhaseData) showPlayerSceneOverlay(data.scenePhaseData);
-              else hideSceneOverlay();
+              // 更新玩家/世界状态
+              if (data.playerState) { showStatChanges(data.playerState); updatePlayerState(data.playerState); }
+              if (data.worldState) updateWorldState(data.worldState);
+              if (data.scenePhaseData) {
+                showPlayerSceneOverlay(data.scenePhaseData);
+              } else {
+                // 场景结束 → 显示结局叙事，然后关闭
+                const narrativeEl = document.getElementById('scene-narrative');
+                const endingMsg = data.message || '';
+                if (endingMsg && narrativeEl) {
+                  narrativeEl.innerHTML = '';
+                  typeSceneNarrative(endingMsg, narrativeEl);
+                  document.getElementById('scene-choices').className = 'scene-choices-area hidden';
+                }
+                setTimeout(() => hideSceneOverlay(), endingMsg ? 2500 : 0);
+              }
+              // 刷新附近实体
+              setTimeout(() => loadNearbyEntities(), 300);
             });
         }
         choicesArea.innerHTML = '<div style="text-align:center;color:#8b7355;">等待结果...</div>';
@@ -3559,9 +3636,9 @@ function updateSceneOverlay(sceneData) {
 }
 
 function hideSceneOverlay() {
-  closeL0SceneQueue();
   const overlay = document.getElementById('scene-overlay');
   overlay.classList.remove('active');
+  hideVisualStage();
   if (sceneTypingTimer) { clearInterval(sceneTypingTimer); sceneTypingTimer = null; }
   if (sceneCountdownTimer) { clearInterval(sceneCountdownTimer); sceneCountdownTimer = null; }
   activeSceneData = null;
@@ -3588,6 +3665,46 @@ function handleSceneUpdate(msg) {
 
 function handleServerResponse(msg) {
   const data = msg.data;
+
+  // 玩家多步骤场景优先 — 进入场景模式后直接返回
+  // REST /api/action 返回 isScenePhase=true 时，顶层字段即为场景数据
+  if (data.scenePhaseData || data.isScenePhase) {
+    const spd = data.scenePhaseData || {
+      sceneId: data.sceneId,
+      sceneName: data.sceneName,
+      narrative: data.narrative,
+      choices: data.choices,
+      participantNames: data.participantNames,
+      totalPhases: data.totalPhases,
+      currentPhaseIndex: data.currentPhaseIndex,
+      visual: data.visual,
+    };
+    console.log('[scenePhaseData]', JSON.stringify(spd).slice(0, 300));
+    // 更新玩家状态
+    if (data.playerState) {
+      showStatChanges(data.playerState);
+      updatePlayerState(data.playerState);
+    }
+    if (data.worldState) updateWorldState(data.worldState);
+    showPlayerSceneOverlay(spd);
+    return;
+  }
+
+  // 非场景响应 → 关闭可能残留的 overlay
+  const overlay = document.getElementById('scene-overlay');
+  if (overlay && overlay.classList.contains('active')) {
+    // 延迟关闭让用户看到最后一幕结局
+    const narrative = data.message || data.sceneDescription || '';
+    const sceneNarrative = document.getElementById('scene-narrative');
+    if (sceneNarrative && narrative) {
+      sceneNarrative.innerHTML = '';
+      typeSceneNarrative(narrative, sceneNarrative);
+      // 隐藏选择区域
+      document.getElementById('scene-choices').className = 'scene-choices-area hidden';
+    }
+    setTimeout(() => hideSceneOverlay(), 2000);
+  }
+
   const sceneMsg = data.sceneDescription || data.message || '';
   if (sceneMsg) {
     // Use typewriter for entity interaction feedback
@@ -3628,20 +3745,23 @@ function handleServerResponse(msg) {
   if (data.briefing) {
     renderBriefing(data.briefing);
   }
-  // 处理玩家多步骤场景（演出库模式）
-  if (data.scenePhaseData) {
-    showPlayerSceneOverlay(data.scenePhaseData);
-  }
   // Refresh nearby entities after action
   setTimeout(() => loadNearbyEntities(), 300);
   setTimeout(() => loadMoveOptions(), 400);
-  // Handle active L0 scenes (多步演出 — 优先展示)
+  // NPC L0 动作仅写入活动日志（不弹 overlay）
   if (data.activeL0Scenes && data.activeL0Scenes.length > 0) {
-    showSceneOverlay(data.activeL0Scenes[0]);
+    for (const scene of data.activeL0Scenes) {
+      const msg = scene.narrative || `${scene.actorName}正在${scene.sceneName}`;
+      addLog(`📜 ${scene.actorName}：${msg.substring(0, 60)}`);
+    }
   }
-  // 将 turnSummary.l0Actions 加入演出队列
-  else if (data.turnSummary && data.turnSummary.l0Actions && data.turnSummary.l0Actions.length > 0) {
-    queueL0SceneActions(data.turnSummary.l0Actions);
+  if (data.turnSummary && data.turnSummary.l0Actions && data.turnSummary.l0Actions.length > 0) {
+    for (const act of data.turnSummary.l0Actions) {
+      const msg = act.narrative || act.result || '';
+      if (msg && !msg.startsWith('正在演出') && !msg.startsWith('开始演出')) {
+        addLog(`📜 ${act.npcName}：${msg.substring(0, 60)}`);
+      }
+    }
   }
 }
 
@@ -4189,7 +4309,89 @@ function renderNearbyEntities() {
 function selectEntity(entityId) {
   selectedEntityId = entityId;
   renderNearbyEntities();
-  loadEntityActions(entityId);
+  const entity = nearbyEntities.find(e => e.id === entityId);
+  if (!entity) return;
+
+  // 显示信息卡片
+  showEntityDetail(entity);
+
+  // 获取可执行演出选项
+  document.getElementById('action-list').innerHTML = '<div class="action-loading">正在观察...</div>';
+  fetch(`/api/world/entity/${entityId}/actions`)
+    .then(r => r.json())
+    .then(data => renderEntityActions(data))
+    .catch(() => { document.getElementById('action-list').innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);">无法获取行为列表</div>'; });
+}
+
+/** 仅显示实体信息卡片（不获取行为列表） */
+function showEntityDetail(entity) {
+  const card = document.getElementById('entity-detail-card');
+  document.getElementById('detail-icon').textContent = entity.icon;
+  document.getElementById('detail-name').textContent = entity.name;
+
+  let desc = '';
+  if (entity.profession) desc += entity.profession;
+  if (entity.briefDesc) desc = entity.briefDesc;
+  if (entity.buildingType) {
+    const typeLabels = { shop: '店铺', teahouse: '茶楼', clinic: '药铺', tavern: '酒肆', warehouse: '货栈', temple: '寺庙', government: '衙门', house: '民居' };
+    desc = typeLabels[entity.buildingType] || '建筑';
+    if (entity.ownerName) desc += ` · 主人: ${entity.ownerName}`;
+  }
+  if (entity.description) desc = entity.description;
+  if (entity.factionName) {
+    const roleLabel = entity.factionRole === 'leader' ? '首领' : '成员';
+    desc += ` · ${entity.factionName}（${roleLabel}）`;
+  }
+  document.getElementById('detail-desc').textContent = desc;
+
+  const statsEl = document.getElementById('detail-stats');
+  let statsHtml = '';
+  if (entity.factionName) {
+    const factionColors = { government: '#8b0000', military: '#4a4a8a', merchant: '#8b6914', religion: '#6a5acd', underground: '#2f4f4f', scholar: '#2e8b57' };
+    const factionLabels = { government: '政府', military: '军事', merchant: '商业', religion: '宗教', underground: '地下', scholar: '文人' };
+    const fColor = factionColors[entity.factionType] || '#666';
+    const fLabel = factionLabels[entity.factionType] || '组织';
+    const fRoleLabel = entity.factionRole === 'leader' ? '首领' : '成员';
+    statsHtml += `<div class="entity-stat" style="cursor:pointer;background:${fColor}15;color:${fColor};border:1px solid ${fColor}40;font-weight:600;" onclick="jumpToFactionDetail(${entity.factionId})" title="点击查看组织详情">${fLabel} · ${entity.factionName}（${fRoleLabel}）</div>`;
+  }
+  if (entity.vital) {
+    if (entity.vital.hunger !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">🍖</span>${Math.round(entity.vital.hunger)}</div>`;
+    if (entity.vital.health !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">❤️</span>${Math.round(entity.vital.health)}</div>`;
+    if (entity.vital.mood !== undefined) statsHtml += `<div class="entity-stat"><span class="stat-icon">😊</span>${Math.round(entity.vital.mood)}</div>`;
+  }
+  if (entity.wallet) statsHtml += `<div class="entity-stat"><span class="stat-icon">🪙</span>${entity.wallet.copper}文</div>`;
+  if (entity.personality && entity.personality.length > 0) {
+    entity.personality.forEach(p => { statsHtml += `<div class="entity-stat">${p}</div>`; });
+  }
+  if (entity.openHours) statsHtml += `<div class="entity-stat">营业: ${entity.openHours}</div>`;
+  if (entity.quality) statsHtml += `<div class="entity-stat">品质: ${entity.quality}</div>`;
+  if (entity.rooms && entity.rooms.length > 0) {
+    entity.rooms.forEach(r => { statsHtml += `<div class="entity-stat">${r.icon} ${r.name}</div>`; });
+  }
+  statsEl.innerHTML = statsHtml;
+
+  // NPC 最近活动
+  const recentEl = document.getElementById('detail-recent');
+  if (entity.type === 'npc' && entity.id) {
+    fetch(`/api/world/npc/${entity.id}/history`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.history && data.history.length > 0) {
+          const last2 = data.history.slice(-2);
+          recentEl.innerHTML = `<div class="entity-recent"><div class="entity-recent-title">最近动向</div>${last2.map(h => `<div class="entity-recent-item">${h.description || h.action}</div>`).join('')}</div>`;
+          recentEl.style.display = 'block';
+        } else { recentEl.style.display = 'none'; }
+      }).catch(() => { recentEl.style.display = 'none'; });
+  } else if (entity.type) {
+    const statusMap = { animal: entity.vital ? `活力: ${Math.round(entity.vital.health || 0)}` : '自在活动', plant: entity.growth ? `生长状态: ${entity.growth}` : '生长中', mineral: entity.quality ? `品质: ${entity.quality}` : '可采集', building: entity.description || (entity.openHours ? `营业: ${entity.openHours}` : '可进入探访'), item: entity.rarity ? `稀有度: ${entity.rarity}` : '可使用' };
+    const statusDesc = statusMap[entity.type] || '';
+    if (statusDesc) {
+      recentEl.innerHTML = `<div class="entity-recent"><div class="entity-recent-title">状态</div><div class="entity-recent-item">${statusDesc}</div></div>`;
+      recentEl.style.display = 'block';
+    } else { recentEl.style.display = 'none'; }
+  } else { recentEl.style.display = 'none'; }
+
+  card.classList.add('visible');
 }
 
 function closeEntityDetail() {
@@ -4322,7 +4524,7 @@ function loadEntityActions(entityId) {
 function renderEntityActions(data) {
   const list = document.getElementById('action-list');
   if (!data.actions || data.actions.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);">没有可用行为</div>';
+    list.innerHTML = '<div style="font-size:12px;color:rgba(44,24,16,0.35);padding:8px;">当前没有可触发的演出</div>';
     return;
   }
   list.innerHTML = data.actions.map(a => {
@@ -4332,7 +4534,7 @@ function renderEntityActions(data) {
         <div class="action-icon">${a.icon}</div>
         <div class="action-info">
           <div class="action-name">${a.name}</div>
-          ${canDo ? `<div class="action-effect">${a.effects || ''}</div>` : ''}
+          ${canDo && a.effects ? `<div class="action-effect">${a.effects}</div>` : ''}
           ${!canDo ? `<div class="action-reason">${a.conditions.reason}</div>` : ''}
         </div>
         ${a.apCost > 0 ? `<div class="action-ap-cost">⚡${a.apCost}</div>` : ''}
@@ -4357,26 +4559,27 @@ function doEntityAction(actionId, targetId, btn) {
   })
   .then(r => r.json())
   .then(data => {
-    // Determine success/failure from message content
+    // If the response is a scene phase, show the visual stage overlay
+    if (data.isScenePhase || data.scenePhaseData) {
+      handleServerResponse({ type: 'actionResult', data });
+      return;
+    }
+
+    // Otherwise, normal text feedback
     const msg = data.sceneDescription || data.message || '';
     const isFail = /失败|不够|被发|拒绝|没找到|跑掉|没有|没偷到|空/.test(msg);
     const isSuccess = !isFail && msg.length > 10;
 
-    // Show feedback with typewriter effect
     if (msg) showActionFeedback(msg, isFail);
-
-    // Flash animation on action button
     flashLastActionBtn(isSuccess);
 
-    // Flash animation on detail card
     const card = document.getElementById('entity-detail-card');
     if (card) {
       card.classList.remove('action-flash-success', 'action-flash-fail');
-      void card.offsetWidth; // force reflow
+      void card.offsetWidth;
       card.classList.add(isFail ? 'action-flash-fail' : 'action-flash-success');
     }
 
-    // Show floating rewards
     if (data.playerState) {
       showStatChanges(data.playerState);
       const oldCopper = playerState.copper;
@@ -4390,7 +4593,6 @@ function doEntityAction(actionId, targetId, btn) {
     if (data.worldState) updateWorldState(data.worldState);
     if (data.options) renderServerOptions(data.options);
 
-    // Refresh actions and nearby entities after execution
     if (selectedEntityId) {
       setTimeout(() => loadEntityActions(selectedEntityId), 300);
     }

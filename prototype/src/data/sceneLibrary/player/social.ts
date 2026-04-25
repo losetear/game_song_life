@@ -31,6 +31,17 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
     ],
     openingNarrative:
       '你正走在闹市之间，忽见一个肩挑货担的小贩急匆匆迎面而来，衣衫凌乱、满面焦急。他一把拦住你的去路，连声作揖道："客官行行好！方才有个泼皮骗走了我半担丝线，那可是我全家的活命钱啊！求客官帮我做主！"',
+    openingVisual: {
+      background: 'market',
+      location: '汴京 · 东市街口',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+        { id: 'merchant', name: '小贩', glyph: '商', position: 'right', mood: 'sad' },
+      ],
+      dialogue: [
+        { speaker: '小贩', text: '客官行行好！方才有个泼皮骗走了我半担丝线，那可是我全家的活命钱啊！' },
+      ],
+    },
     entryPhase: 'merchant_plea_1',
     phases: {
       // ── 第一阶段：商贩求助 ──
@@ -93,6 +104,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 东市',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'merchant', name: '小贩', glyph: '商', position: 'right', mood: 'sad' },
+            { id: 'passerby1', name: '路人', glyph: '民', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '小贩', text: '那人往那条巷子去了，穿着灰布短褐，手里还拿着我的丝线包！' },
+          ],
+        },
       },
 
       // ── 第二阶段A：追上骗子 ──
@@ -116,6 +139,15 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'alley',
+          location: '汴京 · 窄巷深处',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'angry' },
+            { id: 'thief', name: '灰衣汉子', glyph: '骗', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [],
+        },
       },
 
       // ── 第二阶段B：分析情况出计划 ──
@@ -149,6 +181,17 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 东市街边',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'merchant', name: '小贩', glyph: '商', position: 'right', mood: 'sad' },
+          ],
+          dialogue: [
+            { speaker: '小贩', text: '那人先是以高价收丝线为名，趁我不备把货包调了包……' },
+          ],
+        },
       },
 
       // ── 第三阶段A：正面与骗子对质 ──
@@ -196,6 +239,19 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'alley',
+          location: '汴京 · 窄巷',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'angry' },
+            { id: 'thief', name: '灰衣汉子', glyph: '骗', position: 'right', mood: 'angry' },
+            { id: 'bystander1', name: '围观路人', glyph: '民', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '灰衣汉子', text: '你是什么人？放手！' },
+            { speaker: '你', text: '站住！这东西是你骗来的！' },
+          ],
+        },
       },
 
       // ── 第三阶段B：偷偷拿回货物 ──
@@ -256,6 +312,19 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'teahouse',
+          location: '汴京 · 茶肆门前',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'thief', name: '灰衣汉子', glyph: '骗', position: 'center', mood: 'happy' },
+            { id: 'accomplice1', name: '同伴甲', glyph: '匪', position: 'right', mood: 'neutral' },
+            { id: 'accomplice2', name: '同伴乙', glyph: '匪', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '灰衣汉子', text: '再来一壶好茶！' },
+          ],
+        },
       },
 
       // ── 第三阶段C：自己做饵引骗子 ──
@@ -284,6 +353,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 东市人丛中',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'thief', name: '灰衣汉子', glyph: '骗', position: 'right', mood: 'neutral' },
+            { id: 'bystander1', name: '路人', glyph: '民', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '灰衣汉子', text: '客官可是丢了东西？' },
+          ],
+        },
       },
     },
     weight: 6,
@@ -316,6 +397,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
     ],
     openingNarrative:
       '夜深了，街巷中空无一人。你裹紧衣衫匆匆赶路，路过一条昏暗的小巷时，前方忽然闪出一条黑影。紧接着，身后也传来脚步声——你被堵住了。火折子的微光映出两三张粗犷的面孔，为首那人手里攥着一根木棍，瓮声瓮气道："把身上的钱留下，爷们儿饶你一条路。"',
+    openingVisual: {
+      background: 'night_street',
+      location: '汴京 · 昏暗巷口',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'robber_leader', name: '为首劫匪', glyph: '劫', position: 'left', mood: 'angry' },
+        { id: 'robber2', name: '劫匪甲', glyph: '匪', position: 'right', mood: 'angry' },
+      ],
+      dialogue: [
+        { speaker: '为首劫匪', text: '把身上的钱留下，爷们儿饶你一条路。' },
+      ],
+    },
     entryPhase: 'night_ambush_1',
     phases: {
       // ── 第一阶段：劫匪拦路 ──
@@ -361,6 +454,19 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'night_street',
+          location: '汴京 · 黑暗窄巷',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'robber_leader', name: '为首劫匪', glyph: '劫', position: 'center', mood: 'angry' },
+            { id: 'robber2', name: '劫匪甲', glyph: '匪', position: 'right', mood: 'happy' },
+            { id: 'robber3', name: '劫匪乙', glyph: '匪', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '劫匪甲', text: '嘿嘿嘿……识相的就把钱交出来。' },
+          ],
+        },
       },
 
       // ── 第二阶段A：搏斗 ──
@@ -403,6 +509,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'night_street',
+          location: '汴京 · 巷中搏斗',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'angry' },
+            { id: 'robber_leader', name: '为首劫匪', glyph: '劫', position: 'right', mood: 'angry' },
+            { id: 'robber2', name: '劫匪甲', glyph: '匪', position: 'right', mood: 'angry' },
+          ],
+          dialogue: [
+            { speaker: '为首劫匪', text: '你找死！' },
+          ],
+        },
       },
 
       // ── 第二阶段B：逃跑 ──
@@ -435,6 +553,17 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'alley',
+          location: '汴京 · 月下小巷',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'robber_leader', name: '劫匪', glyph: '劫', position: 'right', mood: 'angry' },
+          ],
+          dialogue: [
+            { speaker: '劫匪', text: '追！别让他跑了！' },
+          ],
+        },
       },
     },
     weight: 4,
@@ -471,6 +600,19 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
     ],
     openingNarrative:
       '你走在坊巷之中，远远就听到一阵激烈的争吵声。走近一看，是两户人家的门户前，一男一女正争得面红耳赤。地上散落着几片碎瓦和一滩污水，似乎是屋顶漏水引发的矛盾。左邻右舍有人开门探头，有人摇头叹气，却没人上前劝解。',
+    openingVisual: {
+      background: 'courtyard',
+      location: '汴京 · 居民坊巷',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+        { id: 'neighbor_a', name: '甲方汉子', glyph: '汉', position: 'center', mood: 'angry' },
+        { id: 'neighbor_b', name: '乙方妇人', glyph: '妇', position: 'right', mood: 'angry' },
+      ],
+      dialogue: [
+        { speaker: '甲方汉子', text: '你家漏水泡了我的柴火！' },
+        { speaker: '乙方妇人', text: '你占了过道还怪我？' },
+      ],
+    },
     entryPhase: 'neighbor_dispute_1',
     phases: {
       // ── 第一阶段：两家吵架 ──
@@ -514,6 +656,19 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'courtyard',
+          location: '汴京 · 坊巷门前',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'neighbor_a', name: '甲方汉子', glyph: '汉', position: 'center', mood: 'angry' },
+            { id: 'neighbor_b', name: '乙方妇人', glyph: '妇', position: 'right', mood: 'angry' },
+          ],
+          dialogue: [
+            { speaker: '甲方汉子', text: '你家屋顶年久失修，漏下来的水泡坏了我门口堆的柴火！' },
+            { speaker: '乙方妇人', text: '你自己占了我的地界还不算，倒怪起我来了！' },
+          ],
+        },
       },
 
       // ── 第二阶段A：调停 ──
@@ -542,6 +697,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'courtyard',
+          location: '汴京 · 坊巷',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+            { id: 'neighbor_a', name: '甲方汉子', glyph: '汉', position: 'left', mood: 'angry' },
+            { id: 'neighbor_b', name: '乙方妇人', glyph: '妇', position: 'right', mood: 'angry' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '两位且消消气，街坊邻里的，有什么话不能好好说？' },
+          ],
+        },
       },
 
       // ── 第二阶段B：帮有理的一方 ──
@@ -563,6 +730,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'courtyard',
+          location: '汴京 · 坊巷过道',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'neighbor_a', name: '甲方汉子', glyph: '汉', position: 'center', mood: 'angry' },
+            { id: 'neighbor_b', name: '乙方妇人', glyph: '妇', position: 'right', mood: 'angry' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '这位大哥，柴火确实不该堆在过道上。这位嫂子，屋顶该修也趁早修。' },
+          ],
+        },
       },
 
       // ── 第三阶段：调停结果 ──
@@ -591,6 +770,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'courtyard',
+          location: '汴京 · 坊巷',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'happy' },
+            { id: 'neighbor_a', name: '甲方汉子', glyph: '汉', position: 'left', mood: 'happy' },
+            { id: 'neighbor_b', name: '乙方妇人', glyph: '妇', position: 'right', mood: 'happy' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '远亲不如近邻嘛，来，干一碗！' },
+          ],
+        },
       },
     },
     weight: 5,
@@ -624,6 +815,17 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
     ],
     openingNarrative:
       '你在街角看到一个青衫落拓的年轻人，面容清瘦却眉宇间有股子书卷气。他靠在墙根下，手里捧着一卷皱巴巴的书册，嘴唇干裂，神情落寞。见你走近，他犹豫了一下，起身拱手行了一礼，声音沙哑："这位仁兄，在下姓周，赴京应试途中遭了贼……不知可否行个方便？"',
+    openingVisual: {
+      background: 'market',
+      location: '汴京 · 街角',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+        { id: 'scholar', name: '周书生', glyph: '书', position: 'right', mood: 'sad' },
+      ],
+      dialogue: [
+        { speaker: '周书生', text: '这位仁兄，在下姓周，赴京应试途中遭了贼……不知可否行个方便？' },
+      ],
+    },
     entryPhase: 'scholar_1',
     phases: {
       // ── 第一阶段：书生求助 ──
@@ -667,6 +869,17 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 街角墙根',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'scholar', name: '周书生', glyph: '书', position: 'right', mood: 'sad' },
+          ],
+          dialogue: [
+            { speaker: '周书生', text: '在客栈被偷了盘缠，已经两天没正经吃过饭了……' },
+          ],
+        },
       },
 
       // ── 第二阶段：深入交谈 ──
@@ -731,6 +944,17 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'teahouse',
+          location: '汴京 · 茶肆',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'happy' },
+            { id: 'scholar', name: '周书生', glyph: '书', position: 'right', mood: 'sad' },
+          ],
+          dialogue: [
+            { speaker: '周书生', text: '功名未就，倒先把面子丢尽了……' },
+          ],
+        },
       },
     },
     weight: 5,
@@ -770,6 +994,20 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
     ],
     openingNarrative:
       '你路过一处热闹的地摊，看见一个老妇人正被几个摊贩围着。其中一个摊贩手持一只"金蟾"，说得天花乱坠："这是从雷峰塔下挖出来的宝贝，见者有缘，只卖三十文！"另外两个"路人"在一旁帮腔叫好，一个说"我刚买了，果然灵验"，另一个说"这可是千载难逢的好事"。你一看就知道——这是经典的托儿骗局。',
+    openingVisual: {
+      background: 'market',
+      location: '汴京 · 西市地摊',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+        { id: 'scammer', name: '摊贩', glyph: '骗', position: 'center', mood: 'happy' },
+        { id: 'victim', name: '老妇人', glyph: '妇', position: 'right', mood: 'neutral' },
+        { id: 'shill1', name: '托儿甲', glyph: '托', position: 'right', mood: 'happy' },
+      ],
+      dialogue: [
+        { speaker: '摊贩', text: '这是从雷峰塔下挖出来的宝贝，见者有缘，只卖三十文！' },
+        { speaker: '托儿甲', text: '这可是千载难逢的好事！' },
+      ],
+    },
     entryPhase: 'street_scam_1',
     phases: {
       // ── 第一阶段：目睹骗局 ──
@@ -820,6 +1058,20 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 西市地摊前',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'scammer', name: '摊贩', glyph: '骗', position: 'center', mood: 'happy' },
+            { id: 'victim', name: '老妇人', glyph: '妇', position: 'right', mood: 'neutral' },
+            { id: 'shill1', name: '托儿甲', glyph: '托', position: 'right', mood: 'happy' },
+          ],
+          dialogue: [
+            { speaker: '摊贩', text: '见者有缘，只卖三十文！' },
+            { speaker: '老妇人', text: '真有那么灵？' },
+          ],
+        },
       },
 
       // ── 第二阶段A：当众揭穿 ──
@@ -848,6 +1100,20 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 西市',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'angry' },
+            { id: 'scammer', name: '摊贩', glyph: '骗', position: 'center', mood: 'angry' },
+            { id: 'victim', name: '老妇人', glyph: '妇', position: 'right', mood: 'neutral' },
+            { id: 'bystander1', name: '围观路人', glyph: '民', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '这分明是铜的，涂了一层金漆而已！' },
+            { speaker: '摊贩', text: '你胡说八道什么！' },
+          ],
+        },
       },
 
       // ── 第二阶段B：暗中提醒 ──
@@ -874,6 +1140,18 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 西市地摊旁',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'victim', name: '老妇人', glyph: '妇', position: 'center', mood: 'neutral' },
+            { id: 'scammer', name: '摊贩', glyph: '骗', position: 'right', mood: 'happy' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '大嫂，那是假的，涂了金漆的铜块。旁边那几个叫好的都是一伙的。' },
+          ],
+        },
       },
 
       // ── 第二阶段C：参与骗局 ──
@@ -906,6 +1184,19 @@ export const PLAYER_SOCIAL_SCENES: PlayerScene[] = [
             },
           },
         ],
+        visual: {
+          background: 'market',
+          location: '汴京 · 西市地摊前',
+          characters: [
+            { id: 'player', name: '你', glyph: '贩', position: 'left', mood: 'neutral' },
+            { id: 'scammer', name: '摊贩', glyph: '骗', position: 'center', mood: 'happy' },
+            { id: 'victim', name: '老妇人', glyph: '妇', position: 'right', mood: 'neutral' },
+          ],
+          dialogue: [
+            { speaker: '你', text: '老板，我也算是同道中人，能不能搭个伙？' },
+            { speaker: '摊贩', text: '嘿嘿，你倒是个识货的。' },
+          ],
+        },
       },
     },
     weight: 5,

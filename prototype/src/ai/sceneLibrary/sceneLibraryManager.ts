@@ -10,9 +10,11 @@ import {
   L2Scene, L2RegionStats, L2MatchResult,
   GoalCategory,
   PlayerScene, PlayerSceneState, PlayerSceneMatchResult, PlayerSceneChoice,
+  SceneVisualMeta,
   L0PhaseScene,
 } from './types';
-import { matchL0Scene, matchL1Scene, matchL2Scenes } from './matcher';
+import { matchL0Scene, matchesL0Condition, matchL1Scene, matchL2Scenes } from './matcher';
+import { generateDynamicScene, DynamicSceneContext } from './dynamicSceneGenerator';
 import { resolveScene, resolveSceneV2, selectTieredOutcome, ResolveContext } from './resolver';
 import { formatNarrative } from './narrativeFormatter';
 import { ActiveSceneManager } from './activeSceneManager';
@@ -62,6 +64,7 @@ export class SceneLibraryManager {
   // 玩家场景运行时状态
   private activePlayerScene: PlayerSceneState | null = null;
   private playerSceneCooldown: Map<string, number> = new Map();
+  private dynamicPlayerScene: PlayerScene | null = null;
 
   // 多步演出管理器
   readonly activeSceneManager = new ActiveSceneManager();
@@ -426,24 +429,8 @@ export class SceneLibraryManager {
       const lastTick = this.playerSceneCooldown.get(scene.id) || 0;
       if (tick - lastTick < scene.cooldownTicks) continue;
 
-      // 条件匹配（复用 L0 匹配逻辑）
-      const target = matchL0Scene(
-        [scene.triggerCondition as any],
-        actorContext,
-        nearbyNpcs,
-        [],
-        [{
-          id: scene.id,
-          name: scene.name,
-          goalCategory: 'social' as GoalCategory,
-          outcomeType: 'certain',
-          conditions: scene.triggerCondition,
-          success: { narrative: '', effects: {} },
-          weight: scene.weight,
-          cooldownTicks: scene.cooldownTicks,
-        }],
-      );
-
+      // 条件匹配（直接用 matchesL0Condition 检查触发条件）
+      const target = matchesL0Condition(scene.triggerCondition, actorContext, nearbyNpcs);
       if (!target) continue;
 
       // 参与者匹配
@@ -476,6 +463,7 @@ export class SceneLibraryManager {
         state,
         openingNarrative: openingNarrative + '\n\n' + entryPhase.narrative,
         choices: availableChoices,
+        visual: entryPhase.visual || scene.openingVisual,
       };
     }
 
@@ -492,10 +480,12 @@ export class SceneLibraryManager {
     effects?: Record<string, number>;
     choices?: PlayerSceneChoice[];
     finished: boolean;
+    visual?: SceneVisualMeta;
   } | null {
     if (!this.activePlayerScene) return null;
 
-    const scene = this.playerScenes.find(s => s.id === this.activePlayerScene!.sceneId);
+    const scene = this.playerScenes.find(s => s.id === this.activePlayerScene!.sceneId)
+      || (this.dynamicPlayerScene?.id === this.activePlayerScene!.sceneId ? this.dynamicPlayerScene : null);
     if (!scene) return null;
 
     const phase = scene.phases[this.activePlayerScene.currentPhase];
@@ -531,17 +521,23 @@ export class SceneLibraryManager {
           effects: { ...consequence.immediateEffects, ...tierResult.effects },
           finished: consequence.nextPhase === null,
           choices: undefined,
+          visual: consequence.nextPhase ? scene.phases[consequence.nextPhase]?.visual : undefined,
         };
       }
     }
 
     // 应用直接效果
-    const effects = consequence.immediateEffects;
+    const effects = { ...consequence.immediateEffects };
+    // 将 relationChange 合并到 effects 中以便 worldEngine 统一处理
+    if (consequence.relationChange !== undefined) {
+      effects['relationChange'] = consequence.relationChange;
+    }
 
     // 场景结束
     if (consequence.nextPhase === null) {
       const endTick = this.activePlayerScene.startTick;
       this.activePlayerScene = null;
+      this.dynamicPlayerScene = null;
       this.playerSceneCooldown.set(scene.id, endTick);
 
       return {
@@ -556,6 +552,7 @@ export class SceneLibraryManager {
     const nextPhase = scene.phases[consequence.nextPhase];
     if (!nextPhase) {
       this.activePlayerScene = null;
+      this.dynamicPlayerScene = null;
       return { narrative: consequence.endingNarrative || '场景异常结束。', effects, finished: true };
     }
 
@@ -566,6 +563,7 @@ export class SceneLibraryManager {
       effects,
       choices: availableChoices,
       finished: false,
+      visual: nextPhase.visual,
     };
   }
 
@@ -575,6 +573,58 @@ export class SceneLibraryManager {
       this.playerSceneCooldown.set(this.activePlayerScene.sceneId, this.activePlayerScene.startTick);
       this.activePlayerScene = null;
     }
+    this.dynamicPlayerScene = null;
+  }
+
+  /** 动态生成并启动一个多幕场景（兜底机制） */
+  startDynamicScene(
+    actionId: string,
+    actorContext: L0ActorContext,
+    nearbyNpcs: NearbyNpcInfo[],
+    playerStats: Record<string, number>,
+    tick: number,
+  ): PlayerSceneMatchResult | null {
+    if (this.activePlayerScene) return null;
+
+    // 取 params 中的 targetId 或最近的 NPC
+    const targetNpc = nearbyNpcs[0];
+    if (!targetNpc) return null;
+
+    const scene = generateDynamicScene({
+      actionId,
+      npc: targetNpc,
+      playerContext: actorContext,
+      playerStats,
+      tick,
+    });
+
+    const state: PlayerSceneState = {
+      sceneId: scene.id,
+      currentPhase: scene.entryPhase,
+      participantNpcIds: [targetNpc.id],
+      history: [],
+      startTick: tick,
+    };
+
+    this.dynamicPlayerScene = scene;
+    this.activePlayerScene = state;
+
+    const entryPhase = scene.phases[scene.entryPhase];
+    const availableChoices = this.filterAvailableChoices(entryPhase.choices, playerStats);
+
+    const openingNarrative = formatNarrative(scene.openingNarrative + '\n\n' + entryPhase.narrative, {
+      npcName: actorContext.npcName,
+      targetName: targetNpc.name,
+      location: actorContext.currentGrid,
+    });
+
+    return {
+      scene,
+      state,
+      openingNarrative,
+      choices: availableChoices,
+      visual: entryPhase.visual || scene.openingVisual,
+    };
   }
 
   /** 匹配场景参与者 */

@@ -55,7 +55,7 @@ function checkTimeOfDay(shichen: string, required?: string): boolean {
 // L0 精细匹配（扩展当前算法）
 // ════════════════════════════════════════
 
-function matchesL0Condition(
+export function matchesL0Condition(
   cond: L0SceneCondition,
   ctx: L0ActorContext,
   nearbyNpcs: NearbyNpcInfo[],
