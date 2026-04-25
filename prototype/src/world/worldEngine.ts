@@ -4410,6 +4410,11 @@ export class WorldEngine {
     // 重置 AP
     this.resetAP(playerId);
 
+    // 清理残留的活跃场景（上回合 end_turn 触发但未处理的）
+    if (this.sceneLib.hasActivePlayerScene()) {
+      this.sceneLib.cancelPlayerScene();
+    }
+
     // 随机触发场景（8%概率）
     if (Math.random() < 0.08) {
       const sceneCheck = this.tryTriggerPlayerScene(playerId, 'end_turn', {});
