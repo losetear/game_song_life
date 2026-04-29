@@ -18,6 +18,8 @@ import { generateDynamicScene, DynamicSceneContext } from './dynamicSceneGenerat
 import { resolveScene, resolveSceneV2, selectTieredOutcome, ResolveContext } from './resolver';
 import { formatNarrative } from './narrativeFormatter';
 import { ActiveSceneManager } from './activeSceneManager';
+import { RandomEventScheduler } from './randomEventGenerator';
+import { RandomEvent } from './types';
 
 // 按类别索引的场景缓存
 let l0ByCategory: Map<GoalCategory, L0Scene[]> | null = null;
@@ -69,6 +71,9 @@ export class SceneLibraryManager {
   // 多步演出管理器
   readonly activeSceneManager = new ActiveSceneManager();
 
+  // 随机事件调度器
+  readonly randomEventScheduler = new RandomEventScheduler();
+
   registerL0(scenes: L0Scene[]): void {
     this.l0Scenes = scenes;
     l0ByCategory = indexL0(scenes);
@@ -86,6 +91,11 @@ export class SceneLibraryManager {
   /** 注册玩家多步骤场景 */
   registerPlayerScenes(scenes: PlayerScene[]): void {
     this.playerScenes = scenes;
+  }
+
+  /** 注册随机事件池 */
+  registerRandomEvents(events: RandomEvent[]): void {
+    this.randomEventScheduler.registerEvents(events);
   }
 
   /** 每tick开始时重置L1计数 */

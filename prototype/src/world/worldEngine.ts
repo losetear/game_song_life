@@ -4496,13 +4496,26 @@ export class WorldEngine {
     const apCosts: Record<string, number> = {
       talk_to: 1, ask_rumor: 1, trade_buy: 2, trade_sell: 2, share_food: 1,
       help_request: 1, steal: 2, learn_skill: 2, invite_travel: 1, heal: 2,
-      provoke: 2, sworn_brothers: 3, gift: 1,
+      provoke: 2, sworn_brothers: 3, gift: 1, bribe: 2,
       shelter: 0, gather_fruit: 1, fish: 2, scavenge: 1,
       enter_building: 1, buy_from_shop: 1, ask_around: 1,
       observe: 0, feed_animal: 1, chase_away: 1, track_animal: 1, hunt: 2, tame: 3,
       chop: 2, water_plant: 1, gather: 1,
       mine: 3, collect: 2,
       pickup: 1, inspect: 0, use_item: 1,
+      // 商业/交易
+      gambling: 2, fortune_telling: 1, luxury_deal: 3,
+      // 职业
+      blacksmith_craft: 2, farm_work: 2, hunt_guide: 2, teach: 2,
+      // 组织事务
+      faction_salary: 1, faction_recruit: 2, faction_quest: 2,
+      faction_ally: 1, faction_rival: 1, faction_patrol: 1, faction_dues: 1,
+      faction_order: 2, faction_meeting: 1, faction_reward: 2, faction_expand: 3,
+      guard_patrol: 1,
+      // 家族
+      family_feast: 2, family_legacy: 1, family_aid: 1,
+      // 公共事务
+      collect_tax: 1, charity: 1, loan: 1, black_market: 2,
       // 兼容旧 action ID
       trade: 2, feed: 1, water: 1,
     };

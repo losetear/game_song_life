@@ -65,6 +65,10 @@ export interface L0SceneCondition {
   targetMinHealth?: number;
   targetSameFaction?: boolean;       // 同阵营（新增）
   targetDifferentFaction?: boolean;  // 不同阵营（新增）
+  targetMinMood?: number;            // 目标最低心情（新增）
+  targetMaxMood?: number;            // 目标最高心情（新增）
+  targetMinRelationScore?: number;   // 目标最低关系分数（新增）
+  targetMaxRelationScore?: number;   // 目标最高关系分数（新增）
 
   // 世界约束
   location?: string[];
@@ -83,6 +87,10 @@ export interface L0SceneCondition {
   requiredAnyNarrativeTags?: string[];   // OR：要求至少拥有其中一个
   targetRequiredNarrativeTags?: string[];
   targetForbiddenNarrativeTags?: string[];
+
+  // 选择历史条件（漫野奇谭化：过去选择影响未来场景）
+  requiredChoiceHistory?: string[];       // AND：要求曾在某场景中做过某选择
+  requiredAnyChoiceHistory?: string[];    // OR：至少做过其中一个选择
 }
 
 export interface L0SceneOutcome {
@@ -154,6 +162,7 @@ export interface L0ActorContext {
   nearbyCount: number;
   activeWhimCategories?: Set<string>;
   narrativeTags?: string[];          // 角色累积的叙事标签（来自 memoryTag）
+  choiceHistory?: string[];          // 角色过去做过的选择ID列表（新增）
 }
 
 // ════════════════════════════════════════
@@ -430,6 +439,42 @@ export interface PlayerSceneMatchResult {
   choices: PlayerSceneChoice[];
   /** 视觉演出元数据 */
   visual?: SceneVisualMeta;
+}
+
+// ════════════════════════════════════════
+// 动态随机事件（轻量级，1-2幕，场景转换间插入）
+// ════════════════════════════════════════
+
+/** 随机事件触发条件 */
+export interface RandomEventTrigger {
+  /** 时辰（OR匹配） */
+  shichen?: string[];
+  /** 天气（OR匹配） */
+  weather?: string[];
+  /** 季节（OR匹配） */
+  season?: string[];
+  /** 地点（OR匹配） */
+  location?: string[];
+  /** 玩家最低铜钱 */
+  minCopper?: number;
+  /** 玩家最高健康 */
+  maxHealth?: number;
+  /** 需要的叙事标签（OR） */
+  requiredAnyTags?: string[];
+  /** 禁止的叙事标签 */
+  forbiddenTags?: string[];
+}
+
+/** 随机事件（轻量级 PlayerScene，1-2幕） */
+export interface RandomEvent {
+  id: string;
+  name: string;
+  description: string;
+  trigger: RandomEventTrigger;
+  weight: number;
+  cooldownTicks: number;
+  /** 事件内容（复用 PlayerScene 结构，1-2幕） */
+  scene: PlayerScene;
 }
 
 // ════════════════════════════════════════

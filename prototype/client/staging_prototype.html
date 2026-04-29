@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>市井录 · 演出模式原型 — 夜市迷局</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;700&display=swap');
+
+:root {
+  --ink: #2c1810;
+  --paper: #f5e6c8;
+  --paper-dark: #e8d5a8;
+  --paper-light: #faf0db;
+  --vermillion: #c23a2e;
+  --vermillion-light: #e85d4e;
+  --gold: #b8860b;
+  --gold-light: #daa520;
+  --jade: #2e8b57;
+  --jade-light: #3cb371;
+  --indigo: #3a4f7a;
+  --shadow: rgba(44, 24, 16, 0.15);
+  --shadow-strong: rgba(44, 24, 16, 0.3);
+  --radius: 8px;
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  background: linear-gradient(135deg, #d8c8a8 0%, #c8b898 50%, #b8a888 100%);
+  color: var(--ink);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 居中容器 */
+.stage-container {
+  width: 1080px;
+  max-width: 96vw;
+  height: 92vh;
+  max-height: 800px;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border-radius: 12px;
+  box-shadow:
+    0 20px 60px rgba(44,24,16,0.25),
+    0 0 0 1px rgba(44,24,16,0.08);
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(184,134,11,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 50%, rgba(194,58,46,0.04) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== 顶栏 ===== */
+.top-bar {
+  height: 48px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--ink) 0%, #3a2a1a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 2px 12px var(--shadow-strong);
+}
+
+.top-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--vermillion), transparent);
+}
+
+.story-title {
+  color: var(--gold);
+  font-family: 'Noto Serif SC', serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+.phase-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.phase-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  transition: var(--transition);
+}
+
+.phase-dot.completed { background: var(--jade); }
+.phase-dot.current {
+  background: var(--vermillion);
+  box-shadow: 0 0 8px var(--vermillion);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+.phase-label {
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  margin-left: 8px;
+  font-family: 'Noto Serif SC', serif;
+}
+
+.state-tracker {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.state-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+}
+
+.state-value {
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
+}
+
+.state-value.positive { color: var(--jade-light); }
+.state-value.negative { color: var(--vermillion-light); }
+
+.tag-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.1);
+  color: var(--gold-light);
+  white-space: nowrap;
+}
+
+/* ===== 主区域 ===== */
+.main-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== 左：漫画面板 ===== */
+.staging-panel {
+  flex: 3;
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--paper-dark);
+}
+
+.scene-background {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.8s ease;
+}
+
+/* 背景场景 */
+.bg-market {
+  background:
+    radial-gradient(ellipse at 50% 80%, rgba(184,134,11,0.15) 0%, transparent 60%),
+    linear-gradient(180deg, #e8d5a8 0%, #dcc898 40%, #d4bc88 100%);
+}
+
+.bg-market::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 10%; right: 10%; height: 3px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0px, var(--ink) 20px, transparent 20px, transparent 40px);
+  opacity: 0.1;
+}
+
+.bg-market::after {
+  content: '';
+  position: absolute;
+  top: 20%; left: 15%;
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(184,134,11,0.1) 0%, transparent 70%);
+  box-shadow: 60px 10px 0 40px rgba(184,134,11,0.05), 130px -5px 0 30px rgba(184,134,11,0.07), -20px 15px 0 35px rgba(184,134,11,0.04);
+}
+
+.bg-alley {
+  background:
+    linear-gradient(90deg, rgba(44,24,16,0.2) 0%, transparent 15%, transparent 85%, rgba(44,24,16,0.2) 100%),
+    linear-gradient(180deg, #4a4035 0%, #5a5045 30%, #3a3025 100%);
+}
+
+.bg-alley::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 45%; right: 45%;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(250,240,219,0.08) 0%, rgba(250,240,219,0.02) 100%);
+}
+
+.bg-alley::after {
+  content: '';
+  position: absolute;
+  top: 5%; left: 48%;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: rgba(250,240,219,0.15);
+  box-shadow: -60px 20px 0 3px rgba(250,240,219,0.1), 55px 15px 0 2px rgba(250,240,219,0.08);
+}
+
+.bg-teahouse {
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(194,58,46,0.08) 0%, transparent 40%),
+    linear-gradient(180deg, #d4c0a0 0%, #c8b490 50%, #bca880 100%);
+}
+
+.bg-teahouse::before {
+  content: '';
+  position: absolute;
+  top: 10%; left: 20%;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(194,58,46,0.2) 0%, transparent 70%);
+  box-shadow: 80px 0 0 0 rgba(194,58,46,0.15), 160px 0 0 0 rgba(194,58,46,0.12);
+}
+
+.bg-teahouse::after {
+  content: '';
+  position: absolute;
+  bottom: 30%; left: 0; right: 0;
+  height: 3px;
+  background: repeating-linear-gradient(90deg, rgba(44,24,16,0.08) 0px, rgba(44,24,16,0.08) 30px, transparent 30px, transparent 60px);
+}
+
+.bg-courtyard {
+  background:
+    radial-gradient(ellipse at 70% 30%, rgba(255,255,255,0.1) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 50%, transparent 30%, rgba(46,139,87,0.05) 100%),
+    linear-gradient(180deg, #e0d4b8 0%, #d8ccac 100%);
+}
+
+.bg-courtyard::before {
+  content: '';
+  position: absolute;
+  top: 15%; left: 55%;
+  width: 80px; height: 80px;
+  border: 2px solid rgba(44,24,16,0.08);
+  border-radius: 50%;
+}
+
+.bg-courtyard::after {
+  content: '';
+  position: absolute;
+  left: 10%; bottom: 20%;
+  width: 3px; height: 120px;
+  background: rgba(46,139,87,0.1);
+  box-shadow: 12px 0 0 0 rgba(46,139,87,0.08);
+}
+
+.bg-night_street {
+  background:
+    radial-gradient(ellipse at 70% 15%, rgba(250,240,219,0.12) 0%, transparent 25%),
+    linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+.bg-night_street::before {
+  content: '';
+  position: absolute;
+  top: 8%; left: 68%;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 20px 8px rgba(218,165,32,0.2);
+}
+
+.bg-night_street::after {
+  content: '';
+  position: absolute;
+  bottom: 40%;
+  left: 20%; right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(250,240,219,0.05), transparent);
+}
+
+.bg-palace {
+  background:
+    linear-gradient(180deg, #8b0000 0%, #a02020 20%, #b8860b 21%, #c8a040 100%);
+}
+
+.bg-palace::before {
+  content: '';
+  position: absolute;
+  left: 25%; top: 25%; bottom: 20%;
+  width: 3px;
+  background: var(--gold);
+  opacity: 0.15;
+  box-shadow: 40px 0 0 0 rgba(184,134,11,0.1), 80px 0 0 0 rgba(184,134,11,0.12), 120px 0 0 0 rgba(184,134,11,0.1);
+}
+
+.bg-palace::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 3px;
+  background: var(--gold);
+  opacity: 0.2;
+}
+
+.bg-dungeon {
+  background:
+    linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 50%, #0d0d0d 100%);
+}
+
+.bg-dungeon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0px, transparent 8px, rgba(255,255,255,0.01) 8px, rgba(255,255,255,0.01) 9px);
+}
+
+.bg-dungeon::after {
+  content: '';
+  position: absolute;
+  top: 30%; left: 40%;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: rgba(250,240,219,0.1);
+  box-shadow: -30px 10px 0 1px rgba(250,240,219,0.06), 25px -5px 0 1px rgba(250,240,219,0.04);
+}
+
+/* 场景位置标签 */
+.scene-location {
+  position: absolute;
+  top: 16px; left: 20px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  color: rgba(44,24,16,0.5);
+  background: rgba(245,230,200,0.6);
+  padding: 3px 10px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+/* 角色 */
+.characters-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+.character {
+  position: absolute;
+  bottom: 18%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.character.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.character.pos-left { left: 18%; }
+.character.pos-center { left: 50%; transform: translateX(-50%) translateY(20px); }
+.character.pos-center.visible { transform: translateX(-50%) translateY(0); }
+.character.pos-right { right: 18%; }
+
+.char-avatar {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 0 4px 16px var(--shadow-strong);
+  position: relative;
+  transition: border-color var(--transition);
+}
+
+.char-avatar.mood-neutral { border-color: var(--ink); background: linear-gradient(135deg, #5a4a3a, #3a2a1a); }
+.char-avatar.mood-angry { border-color: var(--vermillion); background: linear-gradient(135deg, #6a2a1a, #4a1a0a); }
+.char-avatar.mood-happy { border-color: var(--gold); background: linear-gradient(135deg, #5a4a1a, #3a3a0a); }
+.char-avatar.mood-sad { border-color: var(--indigo); background: linear-gradient(135deg, #3a3a5a, #2a2a4a); }
+
+.char-mood {
+  position: absolute;
+  top: -4px; right: -4px;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  opacity: 0.8;
+}
+
+.char-name {
+  margin-top: 8px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--paper);
+  background: rgba(44,24,16,0.7);
+  padding: 2px 10px;
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+}
+
+@keyframes charEnterLeft {
+  from { transform: translateX(-80px) translateY(20px); opacity: 0; }
+  to { transform: translateX(0) translateY(0); opacity: 1; }
+}
+
+@keyframes charEnterRight {
+  from { transform: translateX(80px) translateY(20px); opacity: 0; }
+  to { transform: translateX(0) translateY(0); opacity: 1; }
+}
+
+@keyframes charEnterCenter {
+  from { transform: translateX(-50%) translateY(30px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+.character.enter-left.visible { animation: charEnterLeft 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.character.enter-right.visible { animation: charEnterRight 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.character.enter-center.visible { animation: charEnterCenter 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* ===== 右：叙事面板 ===== */
+.narrative-panel {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-light);
+  overflow: hidden;
+}
+
+.narrative-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.narrative-text {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 15px;
+  line-height: 2;
+  color: var(--ink);
+  white-space: pre-wrap;
+  min-height: 60px;
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--vermillion);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.dialogue-area {
+  margin-top: 20px;
+}
+
+.dialogue-bubble {
+  margin-bottom: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--paper);
+  border-left: 3px solid var(--indigo);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dialogue-bubble.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dialogue-speaker {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--vermillion);
+  margin-bottom: 4px;
+  font-family: 'Noto Serif SC', serif;
+}
+
+.dialogue-text {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+/* ===== 底栏：选项 ===== */
+.choices-bar {
+  flex-shrink: 0;
+  min-height: 56px;
+  background: linear-gradient(180deg, var(--paper-light), var(--paper));
+  border-top: 1px solid var(--paper-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 24px;
+  position: relative;
+  z-index: 5;
+  overflow-x: auto;
+}
+
+.choice-btn {
+  background: var(--paper);
+  border: 2px solid var(--paper-dark);
+  border-radius: var(--radius);
+  padding: 10px 20px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px var(--shadow);
+  opacity: 0;
+  transform: translateY(16px);
+  max-width: 260px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.choice-btn.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.choice-btn:hover {
+  border-color: var(--vermillion);
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px var(--shadow-strong);
+}
+
+.choice-btn:active {
+  transform: translateX(4px) scale(0.97);
+}
+
+.choice-btn.selected {
+  border-color: var(--vermillion);
+  background: rgba(194,58,46,0.08);
+  animation: btnPulse 0.3s ease;
+}
+
+@keyframes btnPulse {
+  0% { transform: translateX(4px) scale(1); }
+  50% { transform: translateX(4px) scale(1.02); }
+  100% { transform: translateX(4px) scale(1); }
+}
+
+.choice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--paper-dark);
+}
+
+/* ===== 结局画面 ===== */
+.ending-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(44,24,16,0.95);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1s ease;
+}
+
+.ending-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ending-card {
+  max-width: 640px;
+  width: 90%;
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transform: translateY(30px);
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ending-overlay.active .ending-card {
+  transform: translateY(0);
+}
+
+.ending-type {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  margin-bottom: 12px;
+}
+
+.ending-type.good { color: var(--jade); }
+.ending-type.bittersweet { color: var(--gold); }
+.ending-type.bad { color: var(--vermillion); }
+.ending-type.secret { color: var(--indigo); }
+
+.ending-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--ink);
+  margin-bottom: 24px;
+  border-bottom: 2px solid var(--vermillion);
+  display: inline-block;
+  padding-bottom: 8px;
+}
+
+.ending-narration {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 15px;
+  line-height: 2;
+  color: var(--ink);
+  text-align: left;
+  margin-bottom: 32px;
+  min-height: 100px;
+}
+
+.ending-stats {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.ending-stat {
+  text-align: center;
+}
+
+.ending-stat-label {
+  font-size: 11px;
+  color: rgba(44,24,16,0.5);
+  margin-bottom: 4px;
+}
+
+.ending-stat-value {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.restart-btn {
+  background: linear-gradient(135deg, var(--ink), #3a2a1a);
+  color: var(--gold);
+  border: none;
+  border-radius: var(--radius);
+  padding: 12px 32px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 16px;
+  cursor: pointer;
+  transition: var(--transition);
+  letter-spacing: 2px;
+}
+
+.restart-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--shadow-strong);
+}
+
+/* ===== 开场画面 ===== */
+.title-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--ink);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 1s ease;
+}
+
+.title-overlay.hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.title-main {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 48px;
+  font-weight: 900;
+  color: var(--gold);
+  letter-spacing: 12px;
+  margin-bottom: 8px;
+}
+
+.title-sub {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 18px;
+  color: rgba(250,240,219,0.5);
+  letter-spacing: 6px;
+  margin-bottom: 48px;
+}
+
+.title-start {
+  background: transparent;
+  border: 2px solid var(--gold);
+  color: var(--gold);
+  padding: 14px 48px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 18px;
+  letter-spacing: 4px;
+  cursor: pointer;
+  transition: var(--transition);
+  border-radius: var(--radius);
+}
+
+.title-start:hover {
+  background: var(--gold);
+  color: var(--ink);
+}
+
+/* ===== 内容区快速淡入淡出 ===== */
+.staging-panel, .narrative-panel {
+  transition: opacity 0.15s ease;
+}
+.staging-panel.fade-out, .narrative-panel.fade-out {
+  opacity: 0;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 768px) {
+  body { align-items: flex-start; padding-top: 8px; }
+  .stage-container {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .main-area {
+    flex-direction: column;
+  }
+  .staging-panel {
+    flex: none;
+    height: 35vh;
+    border-right: none;
+    border-bottom: 1px solid var(--paper-dark);
+  }
+  .narrative-panel {
+    flex: 1;
+  }
+  .choices-bar {
+    min-height: auto;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  .choice-btn {
+    padding: 8px 14px;
+    font-size: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+  .state-tracker { display: none; }
+  .story-title { font-size: 14px; letter-spacing: 2px; }
+  .char-avatar { width: 48px; height: 48px; font-size: 22px; }
+  .character.pos-left { left: 12%; }
+  .character.pos-right { right: 12%; }
+}
+
+/* ===== 滚动条 ===== */
+.narrative-scroll::-webkit-scrollbar { width: 4px; }
+.narrative-scroll::-webkit-scrollbar-track { background: transparent; }
+.narrative-scroll::-webkit-scrollbar-thumb { background: var(--paper-dark); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- 开场画面 -->
+<div class="title-overlay" id="titleOverlay">
+  <div class="title-main">夜市迷局</div>
+  <div class="title-sub">漫野奇谭 · 演出模式原型</div>
+  <button class="title-start" id="startBtn">开始</button>
+</div>
+
+<!-- 淡入淡出层（已移除） -->
+
+<!-- 居中演出容器 -->
+<div class="stage-container">
+<!-- 顶栏 -->
+<div class="top-bar">
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div class="story-title">夜市迷局</div>
+    <div class="phase-indicator" id="phaseIndicator"></div>
+    <div class="phase-label" id="phaseLabel"></div>
+  </div>
+  <div class="state-tracker" id="stateTracker">
+    <div class="state-item">
+      <span>仁</span>
+      <span class="state-value" id="virtueValue">0</span>
+    </div>
+    <div class="state-item">
+      <span>智</span>
+      <span class="state-value" id="cunningValue">0</span>
+    </div>
+    <div class="state-item">
+      <span>名</span>
+      <span class="state-value" id="reputationValue">0</span>
+    </div>
+    <div id="tagBadges" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<!-- 主区域 -->
+<div class="main-area">
+  <!-- 左：漫画面板 -->
+  <div class="staging-panel" id="stagingPanel">
+    <div class="scene-background" id="sceneBg"></div>
+    <div class="scene-location" id="sceneLocation"></div>
+    <div class="characters-layer" id="charactersLayer"></div>
+  </div>
+
+  <!-- 右：叙事面板 -->
+  <div class="narrative-panel" id="narrativePanel">
+    <div class="narrative-scroll" id="narrativeScroll">
+      <div class="narrative-text" id="narrativeText"></div>
+      <div class="dialogue-area" id="dialogueArea"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 底栏：选项 -->
+<div class="choices-bar" id="choicesBar"></div>
+</div><!-- /stage-container -->
+
+<!-- 结局画面 -->
+<div class="ending-overlay" id="endingOverlay">
+  <div class="ending-card">
+    <div class="ending-type" id="endingType"></div>
+    <div class="ending-title" id="endingTitle"></div>
+    <div class="ending-narration" id="endingNarration"></div>
+    <div class="ending-stats" id="endingStats"></div>
+    <button class="restart-btn" id="restartBtn">重新开始</button>
+  </div>
+</div>
+
+<script>
+// ===========================
+// 故事数据
+// ===========================
+const story = {
+  acts: [
+    {
+      id: 'act1', name: '第一幕 · 初遇',
+      scenes: ['act1_scene1','act1_scene2','act1_scene2a','act1_scene3','act1_scene4']
+    },
+    {
+      id: 'act2', name: '第二幕 · 深入',
+      scenes: ['act2_scene1_combat','act2_scene1_social','act2_scene1_cunning','act2_scene2','act2_scene3']
+    },
+    {
+      id: 'act3', name: '第三幕 · 抉择',
+      scenes: ['act3_scene1','act3_scene2']
+    }
+  ],
+
+  scenes: {
+    // ===== 第一幕 =====
+    act1_scene1: {
+      background: 'market',
+      location: '汴京 · 东市',
+      act: 'act1',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' }
+      ],
+      narration: '酉时已过，东市的摊贩们陆续收摊。你收拾好炊饼担子，正要往回走，脚下突然踢到一个东西——一个靛蓝色的荷包，鼓鼓囊囊的。\n\n捡起来一看，里面是一封信，信封上盖着枢密院的朱红官印。你心中一惊：这等要紧的公文，怎会落在市井之中？',
+      dialogue: null,
+      choices: [
+        { id: 'a1_read', text: '拆开看看里面写了什么', effects: { cunning: 1 }, tags: ['read_letter'], nextScene: 'act1_scene2' },
+        { id: 'a1_keep', text: '收起来，回家再细看', effects: { cunning: 1 }, tags: ['cautious'], nextScene: 'act1_scene2' },
+        { id: 'a1_turnin', text: '送到开封府去，这是要紧公文', effects: { virtue: 1, reputation: 1 }, tags: ['righteous'], nextScene: 'act1_scene2a' }
+      ]
+    },
+
+    act1_scene2: {
+      background: 'night_street',
+      location: '汴京 · 暗巷',
+      act: 'act1',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'shen', name: '沈青', glyph: '沈', position: 'right', mood: 'neutral' }
+      ],
+      narration: '你揣着荷包，走在回家的巷子里。月光把青石板照得泛白，四下里静悄悄的。\n\n忽然，身后传来脚步声。你猛回头——一个青衣女子站在三步之外，月光下看不清面容，只觉得她目光如炬。',
+      dialogue: [
+        { speaker: '沈青', text: '这位小哥，你可捡到了什么东西？' }
+      ],
+      choices: [
+        { id: 'a1_admit', text: '如实告诉她，捡到了一个荷包', effects: { virtue: 1 }, tags: ['honest_to_shen'], nextScene: 'act1_scene3' },
+        { id: 'a1_deny', text: '装作不知，说没有捡到', effects: { cunning: 1 }, tags: ['lied_to_shen'], nextScene: 'act1_scene3' },
+        { id: 'a1_challenge', text: '反问她是什么人，为何打听这个', effects: { cunning: 1, reputation: 1 }, tags: ['suspicious_of_shen'], nextScene: 'act1_scene3' }
+      ]
+    },
+
+    act1_scene2a: {
+      background: 'palace',
+      location: '汴京 · 开封府',
+      act: 'act1',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'zhao', name: '赵捕头', glyph: '赵', position: 'right', mood: 'neutral' }
+      ],
+      narration: '你赶到开封府，值夜的是一个四十来岁的捕头，姓赵，面色红润，看起来和气。你把荷包递过去，他接过来翻了翻，脸色微变。',
+      dialogue: [
+        { speaker: '赵捕头', text: '这东西你从哪捡的？还有别人看见吗？' },
+        { speaker: '赵捕头', text: '行，我知道了。你先回去吧，此事莫要再提。' }
+      ],
+      choices: [
+        { id: 'a1_doubt', text: '赵捕头的反应不对劲，得找人打听', effects: { cunning: 1 }, tags: ['doubt_zhao'], nextScene: 'act1_scene3' },
+        { id: 'a1_accept', text: '大人说了算，回家睡觉', effects: { virtue: 1 }, tags: ['trusted_authority'], nextScene: 'act1_scene3' }
+      ]
+    },
+
+    act1_scene3: {
+      background: 'teahouse',
+      location: '汴京 · 王婆茶摊',
+      act: 'act1',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'granny', name: '王婆', glyph: '王', position: 'left', mood: 'happy' },
+        { id: 'liang', name: '梁七', glyph: '梁', position: 'right', mood: 'sad' }
+      ],
+      narration: '你心里不踏实，拐到王婆的茶摊，叫了碗茶。王婆在这条街上卖了二十年茶，什么事都知道。你旁敲侧击，问起最近可有什么稀奇事。',
+      dialogue: [
+        { speaker: '王婆', text: '稀奇事？你还别说，最近东市确实怪得很。好几批货从码头进来，走的不是正经路子。' },
+        { speaker: '王婆', text: '听说那个梁家书生，梁七，最近发了点小财。他一个穷书生，哪来的钱？' }
+      ],
+      choices: [
+        { id: 'a1_befriend', text: '主动搭话，请那个书生喝茶', effects: { virtue: 1, reputation: 1 }, tags: ['befriended_liang'], nextScene: 'act1_scene4' },
+        { id: 'a1_observe', text: '不动声色，暗中观察书生', effects: { cunning: 1 }, tags: ['observed_liang'], nextScene: 'act1_scene4' },
+        { id: 'a1_leave', text: '这书生来路不明，先走为妙', effects: { reputation: -1 }, tags: ['avoided_liang'], nextScene: 'act1_scene4' }
+      ]
+    },
+
+    act1_scene4: {
+      background: 'alley',
+      location: '汴京 · 窄巷',
+      act: 'act1',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'thug', name: '黑衣人', glyph: '?', position: 'right', mood: 'angry' }
+      ],
+      narration: '从茶摊出来，你抄近路穿过一条小巷。月光下，前面突然闪出两个黑衣人，挡住了去路。其中一人手里提着根短棍，另一人空着手，但指节粗大，一看就是练家子。',
+      dialogue: [
+        { speaker: '黑衣人', text: '你今天捡到的东西，交出来。别逼我们不客气。' }
+      ],
+      choices: [
+        { id: 'a1_fight', text: '抡起炊饼担子就打', effects: { virtue: 1, reputation: 2 }, tags: ['fought_thugs'], nextScene: 'act2_scene1_combat' },
+        { id: 'a1_bluff', text: '"东西已经交给官府了，你们来晚了"', effects: { cunning: 2 }, tags: ['bluffed_thugs'], nextScene: 'act2_scene1_social' },
+        { id: 'a1_run', text: '转身就跑', effects: { cunning: 1, reputation: -1 }, tags: ['ran_from_thugs'], nextScene: 'act2_scene1_cunning' }
+      ]
+    },
+
+    // ===== 第二幕：战斗路径 =====
+    act2_scene1_combat: {
+      background: 'night_street',
+      location: '汴京 · 暗巷',
+      act: 'act2',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'angry' },
+        { id: 'thug', name: '黑衣人甲', glyph: '甲', position: 'left', mood: 'angry' },
+        { id: 'thug2', name: '黑衣人乙', glyph: '乙', position: 'right', mood: 'angry' }
+      ],
+      narration: '你抡起扁担，朝左边的黑衣人横扫过去。那人没料到你敢动手，仓促间侧身躲避，还是被扁担结结实实扫在了肩膀上。他闷哼一声退了两步，另一个黑衣人从侧面扑来！\n\n一番混战，你到底常挑担子走街串巷，力气不小。虽然身上挨了两下，总算把两个黑衣人打跑了。地上掉了一块腰牌，上面刻着一个"赵"字。',
+      dialogue: null,
+      choices: [
+        { id: 'a2_chase', text: '追上去，看他们往哪跑', effects: { virtue: 1, reputation: 1 }, tags: ['chased_thugs'], nextScene: 'act2_scene2' },
+        { id: 'a2_evidence', text: '捡起腰牌，这是重要证据', effects: { cunning: 1 }, tags: ['found_zhao_badge'], nextScene: 'act2_scene2' }
+      ]
+    },
+
+    // ===== 第二幕：社交路径 =====
+    act2_scene1_social: {
+      background: 'alley',
+      location: '汴京 · 窄巷',
+      act: 'act2',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'thug', name: '黑衣人甲', glyph: '甲', position: 'left', mood: 'angry' },
+        { id: 'thug2', name: '黑衣人乙', glyph: '乙', position: 'right', mood: 'neutral' }
+      ],
+      narration: '你装出一副老神在在的样子，冷笑一声。\n\n"东西？早交给开封府了。赵捕头亲自收的。"\n\n你故意把"赵捕头"三个字咬得很重。两个黑衣人对视一眼，神色微变。',
+      dialogue: [
+        { speaker: '黑衣人甲', text: '……赵捕头？你确定？' },
+        { speaker: '黑衣人乙', text: '先走。' }
+      ],
+      choices: [
+        { id: 'a2_find_shen', text: '明天去找沈青，她好像知道些什么', effects: { cunning: 1 }, tags: ['seeks_shen'], nextScene: 'act2_scene2' },
+        { id: 'a2_find_wangpo', text: '去问问王婆，她知道的内情更多', effects: { virtue: 1 }, tags: ['seeks_granny'], nextScene: 'act2_scene2' }
+      ]
+    },
+
+    // ===== 第二幕：狡诈路径 =====
+    act2_scene1_cunning: {
+      background: 'night_street',
+      location: '汴京 · 暗巷',
+      act: 'act2',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' }
+      ],
+      narration: '你撒腿就跑，脚步声在小巷里回响。身后的追赶声渐渐远了——这巷子你从小走到大，哪个拐角有石阶、哪条岔路通向大路，你比谁都清楚。\n\n七拐八弯之后，你甩掉了追兵，站在一处屋檐下喘气。你想了想，决定明天换个路子——既然有人动手，说明你手里这封信确实触及了什么人的要害。与其硬来，不如暗中查访。',
+      dialogue: null,
+      choices: [
+        { id: 'a2_study', text: '把信里的内容仔细研究一番', effects: { cunning: 2 }, tags: ['studied_letter'], nextScene: 'act2_scene2' },
+        { id: 'a2_hide_seek', text: '把信藏好，去找王婆打听消息', effects: { cunning: 1, virtue: 1 }, tags: ['seeks_granny'], nextScene: 'act2_scene2' }
+      ]
+    },
+
+    // ===== 第二幕：汇聚 =====
+    act2_scene2: {
+      background: 'teahouse',
+      location: '汴京 · 王婆茶摊',
+      act: 'act2',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'shen', name: '沈青', glyph: '沈', position: 'left', mood: 'neutral' },
+        { id: 'liang', name: '梁七', glyph: '梁', position: 'right', mood: 'sad' }
+      ],
+      narration: '第二天，你按约定来到王婆茶摊。沈青已经在那儿了，换了身粗布衣裳，看起来像个普通的卖布女子。旁边坐着昨晚在茶摊见过的那个书生——梁七。他脸色比昨晚更差，眼圈发黑，像是整夜没睡。',
+      dialogue: [
+        { speaker: '沈青', text: '实不相瞒，我是开封府的暗探。那封信涉及到一桩走私大案。' },
+        { speaker: '梁七', text: '我……我本不知情。是赵捕头逼我做的。他威胁我年迈的母亲，我不得不从。' },
+        { speaker: '梁七', text: '走私的货从码头进来，走的是枢密院的旗号。赵捕头打掩护，我只是负责记账。' }
+      ],
+      choices: [
+        { id: 'a2_spare', text: '梁七是被逼的，应该给他一个机会', effects: { virtue: 2 }, tags: ['spared_liang'], nextScene: 'act2_scene3' },
+        { id: 'a2_use', text: '让梁七做内应，把赵捕头引出来', effects: { cunning: 2 }, tags: ['used_liang'], nextScene: 'act2_scene3' },
+        { id: 'a2_betray', text: '梁七也有罪，应该一起告发', effects: { reputation: 2, virtue: -1 }, tags: ['betrayed_liang'], nextScene: 'act2_scene3' }
+      ]
+    },
+
+    act2_scene3: {
+      background: 'market',
+      location: '汴京 · 码头',
+      act: 'act2',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'shen', name: '沈青', glyph: '沈', position: 'left', mood: 'neutral' }
+      ],
+      narration: '沈青和梁七商量了一番，决定设一个局。今夜，梁七按约定去码头交接下一批走私货，而你和沈青暗中跟踪，拿到赵捕头亲自接货的铁证。\n\n天色渐暗，东市的人渐渐散去。你和沈青藏在码头的一堆货物后面。江风带着腥咸的气息吹来，远处传来船桨拍水的声音。一艘乌篷船无声无息地靠了岸。',
+      dialogue: null,
+      choices: [
+        { id: 'a2_direct', text: '等赵捕头一到就冲出去抓人', effects: { virtue: 1, reputation: 1 }, tags: ['direct_confrontation'], nextScene: 'act3_scene1' },
+        { id: 'a2_gather', text: '先拿到证据再说，不动声色地记录', effects: { cunning: 2 }, tags: ['gathered_evidence'], nextScene: 'act3_scene1' },
+        { id: 'a2_signal', text: '按约定信号行事，等沈青发话', effects: { virtue: 1 }, tags: ['followed_plan'], nextScene: 'act3_scene1' }
+      ]
+    },
+
+    // ===== 第三幕 =====
+    act3_scene1: {
+      background: 'night_street',
+      location: '汴京 · 码头',
+      act: 'act3',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'zhao', name: '赵捕头', glyph: '赵', position: 'right', mood: 'angry' },
+        { id: 'liang', name: '梁七', glyph: '梁', position: 'left', mood: 'sad' }
+      ],
+      narration: '赵捕头如约而至。他带了四个手下，大摇大摆地走上码头，压根没把这事当回事。梁七哆哆嗦嗦地递上账本，赵捕头翻了两页，满意地点点头。\n\n就在这时，他目光一转，扫到了你和沈青藏身的方向。',
+      dialogue: [
+        { speaker: '赵捕头', text: '梁七，你的身后好像有人啊。' },
+        { speaker: '赵捕头', text: '出来吧。一个卖炊饼的，一个暗探……哼，真以为赵某是瞎子？' }
+      ],
+      choices: [
+        { id: 'a3_negotiate', text: '站出来和赵捕头谈判，拖延时间', effects: { cunning: 1, reputation: 1 }, tags: ['negotiated'], nextScene: 'act3_scene2' },
+        { id: 'a3_fight', text: '趁赵捕头不备，先下手为强', effects: { virtue: 1, reputation: 2 }, tags: ['fought_zhao'], nextScene: 'act3_scene2' },
+        { id: 'a3_sacrifice', text: '让沈青先走，自己挡住赵捕头', effects: { virtue: 3, reputation: 1 }, tags: ['self_sacrifice'], nextScene: 'act3_scene2' }
+      ]
+    },
+
+    act3_scene2: {
+      background: 'courtyard',
+      location: '汴京 · 偏僻院落',
+      act: 'act3',
+      characters: [
+        { id: 'player', name: '你', glyph: '贩', position: 'center', mood: 'neutral' },
+        { id: 'shen', name: '沈青', glyph: '沈', position: 'left', mood: 'neutral' }
+      ],
+      narration: '一阵混乱之后，你拼死从码头脱身。赵捕头的人追了一阵，被沈青设下的暗桩绊住了。\n\n你气喘吁吁地跑进一处偏僻的院落，沈青已经等在那里了。她手里拿着从码头抢出来的账本，上面清清楚楚地记着赵捕头三年来的走私记录。',
+      dialogue: [
+        { speaker: '沈青', text: '有了这本账，赵捕头跑不了。但问题是——这本账还牵扯到更大的鱼。上面的路线、接头人，一直通到枢密院的一位副使。' },
+        { speaker: '沈青', text: '你打算怎么做？把所有事情都捅出去，还是……到此为止？' }
+      ],
+      choices: [
+        { id: 'a3_reveal', text: '全部公开，一查到底，不管牵涉到谁', effects: { virtue: 2, reputation: 2 }, tags: ['revealed_all'], nextScene: 'ending_resolve' },
+        { id: 'a3_deal', text: '只告赵捕头，把大人物的事压下来', effects: { cunning: 2 }, tags: ['pragmatic_deal'], nextScene: 'ending_resolve' },
+        { id: 'a3_leverage', text: '拿着这些情报，自己去和那位副使做交易', effects: { cunning: 3, virtue: -2, reputation: -1 }, tags: ['leveraged_intel'], nextScene: 'ending_resolve' },
+        { id: 'a3_destroy', text: '毁了账本，这件事到此为止，不再牵连更多人', effects: { virtue: 1, cunning: 1 }, tags: ['destroyed_evidence'], nextScene: 'ending_resolve' }
+      ]
+    }
+  },
+
+  endings: {
+    ending_hero: {
+      title: '义薄云天',
+      type: 'good',
+      background: 'courtyard',
+      narration: '账本送到了枢密院，赵捕头和他的上线副使一同落网。开封府上下大清洗，百姓拍手称快。\n\n沈青因此案立了大功，升任捕头。而你——一个卖炊饼的小贩，被街坊们称为"义民"。你的炊饼摊从此门庭若市，不是因为炊饼多好吃，而是人人都想看看这个敢于和贪官硬碰硬的普通人。\n\n梁七得了赦免，带着母亲搬到了城南，偶尔还会来你的摊上买两个炊饼。\n\n日子平平淡淡地过下去，但你心里清楚——那年夜里捡到的那个荷包，改变了你的一生。'
+    },
+
+    ending_strategist: {
+      title: '棋局人生',
+      type: 'good',
+      background: 'teahouse',
+      narration: '你只揭发了赵捕头，把大人物的把柄留在了自己手里。赵捕头秋后问斩，走私案就此结案。\n\n沈青隐约猜到了你的打算，但什么也没说。\n\n半年后，你不再卖炊饼了。凭借手中的秘密和积累的人脉，你在东市开了一家粮行。那个枢密院副使暗中照应你的生意，你也从不多问。\n\n你成了东市最有脸面的商人——不是因为买卖做得大，而是因为所有人都知道，你手里握着一张谁也不敢碰的底牌。'
+    },
+
+    ending_bittersweet: {
+      title: '浮生若梦',
+      type: 'bittersweet',
+      background: 'night_street',
+      narration: '事情最终不了了之。赵捕头被调离了开封府，说是"另有任用"，但所有人都知道是怎么回事。\n\n沈青也走了，临走前在王婆的茶摊上留了句话给你：\n\n"这世上不缺聪明人，也不缺好人，缺的是又聪明又好的人。"\n\n你继续卖你的炊饼。日子和从前一样，但你知道有些东西已经不一样了。\n\n梁七偶尔会来买炊饼，你们从不提起那天晚上的事。有些秘密，就让它烂在肚子里吧。'
+    },
+
+    ending_dark: {
+      title: '暗流涌动',
+      type: 'bad',
+      background: 'dungeon',
+      narration: '你拿着账本去找枢密院副使做交易，却不知道螳螂捕蝉黄雀在后。\n\n副使收下了你的账本，然后——你被安上了一个"勾结走私犯"的罪名。赵捕头依然逍遥法外，你却进了开封府的大牢。\n\n沈青来探过一次监，隔着铁栅栏，她沉默了很久，最后只说了一句：\n\n"你太贪了。"\n\n你坐在阴暗的牢房里，听着外面街上小贩的叫卖声，恍惚间觉得那是你自己的声音。炊饼担子、青石板路、王婆的茶摊……一切都像是上辈子的事了。'
+    },
+
+    ending_hidden: {
+      title: '江湖再见',
+      type: 'secret',
+      background: 'courtyard',
+      narration: '你没有把证据交给任何人。你找到梁七，让他连夜带着母亲离开汴京。\n\n然后你找到沈青，把账本交给了她，说：\n\n"这件事该由你来决定。但如果你需要，我愿意做你的证人。"\n\n沈青看着你，第一次露出了真正的笑容。她说："你不像个卖炊饼的。"\n\n三个月后，走私案被一个叫"青衣卫"的神秘组织破获，赵捕头和副使双双落马。没人知道这个组织从何而来。\n\n而你，依旧在东市卖你的炊饼。只是摊子上多了一把油纸伞，伞面上画着一枝青竹——那是沈青留下的唯一痕迹。'
+    }
+  },
+
+  entryScene: 'act1_scene1'
+};
+
+// ===========================
+// 游戏状态
+// ===========================
+let gameState = {
+  currentScene: null,
+  virtue: 0,
+  cunning: 0,
+  reputation: 0,
+  tags: [],
+  choiceHistory: [],
+  visitedScenes: [],
+  phase: 'act1'
+};
+
+let typingTimer = null;
+let isTransitioning = false;
+
+// ===========================
+// DOM 引用
+// ===========================
+const $ = id => document.getElementById(id);
+
+// ===========================
+// 核心逻辑
+// ===========================
+
+function startGame() {
+  $('titleOverlay').classList.add('hiding');
+  setTimeout(() => {
+    $('titleOverlay').style.display = 'none';
+    goToScene(story.entryScene);
+  }, 1000);
+}
+
+function goToScene(sceneId) {
+  const scene = story.scenes[sceneId];
+  if (!scene) return;
+
+  gameState.currentScene = sceneId;
+  if (!gameState.visitedScenes.includes(sceneId)) {
+    gameState.visitedScenes.push(sceneId);
+  }
+  gameState.phase = scene.act;
+
+  renderScene(scene);
+}
+
+function renderScene(scene) {
+  // 更新幕指示器
+  renderPhaseIndicator(scene.act, scene.id);
+
+  // 更新状态追踪
+  renderStateTracker();
+
+  // 更新背景
+  const bg = $('sceneBg');
+  bg.className = 'scene-background';
+  bg.classList.add('bg-' + scene.background);
+
+  // 更新位置标签
+  $('sceneLocation').textContent = scene.location;
+
+  // 清空角色层
+  const charLayer = $('charactersLayer');
+  charLayer.innerHTML = '';
+
+  // 渲染角色（延迟显示）
+  scene.characters.forEach((char, i) => {
+    const el = document.createElement('div');
+    const enterClass = char.position === 'left' ? 'enter-left' :
+                       char.position === 'right' ? 'enter-right' : 'enter-center';
+    el.className = `character pos-${char.position} ${enterClass}`;
+    el.innerHTML = `
+      <div class="char-avatar mood-${char.mood}">
+        ${char.glyph}
+        <span class="char-mood">${{neutral:'',angry:'怒',happy:'喜',sad:'悲'}[char.mood]||''}</span>
+      </div>
+      <div class="char-name">${char.name}</div>
+    `;
+    charLayer.appendChild(el);
+
+    setTimeout(() => el.classList.add('visible'), 300 + i * 200);
+  });
+
+  // 清空叙事区
+  $('narrativeText').innerHTML = '';
+  $('dialogueArea').innerHTML = '';
+  $('choicesBar').innerHTML = '';
+
+  // 开始打字机
+  startTypewriter(scene.narration, () => {
+    // 打字完成后显示对话
+    if (scene.dialogue) {
+      showDialogue(scene.dialogue, () => {
+        showChoices(scene.choices);
+      });
+    } else {
+      showChoices(scene.choices);
+    }
+  });
+}
+
+function startTypewriter(text, onComplete) {
+  if (typingTimer) clearInterval(typingTimer);
+
+  const el = $('narrativeText');
+  el.innerHTML = '';
+  const cursor = document.createElement('span');
+  cursor.className = 'typing-cursor';
+
+  let i = 0;
+  let clicked = false;
+
+  const type = () => {
+    if (i < text.length) {
+      if (text[i] === '\n') {
+        el.appendChild(document.createElement('br'));
+      } else {
+        el.appendChild(document.createTextNode(text[i]));
+      }
+      i++;
+      el.appendChild(cursor);
+      $('narrativeScroll').scrollTop = $('narrativeScroll').scrollHeight;
+    } else {
+      clearInterval(typingTimer);
+      typingTimer = null;
+      if (cursor.parentNode) cursor.remove();
+      if (onComplete) onComplete();
+    }
+  };
+
+  // 点击跳过
+  const skipHandler = () => {
+    if (typingTimer) {
+      clearInterval(typingTimer);
+      typingTimer = null;
+      el.innerHTML = '';
+      // 立即显示全部文本
+      text.split('\n').forEach((line, idx) => {
+        if (idx > 0) el.appendChild(document.createElement('br'));
+        el.appendChild(document.createTextNode(line));
+      });
+      if (cursor.parentNode) cursor.remove();
+      if (onComplete) onComplete();
+    }
+    clicked = true;
+  };
+
+  $('narrativeScroll').addEventListener('click', skipHandler, { once: true });
+
+  typingTimer = setInterval(type, 30);
+
+  // 清理：如果打字自然结束，移除监听
+  const origComplete = onComplete;
+  onComplete = () => {
+    if (!clicked) {
+      $('narrativeScroll').removeEventListener('click', skipHandler);
+    }
+    if (origComplete) origComplete();
+  };
+}
+
+function showDialogue(dialogues, onComplete) {
+  const area = $('dialogueArea');
+  area.innerHTML = '';
+
+  dialogues.forEach((d, i) => {
+    const bubble = document.createElement('div');
+    bubble.className = 'dialogue-bubble';
+    bubble.innerHTML = `
+      <div class="dialogue-speaker">${d.speaker}</div>
+      <div class="dialogue-text">${d.text}</div>
+    `;
+    area.appendChild(bubble);
+
+    setTimeout(() => {
+      bubble.classList.add('visible');
+      $('narrativeScroll').scrollTop = $('narrativeScroll').scrollHeight;
+    }, 300 + i * 500);
+  });
+
+  if (onComplete) {
+    setTimeout(onComplete, 300 + dialogues.length * 500 + 300);
+  }
+}
+
+function showChoices(choices) {
+  const bar = $('choicesBar');
+  bar.innerHTML = '';
+
+  choices.forEach((choice, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = choice.text;
+    btn.addEventListener('click', () => makeChoice(choice));
+    bar.appendChild(btn);
+
+    setTimeout(() => btn.classList.add('visible'), 100 + i * 100);
+  });
+}
+
+function makeChoice(choice) {
+  if (isTransitioning) return;
+  isTransitioning = true;
+
+  // 按钮选中效果
+  const btns = document.querySelectorAll('.choice-btn');
+  btns.forEach(btn => {
+    if (btn.textContent === choice.text) {
+      btn.classList.add('selected');
+    } else {
+      btn.style.opacity = '0.3';
+    }
+  });
+  btns.forEach(btn => btn.disabled = true);
+
+  // 应用效果
+  if (choice.effects) {
+    if (choice.effects.virtue) gameState.virtue += choice.effects.virtue;
+    if (choice.effects.cunning) gameState.cunning += choice.effects.cunning;
+    if (choice.effects.reputation) gameState.reputation += choice.effects.reputation;
+  }
+  if (choice.tags) {
+    choice.tags.forEach(tag => {
+      if (!gameState.tags.includes(tag)) gameState.tags.push(tag);
+    });
+  }
+  gameState.choiceHistory.push({
+    scene: gameState.currentScene,
+    choice: choice.id,
+    effects: choice.effects,
+    tags: choice.tags
+  });
+
+  // 转场
+  setTimeout(() => {
+    transitionToScene(choice.nextScene);
+  }, 250);
+}
+
+function transitionToScene(nextSceneId) {
+  const sp = $('stagingPanel');
+  const np = $('narrativePanel');
+
+  // 内容区快速淡出
+  sp.classList.add('fade-out');
+  np.classList.add('fade-out');
+
+  setTimeout(() => {
+    if (nextSceneId === 'ending_resolve') {
+      resolveEnding();
+    } else {
+      goToScene(nextSceneId);
+    }
+
+    // 淡入
+    sp.classList.remove('fade-out');
+    np.classList.remove('fade-out');
+    isTransitioning = false;
+  }, 180);
+}
+
+function resolveEnding() {
+  const { virtue, cunning, reputation, tags } = gameState;
+
+  let endingId;
+
+  // 隐藏结局（最高优先级）
+  if (tags.includes('spared_liang') && tags.includes('gathered_evidence') && virtue >= 4) {
+    endingId = 'ending_hidden';
+  }
+  // 坏结局
+  else if (tags.includes('leveraged_intel') || (virtue <= -2 && reputation <= -1)) {
+    endingId = 'ending_dark';
+  }
+  // 英雄结局
+  else if (virtue >= 5 && tags.includes('revealed_all')) {
+    endingId = 'ending_hero';
+  }
+  // 策略家结局
+  else if (cunning >= 5 && tags.includes('pragmatic_deal')) {
+    endingId = 'ending_strategist';
+  }
+  // 默认：苦乐参半
+  else {
+    endingId = 'ending_bittersweet';
+  }
+
+  showEnding(endingId);
+}
+
+function showEnding(endingId) {
+  const ending = story.endings[endingId];
+
+  // 设置结局背景
+  $('sceneBg').className = 'scene-background';
+  $('sceneBg').classList.add('bg-' + ending.background);
+
+  // 设置结局文字
+  $('endingType').textContent = {
+    good: '◆ 好 结 局 ◆',
+    bittersweet: '◆ 苦 乐 参 半 ◆',
+    bad: '◆ 暗 色 终 局 ◆',
+    secret: '◆ 隐 藏 结 局 ◆'
+  }[ending.type];
+  $('endingType').className = 'ending-type ' + ending.type;
+
+  $('endingTitle').textContent = ending.title;
+  $('endingNarration').textContent = '';
+
+  // 统计
+  $('endingStats').innerHTML = `
+    <div class="ending-stat">
+      <div class="ending-stat-label">仁义</div>
+      <div class="ending-stat-value ${gameState.virtue > 0 ? 'positive' : gameState.virtue < 0 ? 'negative' : ''}">${gameState.virtue > 0 ? '+' : ''}${gameState.virtue}</div>
+    </div>
+    <div class="ending-stat">
+      <div class="ending-stat-label">狡诈</div>
+      <div class="ending-stat-value ${gameState.cunning > 0 ? 'positive' : gameState.cunning < 0 ? 'negative' : ''}">${gameState.cunning > 0 ? '+' : ''}${gameState.cunning}</div>
+    </div>
+    <div class="ending-stat">
+      <div class="ending-stat-label">声望</div>
+      <div class="ending-stat-value ${gameState.reputation > 0 ? 'positive' : gameState.reputation < 0 ? 'negative' : ''}">${gameState.reputation > 0 ? '+' : ''}${gameState.reputation}</div>
+    </div>
+    <div class="ending-stat">
+      <div class="ending-stat-label">抉择</div>
+      <div class="ending-stat-value">${gameState.choiceHistory.length}</div>
+    </div>
+  `;
+
+  // 显示结局覆盖层
+  const overlay = $('endingOverlay');
+  overlay.classList.add('active');
+
+  // 结局叙事打字机
+  setTimeout(() => {
+    startEndingTypewriter(ending.narration);
+  }, 800);
+}
+
+function startEndingTypewriter(text) {
+  const el = $('endingNarration');
+  el.innerHTML = '';
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i < text.length) {
+      if (text[i] === '\n') {
+        el.appendChild(document.createElement('br'));
+      } else {
+        el.appendChild(document.createTextNode(text[i]));
+      }
+      i++;
+    } else {
+      clearInterval(timer);
+    }
+  }, 25);
+}
+
+function renderPhaseIndicator(actId, sceneId) {
+  const container = $('phaseIndicator');
+  const label = $('phaseLabel');
+  container.innerHTML = '';
+
+  story.acts.forEach(act => {
+    const actDot = document.createElement('div');
+    actDot.style.cssText = 'width:10px;height:10px;border-radius:50%;margin:0 8px;';
+    if (act.id === actId) {
+      actDot.style.background = 'var(--vermillion)';
+      actDot.style.boxShadow = '0 0 8px var(--vermillion)';
+    } else if (story.acts.indexOf(story.acts.find(a => a.id === actId)) > story.acts.indexOf(act)) {
+      actDot.style.background = 'var(--jade)';
+    } else {
+      actDot.style.background = 'rgba(255,255,255,0.2)';
+    }
+    container.appendChild(actDot);
+
+    if (act.id === actId) {
+      const actData = act;
+      const idx = actData.scenes.indexOf(sceneId);
+      actData.scenes.forEach((sid, si) => {
+        const dot = document.createElement('div');
+        dot.className = 'phase-dot';
+        if (si < idx || gameState.visitedScenes.includes(sid)) {
+          dot.classList.add('completed');
+        } else if (sid === sceneId) {
+          dot.classList.add('current');
+        }
+        container.appendChild(dot);
+      });
+    }
+  });
+
+  const act = story.acts.find(a => a.id === actId);
+  label.textContent = act ? act.name : '';
+}
+
+function renderStateTracker() {
+  const vEl = $('virtueValue');
+  const cEl = $('cunningValue');
+  const rEl = $('reputationValue');
+
+  vEl.textContent = (gameState.virtue > 0 ? '+' : '') + gameState.virtue;
+  cEl.textContent = (gameState.cunning > 0 ? '+' : '') + gameState.cunning;
+  rEl.textContent = (gameState.reputation > 0 ? '+' : '') + gameState.reputation;
+
+  vEl.className = 'state-value ' + (gameState.virtue > 0 ? 'positive' : gameState.virtue < 0 ? 'negative' : '');
+  cEl.className = 'state-value ' + (gameState.cunning > 0 ? 'positive' : gameState.cunning < 0 ? 'negative' : '');
+  rEl.className = 'state-value ' + (gameState.reputation > 0 ? 'positive' : gameState.reputation < 0 ? 'negative' : '');
+
+  // 标签徽章
+  const tagContainer = $('tagBadges');
+  tagContainer.innerHTML = '';
+  const displayTags = {
+    'read_letter': '已读信',
+    'cautious': '谨慎',
+    'righteous': '正义',
+    'honest_to_shen': '坦诚',
+    'lied_to_shen': '隐瞒',
+    'suspicious_of_shen': '警惕',
+    'doubt_zhao': '疑赵',
+    'trusted_authority': '信官',
+    'befriended_liang': '友梁',
+    'observed_liang': '暗观',
+    'avoided_liang': '避梁',
+    'fought_thugs': '勇斗',
+    'bluffed_thugs': '智退',
+    'ran_from_thugs': '遁走',
+    'spared_liang': '宽恕',
+    'used_liang': '利用',
+    'betrayed_liang': '出卖',
+    'gathered_evidence': '取证',
+    'direct_confrontation': '直面',
+    'followed_plan': '守约',
+    'negotiated': '谈判',
+    'fought_zhao': '反击',
+    'self_sacrifice': '牺牲',
+    'revealed_all': '全揭',
+    'pragmatic_deal': '务实',
+    'leveraged_intel': '利用情报',
+    'destroyed_evidence': '毁证'
+  };
+
+  gameState.tags.forEach(tag => {
+    const badge = document.createElement('span');
+    badge.className = 'tag-badge';
+    badge.textContent = displayTags[tag] || tag;
+    tagContainer.appendChild(badge);
+  });
+}
+
+function restartGame() {
+  gameState = {
+    currentScene: null,
+    virtue: 0,
+    cunning: 0,
+    reputation: 0,
+    tags: [],
+    choiceHistory: [],
+    visitedScenes: [],
+    phase: 'act1'
+  };
+
+  $('endingOverlay').classList.remove('active');
+  $('sceneBg').className = 'scene-background';
+  $('charactersLayer').innerHTML = '';
+  $('narrativeText').innerHTML = '';
+  $('dialogueArea').innerHTML = '';
+  $('choicesBar').innerHTML = '';
+
+  if (typingTimer) clearInterval(typingTimer);
+
+  setTimeout(() => goToScene(story.entryScene), 300);
+}
+
+// ===========================
+// 事件绑定
+// ===========================
+$('startBtn').addEventListener('click', startGame);
+$('restartBtn').addEventListener('click', restartGame);
+</script>
+</body>
+</html>

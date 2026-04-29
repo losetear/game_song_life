@@ -3,11 +3,19 @@
 // 当预定义场景不匹配时，根据 NPC 性格/关系/职业/动作类型
 // 动态生成漫野奇谭式多幕剧情
 //
-// 6 种场景原型：友好交谈、中立初识、敌对遭遇、交易互动、赠礼、挑衅
+// 9 种场景原型：友好交谈、中立初识、敌对遭遇、交易互动、赠礼、挑衅、赌博、占卜、势力交涉
+//
+// 增强特性：
+// - 赌博/交易使用 tiered resolution（概率判定，非硬编码输赢）
+// - NPC 职业解锁额外选项
+// - NPC 状态影响叙事（低健康→悲观叙事）
+// - 关系深度分支（5级：密友/朋友/熟人/不喜/仇敌）
+// - 关键后果加 transformations（角色变形）
 
 import {
   PlayerScene, PlayerSceneChoice, PlayerSceneStep,
   NearbyNpcInfo, L0ActorContext, SceneVisualMeta,
+  CharacterTransformation,
 } from './types';
 
 // ════════════════════════════════════════
@@ -67,6 +75,126 @@ const PROFESSION_TOPIC: Record<string, { topic: string; detail: string; item: st
 function getProfessionTopic(profession: string) {
   return PROFESSION_TOPIC[profession] || { topic: '最近的日子', detail: '日子一天天过去', item: '手中的物件' };
 }
+
+// ════════════════════════════════════════
+// 关系深度分级（5级）
+// ════════════════════════════════════════
+
+type RelationDepth = '密友' | '朋友' | '熟人' | '不喜' | '仇敌';
+
+function getRelationDepth(relation: number): RelationDepth {
+  if (relation >= 60) return '密友';
+  if (relation >= 30) return '朋友';
+  if (relation >= 0) return '熟人';
+  if (relation >= -30) return '不喜';
+  return '仇敌';
+}
+
+function getRelationTone(relation: number): string {
+  const depth = getRelationDepth(relation);
+  return RELATION_TONE[depth].parting;
+}
+
+const RELATION_TONE: Record<RelationDepth, { greetPrefix: string; chatStyle: string; parting: string }> = {
+  '密友': { greetPrefix: '像见到亲人一样', chatStyle: '推心置腹地', parting: '依依不舍地' },
+  '朋友': { greetPrefix: '亲切地', chatStyle: '轻松地', parting: '笑着' },
+  '熟人': { greetPrefix: '客气地', chatStyle: '淡淡地', parting: '礼貌地' },
+  '不喜': { greetPrefix: '冷淡地', chatStyle: '不耐烦地', parting: '敷衍地' },
+  '仇敌': { greetPrefix: '厌恶地', chatStyle: '充满敌意地', parting: '头也不回地' },
+};
+
+// ════════════════════════════════════════
+// NPC状态影响（健康→叙事语调）
+// ════════════════════════════════════════
+
+function getHealthNarrativeMod(health: number): { prefix: string; suffix: string } {
+  if (health <= 20) return { prefix: '面色苍白、气息微弱的', suffix: '，说话间不时咳嗽几声' };
+  if (health <= 40) return { prefix: '看起来有些憔悴的', suffix: '，精神似乎不太好' };
+  if (health >= 80) return { prefix: '精神饱满的', suffix: '' };
+  return { prefix: '', suffix: '' };
+}
+
+// ════════════════════════════════════════
+// 职业→额外选项映射
+// ════════════════════════════════════════
+
+const PROFESSION_EXTRA_CHOICES: Record<string, {
+  sceneType: string;
+  choice: PlayerSceneChoice;
+}[]> = {
+  '郎中': [{
+    sceneType: 'friendly',
+    choice: {
+      id: 'prof_heal',
+      text: '"最近身体不太好，能帮我看看吗？"',
+      condition: { field: 'health', operator: 'lte', value: 50 },
+      consequence: {
+        immediateEffects: { health: 10, copper: -5, mood: 5 },
+        relationChange: 5,
+        nextPhase: null,
+        endingNarrative: '{npcName}为你把了脉，开了几服药。"不碍事，按方子吃几剂就好了。"你感激地道了谢。',
+        outcome: {
+          narrative: '请郎中朋友看了病，身体状况有所好转。',
+          effects: { health: 10 },
+        },
+      },
+    },
+  }],
+  '铁匠': [{
+    sceneType: 'trade',
+    choice: {
+      id: 'prof_forge',
+      text: '"能帮我打件趁手的家伙吗？"',
+      condition: { field: 'copper', operator: 'gte', value: 20 },
+      consequence: {
+        immediateEffects: { copper: -20, mood: 3 },
+        relationChange: 5,
+        nextPhase: null,
+        endingNarrative: '铁匠爽快地答应了，叮叮当当锤了一盏茶的功夫，递给你一件精巧的铁器。"自家打的，结实！"',
+      },
+    },
+  }],
+  '书生': [{
+    sceneType: 'neutral',
+    choice: {
+      id: 'prof_teach',
+      text: '"最近可有什么好书推荐？"',
+      consequence: {
+        immediateEffects: { mood: 5 },
+        relationChange: 3,
+        nextPhase: null,
+        endingNarrative: '{npcName}眼睛一亮，滔滔不绝地推荐了好几本书。你们聊了大半个时辰，临别时{npcName}还特意借了一本给你。',
+      },
+    },
+  }],
+  '捕快': [{
+    sceneType: 'neutral',
+    choice: {
+      id: 'prof_law',
+      text: '"最近城里治安如何？有什么需要注意的？"',
+      consequence: {
+        immediateEffects: { mood: 2 },
+        relationChange: 2,
+        nextPhase: null,
+        endingNarrative: '{npcName}压低声音说了几桩最近发生的事。你暗暗记在心里，以后走路会多个心眼。',
+      },
+    },
+  }],
+  '商贩': [{
+    sceneType: 'trade',
+    choice: {
+      id: 'prof_bulk',
+      text: '"量大从优，能再便宜些吗？我经常来买的。"',
+      condition: { field: 'copper', operator: 'gte', value: 15 },
+      consequence: {
+        immediateEffects: { copper: -12, mood: 3 },
+        relationChange: 3,
+        nextPhase: null,
+        endingNarrative: '{npcName}想了想，"老顾客了，给你个实在价。"你用比平时便宜不少的价格买到了东西。',
+      },
+    },
+  }],
+};
 
 // ════════════════════════════════════════
 // 动态场景生成器接口
@@ -167,16 +295,59 @@ export function generateDynamicScene(ctx: DynamicSceneContext): PlayerScene {
   const id = `dyn_${++dynamicSceneCounter}_${Date.now()}`;
 
   let scene: PlayerScene;
+  let sceneType: string;
   // 根据动作类型选择场景原型
-  if (actionId === 'provoke') scene = buildProvokeScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (actionId === 'gift' || actionId === 'bribe') scene = buildGiftScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (actionId.includes('trade') || actionId === 'luxury_deal') scene = buildTradeScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (actionId === 'gambling') scene = buildGamblingScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (actionId === 'fortune_telling') scene = buildFortuneScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (actionId === 'faction_salary' || actionId === 'faction_recruit') scene = buildFactionScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (relation < -10) scene = buildHostileScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else if (relation >= 30) scene = buildFriendlyScene(id, npcName, voice, topic, relation, timeDesc, ctx);
-  else scene = buildNeutralScene(id, npcName, voice, topic, relation, timeDesc, ctx);
+  if (actionId === 'provoke') { scene = buildProvokeScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'provoke'; }
+  else if (actionId === 'gift' || actionId === 'bribe') { scene = buildGiftScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'gift'; }
+  else if (actionId.includes('trade') || actionId === 'luxury_deal') { scene = buildTradeScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'trade'; }
+  else if (actionId === 'gambling') { scene = buildGamblingScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'gambling'; }
+  else if (actionId === 'fortune_telling') { scene = buildFortuneScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'fortune'; }
+  else if (actionId === 'faction_salary' || actionId === 'faction_recruit') { scene = buildFactionScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'faction'; }
+  // === 新增：专属场景构建器 ===
+  else if (actionId === 'ask_rumor') { scene = buildAskRumorScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'ask_rumor'; }
+  else if (actionId === 'share_food') { scene = buildShareFoodScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'share_food'; }
+  else if (actionId === 'help_request') { scene = buildHelpScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'help'; }
+  else if (actionId === 'learn_skill' || actionId === 'teach') { scene = buildLearnSkillScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'learn_skill'; }
+  else if (actionId === 'heal') { scene = buildHealScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'heal'; }
+  else if (actionId === 'sworn_brothers') { scene = buildSwornBrothersScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'sworn_brothers'; }
+  else if (actionId === 'steal') { scene = buildStealScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'steal'; }
+  else if (['blacksmith_craft', 'farm_work', 'hunt_guide'].includes(actionId)) { scene = buildProfessionScene(id, npcName, voice, topic, relation, timeDesc, ctx, actionId); sceneType = 'profession'; }
+  else if (actionId.startsWith('faction_') || actionId === 'guard_patrol') { scene = buildFactionOpsScene(id, npcName, voice, topic, relation, timeDesc, ctx, actionId); sceneType = 'faction_ops'; }
+  else if (actionId.startsWith('family_')) { scene = buildFamilyScene(id, npcName, voice, topic, relation, timeDesc, ctx, actionId); sceneType = 'family'; }
+  else if (actionId === 'black_market' || actionId === 'loan') { scene = buildBlackMarketScene(id, npcName, voice, topic, relation, timeDesc, ctx, actionId); sceneType = 'black_market'; }
+  else if (['collect_tax', 'charity', 'invite_travel'].includes(actionId)) { scene = buildCivicScene(id, npcName, voice, topic, relation, timeDesc, ctx, actionId); sceneType = 'civic'; }
+  // === 兜底：通用关系场景 ===
+  else if (relation < -10) { scene = buildHostileScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'hostile'; }
+  else if (relation >= 30) { scene = buildFriendlyScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'friendly'; }
+  else { scene = buildNeutralScene(id, npcName, voice, topic, relation, timeDesc, ctx); sceneType = 'neutral'; }
+
+  // 注入职业额外选项
+  const extras = PROFESSION_EXTRA_CHOICES[npc.profession];
+  if (extras) {
+    for (const extra of extras) {
+      if (extra.sceneType === sceneType || extra.sceneType === 'any') {
+        // 注入到第一个 phase 的 choices 末尾
+        const firstPhase = scene.phases[scene.entryPhase];
+        if (firstPhase) {
+          const patchedChoice = { ...extra.choice, id: `${extra.choice.id}_${id}` };
+          // 替换叙事中的 {npcName}
+          if (patchedChoice.consequence.endingNarrative) {
+            patchedChoice.consequence.endingNarrative = patchedChoice.consequence.endingNarrative.replace(/\{npcName\}/g, npcName);
+          }
+          firstPhase.choices.push(patchedChoice);
+        }
+      }
+    }
+  }
+
+  // NPC 状态影响：在开场叙事中注入健康描述
+  const healthMod = getHealthNarrativeMod(npc.health);
+  if (healthMod.prefix && scene.openingNarrative) {
+    scene.openingNarrative = scene.openingNarrative.replace(
+      npcName,
+      `${healthMod.prefix}${npcName}`,
+    );
+  }
 
   return injectVisuals(scene, ctx);
 }
@@ -836,6 +1007,13 @@ function buildGiftScene(
               immediateEffects: { mood: 4 },
               nextPhase: null,
               endingNarrative: `${npcName}郑重地点了点头。"一定一定。"你送出的不仅是一件礼物，更是一份承诺。`,
+              outcome: {
+                narrative: '赠送贵重礼物，加深了彼此的交情。',
+                effects: { mood: 4 },
+                transformations: [
+                  { type: 'gain_narrative_tag', value: 'generous', description: '慷慨地赠送礼物给他人' },
+                ],
+              },
             },
           },
         ],
@@ -925,6 +1103,13 @@ function buildProvokeScene(
               relationChange: -8,
               nextPhase: null,
               endingNarrative: `两人差点动起手来，好在旁人及时拉开。${npcName}指着你的鼻子骂了几句，扬长而去。这下算是结了大仇了。`,
+              outcome: {
+                narrative: '故意挑衅导致冲突升级，结下了仇怨。',
+                effects: { mood: -5 },
+                transformations: [
+                  { type: 'gain_narrative_tag', value: 'troublemaker', description: '在街头挑起冲突' },
+                ],
+              },
             },
           },
           {
@@ -984,7 +1169,7 @@ function buildGamblingScene(
   return {
     id,
     name: '掷骰赌局',
-    description: '与NPC来一场小赌',
+    description: '与NPC来一场赌局，使用概率判定',
     triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
     participants: [{ role: '赌伴', minCount: 1, maxCount: 1 }],
     openingNarrative: `${npcName}拍了拍身边的位置，${voice.chat}"来一局？小赌怡情。"`,
@@ -998,13 +1183,22 @@ function buildGamblingScene(
             id: 'g1_small',
             text: '"我押小，五文钱。"',
             condition: { field: 'copper', operator: 'gte', value: 5 },
-            consequence: { immediateEffects: { copper: -5 }, nextPhase: 'gamble_2a' },
+            consequence: { immediateEffects: { copper: -5 }, nextPhase: 'gamble_roll' },
           },
           {
             id: 'g1_big',
             text: '"押大，十文钱！"',
             condition: { field: 'copper', operator: 'gte', value: 10 },
-            consequence: { immediateEffects: { copper: -10 }, nextPhase: 'gamble_2b' },
+            consequence: { immediateEffects: { copper: -10 }, nextPhase: 'gamble_roll' },
+          },
+          {
+            id: 'g1_allin',
+            text: '"全押！二十文，一把定输赢！"',
+            condition: { field: 'copper', operator: 'gte', value: 20 },
+            consequence: {
+              immediateEffects: { copper: -20 },
+              nextPhase: 'gamble_roll',
+            },
           },
           {
             id: 'g1_decline',
@@ -1017,34 +1211,78 @@ function buildGamblingScene(
           },
         ],
       },
-      gamble_2a: {
-        phaseId: 'gamble_2a',
-        narrative: `骰子在碗中叮叮当当滚了好几圈，终于停了下来。${npcName}凑过去一看，${voice.upset}`,
+      gamble_roll: {
+        phaseId: 'gamble_roll',
+        narrative: `骰子在碗中叮叮当当滚了好几圈，终于缓缓停了下来。${npcName}屏住呼吸凑过去看——`,
         choices: [
           {
-            id: 'g2a_win',
-            text: '是双三——小！赢了！',
+            id: 'g2_reveal',
+            text: '看看结果……',
             consequence: {
-              immediateEffects: { copper: 10, mood: 8 },
-              relationChange: 2,
-              nextPhase: null,
-              endingNarrative: `"哈！手气不错！"${npcName}把铜板推过来。"改天再来。"`,
+              resolution: {
+                type: 'chance',
+                successChance: 0.45,
+              },
+              tieredResults: {
+                critical_success: {
+                  narrative: `双六！大！你赢得盆满钵满！${npcName}目瞪口呆地看着桌上的骰子，半晌说不出话来。"今天……你手气也太好了吧！"`,
+                  effects: { copper: 30, mood: 15 },
+                },
+                success: {
+                  narrative: `你猜对了！${npcName}虽有不舍，但还是把铜板推了过来。"愿赌服输。改天再来过。"` ,
+                  effects: { copper: 12, mood: 8 },
+                },
+                failure: {
+                  narrative: `可惜，猜错了。${npcName}笑呵呵地收起铜板。"赌场无父子，愿赌服输嘛。"`,
+                  effects: { mood: -5 },
+                },
+                critical_failure: {
+                  narrative: `不仅猜错了，还是最小的点数。${npcName}毫不留情地收走了所有赌注。"运气这东西，强求不来啊。"你望着空空的钱袋，暗暗发誓再也不赌了。`,
+                  effects: { copper: -5, mood: -12 },
+                },
+              },
+              nextPhase: 'gamble_aftermath',
             },
           },
         ],
       },
-      gamble_2b: {
-        phaseId: 'gamble_2b',
-        narrative: `骰子咕噜噜转了好几圈。${npcName}探过头去，嘴角慢慢翘了起来。`,
+      gamble_aftermath: {
+        phaseId: 'gamble_aftermath',
+        narrative: `赌局结束。${npcName}收好骰子，${voice.chat}。"怎么样，再来一局？"`,
         choices: [
           {
-            id: 'g2b_lose',
-            text: '是双五——小……输了。',
+            id: 'ga_quit_win',
+            text: '"见好就收，今日到此为止。"',
             consequence: {
-              immediateEffects: { mood: -5 },
+              immediateEffects: { mood: 3 },
+              relationChange: 2,
+              nextPhase: null,
+              endingNarrative: `${npcName}笑着送你离开。"赌品不错，改日再来。"你揣着赢来的铜板，脚步轻快。`,
+              outcome: {
+                narrative: '在赌局中赢得了铜板，见好就收。',
+                effects: { mood: 3 },
+                memoryTag: '赌局小胜',
+                transformations: [
+                  { type: 'gain_narrative_tag', value: 'gambler', description: '参与了掷骰赌局' },
+                ],
+              },
+            },
+          },
+          {
+            id: 'ga_quit_lose',
+            text: '"手气用完了，改天再战。"',
+            consequence: {
               relationChange: 1,
               nextPhase: null,
-              endingNarrative: `${npcName}笑呵呵地收起铜板。"愿赌服输嘛。"`,
+              endingNarrative: `你拍了拍空瘪的口袋，苦笑着离去。${npcName}在身后喊道："常来啊！"赌桌上输赢乃兵家常事，只是这口袋里的铜板……`,
+              outcome: {
+                narrative: '在赌局中输了一些铜板，但输得起。',
+                effects: {},
+                memoryTag: '赌局小负',
+                transformations: [
+                  { type: 'gain_narrative_tag', value: 'gambler', description: '参与了掷骰赌局' },
+                ],
+              },
             },
           },
         ],
@@ -1186,6 +1424,885 @@ function buildFactionScene(
               relationChange: -1,
               nextPhase: null,
               endingNarrative: `${npcName}${voice.upset}但最终还是听你说完了。"此事难办，容后再议。"`,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+
+// ════════════════════════════════════════
+// 12 个新增专属场景构建器（正确 PlayerScene 结构）
+// ════════════════════════════════════════
+
+// ── 打听八卦 ──
+function buildAskRumorScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  const tone = getRelationTone(relation);
+  return {
+    id,
+    name: '街坊消息',
+    description: '打听八卦消息',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '线人', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你找到${npcName}，想打听些消息。${npcName}${voice.greet}。`,
+    entryPhase: 'rumor_1',
+    phases: {
+      rumor_1: {
+        phaseId: 'rumor_1',
+        narrative: `${relation >= 30
+          ? `"你问得正好，我跟你说……"${tone}`
+          : relation < 0
+            ? `${voice.refuse}但看你一脸诚恳，犹豫了一下。`
+            : `"你打听的事，我多少知道一些。"`
+        }\n\n${topic
+          ? `"说到${topic.topic}，${topic.detail}。"`
+          : '"最近街坊邻里确实有些动静。"'
+        }\n\n${npcName}压低声音凑近了些。`,
+        choices: [
+          {
+            id: 'r1_gossip',
+            text: '"最近有什么新鲜事？"',
+            consequence: { nextPhase: 'rumor_2' },
+          },
+          {
+            id: 'r1_secret',
+            text: '"有没有什么不为人知的秘密？"',
+            condition: { field: 'personality', operator: 'includes' as const, value: '精明' },
+            consequence: { nextPhase: 'rumor_2', immediateEffects: { mood: 1 } },
+          },
+          {
+            id: 'r1_pay',
+            text: `[给5文铜钱] "请喝杯茶，随便聊聊。"`,
+            condition: { field: 'copper', operator: 'gte' as const, value: 5 },
+            consequence: { nextPhase: 'rumor_2', immediateEffects: { copper: -5 }, relationChange: 2 },
+          },
+        ],
+      },
+      rumor_2: {
+        phaseId: 'rumor_2',
+        narrative: `${npcName}${voice.chat}，说了一些你不知道的事情。`,
+        choices: [
+          {
+            id: 'r2_listen',
+            text: '认真倾听',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `你从${npcName}口中得知了一些有用的消息。\n\n"这些话你可别外传。"${tone}`,
+              relationChange: 1,
+            },
+          },
+          {
+            id: 'r2_spread',
+            text: '"这事我再去问问别人。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.upset}"你不信我？算了。"`,
+              relationChange: -2,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 把酒言欢 ──
+function buildShareFoodScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  const tone = getRelationTone(relation);
+  return {
+    id,
+    name: '把酒言欢',
+    description: '请客吃饭，增进感情',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '酒友', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你请${npcName}到酒肆小坐。${npcName}${voice.greet}，欣然落座。`,
+    entryPhase: 'food_1',
+    phases: {
+      food_1: {
+        phaseId: 'food_1',
+        narrative: `${relation >= 30
+          ? `"又是你请客！这回我可不客气了。"${tone}`
+          : `"既然盛情相邀，那就叨扰了。"`
+        }`,
+        choices: [
+          {
+            id: 'f1_simple',
+            text: '"来两碗阳春面，一碟小菜。"',
+            condition: { field: 'copper', operator: 'gte' as const, value: 10 },
+            consequence: { nextPhase: 'food_2', immediateEffects: { copper: -10 }, relationChange: 2 },
+          },
+          {
+            id: 'f1_feast',
+            text: '"好酒好菜尽管上！"',
+            condition: { field: 'copper', operator: 'gte' as const, value: 30 },
+            consequence: { nextPhase: 'food_2', immediateEffects: { copper: -30 }, relationChange: 5 },
+          },
+          {
+            id: 'f1_humble',
+            text: '"家里带了些粗茶淡饭，不嫌弃吧？"',
+            consequence: { nextPhase: 'food_2', relationChange: 1 },
+          },
+        ],
+      },
+      food_2: {
+        phaseId: 'food_2',
+        narrative: `酒过三巡，${npcName}${voice.chat}。\n\n${topic
+          ? `"说起${topic.topic}，${topic.detail}。"`
+          : `${npcName}谈起最近见闻，言语间颇为感慨。`
+        }`,
+        choices: [
+          {
+            id: 'f2_deep',
+            text: '推心置腹地聊',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `你们聊到月上柳梢，${npcName}起身告辞。\n\n"今日畅快！改日再聚。"${tone}`,
+              relationChange: 3,
+            },
+          },
+          {
+            id: 'f2_listen',
+            text: '静静倾听',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `你安静地听着${npcName}的话，偶尔点点头。\n\n${npcName}似乎找到了一个可以倾诉的人。`,
+              relationChange: 2,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 施以援手 ──
+function buildHelpScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  const tone = getRelationTone(relation);
+  const helpType = ['搬重物', '修补屋顶', '照看摊位', '写信念书', '跑腿送信'][Math.floor(Math.random() * 5)];
+  return {
+    id,
+    name: '施以援手',
+    description: '帮NPC解决困难',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '求助者', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你听说${npcName}正需要人帮忙${helpType}。\n\n${npcName}${voice.greet}。\n\n"你要是能搭把手，那可太好了。"${tone}`,
+    entryPhase: 'help_1',
+    phases: {
+      help_1: {
+        phaseId: 'help_1',
+        narrative: `${npcName}正为${helpType}发愁，你走上前去。`,
+        choices: [
+          {
+            id: 'h1_gladly',
+            text: `"没问题，包在我身上！"`,
+            consequence: { nextPhase: 'help_2', immediateEffects: { health: -5 } },
+          },
+          {
+            id: 'h1_cond',
+            text: '"可以帮忙，不过……"',
+            consequence: { nextPhase: 'help_2', relationChange: -1 },
+          },
+          {
+            id: 'h1_decline',
+            text: '"今天实在忙不过来。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.refuse}\n\n"罢了，我再找别人。"`,
+              relationChange: -2,
+            },
+          },
+        ],
+      },
+      help_2: {
+        phaseId: 'help_2',
+        narrative: `你花了些力气帮忙${helpType}。${npcName}${voice.chat}。\n\n"辛苦你了，真不知道怎么感谢。"${tone}`,
+        choices: [
+          {
+            id: 'h2_free',
+            text: '"举手之劳，不必客气。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}感激地看着你。\n\n"你是个好人，我记住了。"`,
+              relationChange: 5,
+            },
+          },
+          {
+            id: 'h2_reward',
+            text: '"也没什么，看着给点辛苦费吧。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}从怀里掏出几枚铜钱递给你。\n\n"一点心意，请收下。"`,
+              relationChange: 2,
+              immediateEffects: { copper: 8 },
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 虚心求教 ──
+function buildLearnSkillScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  const tone = getRelationTone(relation);
+  const skillTopic = topic
+    ? topic.topic
+    : ['种庄稼', '做买卖', '打猎', '写字', '算账'][Math.floor(Math.random() * 5)];
+  return {
+    id,
+    name: '虚心求教',
+    description: '向NPC请教手艺或知识',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '师傅', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你向${npcName}请教${skillTopic}的门道。${npcName}${voice.greet}。`,
+    entryPhase: 'learn_1',
+    phases: {
+      learn_1: {
+        phaseId: 'learn_1',
+        narrative: `${relation >= 30
+          ? `"你想学这个？那我跟你说说。"${tone}`
+          : relation < 0
+            ? `${voice.refuse}"你找我学？我可教不了你什么。"`
+            : `"嗯，${skillTopic}的门道说来话长……"`
+        }`,
+        choices: [
+          {
+            id: 'l1_listen',
+            text: '认真听讲',
+            consequence: { nextPhase: 'learn_2' },
+          },
+          {
+            id: 'l1_gift',
+            text: `[送上10文束脩] "还请不吝赐教。"`,
+            condition: { field: 'copper', operator: 'gte' as const, value: 10 },
+            consequence: { nextPhase: 'learn_2', immediateEffects: { copper: -10 }, relationChange: 2 },
+          },
+          {
+            id: 'l1_debate',
+            text: '"我倒是有些不同看法……"',
+            condition: { field: 'personality', operator: 'includes' as const, value: '精明' },
+            consequence: { nextPhase: 'learn_2', relationChange: relation >= 0 ? -1 : 1 },
+          },
+        ],
+      },
+      learn_2: {
+        phaseId: 'learn_2',
+        narrative: `${npcName}讲得头头是道。\n\n${topic
+          ? `"${topic.detail}，所以关键在于……"`
+          : `"${skillTopic}这事，最要紧的是耐心。"`
+        }\n\n"来，试试看。"`,
+        choices: [
+          {
+            id: 'l2_do',
+            text: '照着示范练习',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `你跟着${npcName}学了一阵子。虽然还有些生疏，但已经摸到了门道。\n\n"不错不错，孺子可教。"${tone}`,
+              relationChange: 3,
+            },
+          },
+          {
+            id: 'l2_deep',
+            text: '"能再深入讲讲吗？"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}见你好学，又多说了许多。日头西斜，你收获颇丰。\n\n"好学的后生，我喜欢。"${tone}`,
+              relationChange: 4,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 求医问药 ──
+function buildHealScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  const playerHealth = ctx.playerStats?.health ?? 100;
+  return {
+    id,
+    name: '求医问药',
+    description: '找郎中看病买药',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '郎中', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你找到${npcName}寻求医治。\n\n${npcName}${voice.greet}，仔细端详了你的气色。`,
+    entryPhase: 'heal_1',
+    phases: {
+      heal_1: {
+        phaseId: 'heal_1',
+        narrative: `"让我看看……嗯，${playerHealth < 40 ? '你气色不太好，需要好好调理。' : '还好，不算大碍。'}"`,
+        choices: [
+          {
+            id: 'heal_herbs',
+            text: '"有没有草药可以调理？"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}配了一副草药递给你。\n\n"一日三次，忌辛辣。"你服下后感觉好多了。`,
+              immediateEffects: { health: 20 },
+              relationChange: 1,
+            },
+          },
+          {
+            id: 'heal_pay',
+            text: `[付20文] "请用最好的药。"`,
+            condition: { field: 'copper', operator: 'gte' as const, value: 20 },
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}取出上好的药材精心调配。\n\n"这药见效快，几日便可痊愈。"`,
+              immediateEffects: { health: 35, copper: -20 },
+              relationChange: 2,
+            },
+          },
+          {
+            id: 'heal_free',
+            text: '"手头紧，能不能通融一下？"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.refuse}\n\n${relation >= 30 ? '最终还是给了你一些便宜的草药。' : '"药铺也要本钱的。"'}`,
+              immediateEffects: relation >= 30 ? { health: 10 } : {},
+              relationChange: relation >= 30 ? 0 : -1,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 义结金兰 ──
+function buildSwornBrothersScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  return {
+    id,
+    name: '义结金兰',
+    description: '与NPC结为异姓兄弟',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '结义兄弟', minCount: 1, maxCount: 1, minRelationScore: 60 }],
+    openingNarrative: `${timeDesc}，你和${npcName}来到神祠前。烛火摇曳，${npcName}${voice.greet}。\n\n"今日你我在此结拜，天地为证。"\n\n香案上摆着鸡血酒和黄纸。`,
+    entryPhase: 'sworn_1',
+    phases: {
+      sworn_1: {
+        phaseId: 'sworn_1',
+        narrative: '你们跪在香案前，准备歃血为盟。',
+        choices: [
+          {
+            id: 's1_solemn',
+            text: '郑重地跪下磕头',
+            consequence: { nextPhase: 'sworn_2', relationChange: 5 },
+          },
+          {
+            id: 's1_humble',
+            text: '"我何德何能……"',
+            consequence: { nextPhase: 'sworn_2', relationChange: 3 },
+          },
+        ],
+      },
+      sworn_2: {
+        phaseId: 'sworn_2',
+        narrative: `你们焚香叩首，歃血为盟。${npcName}端起酒碗，目光坚定。\n\n"从今往后，你我同甘共苦，祸福与共。"\n\n碗中的酒映着烛光，如血般殷红。`,
+        choices: [
+          {
+            id: 's2_drink',
+            text: '饮下血酒',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `酒入喉中，辛辣而滚烫。${npcName}放下酒碗，紧紧握住你的手。\n\n"兄弟！"这一声，重逾千钧。\n\n从此，你们便是过命的兄弟了。`,
+              relationChange: 10,
+            },
+          },
+          {
+            id: 's2_extra',
+            text: '"我再加一条：若有违背，天打雷劈。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}动容地看着你，也跟着发了毒誓。\n\n${npcName}${voice.chat}。\n\n"有你这句话，我放心了。"\n\n这份情义，比血还浓。`,
+              relationChange: 12,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 顺手牵羊 ──
+function buildStealScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext,
+): PlayerScene {
+  const stealTarget = topic?.item || '腰间的钱袋';
+  return {
+    id,
+    name: '顺手牵羊',
+    description: '偷窃NPC物品',
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '目标', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你盯上了${npcName}${stealTarget}。\n\n${npcName}正${voice.chat}，似乎没有注意到你。`,
+    entryPhase: 'steal_1',
+    phases: {
+      steal_1: {
+        phaseId: 'steal_1',
+        narrative: '你的手慢慢伸了过去……',
+        choices: [
+          {
+            id: 'st1_go',
+            text: '下手！',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: '',
+              resolution: { type: 'chance', successChance: 0.4 },
+              tieredResults: {
+                critical_success: {
+                  narrative: `你的手指触到了${stealTarget}，轻轻一抽——得手了！${npcName}浑然不觉。你迅速藏好战利品，若无其事地走开了。`,
+                  effects: { copper: 25 },
+                },
+                success: {
+                  narrative: `你小心翼翼地拿到了${stealTarget}里的铜钱。${npcName}打了个哈欠，丝毫没有察觉。`,
+                  effects: { copper: 15 },
+                },
+                failure: {
+                  narrative: `你的手刚碰到${stealTarget}，${npcName}猛地转过头来！"你在干什么！"${voice.upset}\n\n你连忙缩回手，但已经被抓了个现行。`,
+                  effects: {},
+                },
+              },
+              relationChange: -10,
+            },
+          },
+          {
+            id: 'st1_wait',
+            text: '再等等，等更好的时机',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `你犹豫了一下，还是收回了手。也许下次有更好的机会。${npcName}依然毫无察觉。`,
+            },
+          },
+          {
+            id: 'st1_abort',
+            text: '算了，不是正道',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: '你摇了摇头，转身离开。偷鸡摸狗之事，终究不是长久之计。',
+              relationChange: 1,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 行业互动 ──
+const PROFESSION_SCENE_CONFIG: Record<string, { title: string; act1: string; act2: string }> = {
+  blacksmith_craft: {
+    title: '铁匠锻造',
+    act1: '你走进铁匠铺，炉火熊熊。',
+    act2: '铁器淬火，白烟升腾。',
+  },
+  farm_work: {
+    title: '田间帮农',
+    act1: '田垄间，那人正弯腰劳作，汗水浸透了衣衫。',
+    act2: '日头渐高，你们坐在田埂上歇脚。',
+  },
+  hunt_guide: {
+    title: '猎户向导',
+    act1: '那人背着弓箭，正准备进山。',
+    act2: '山间小路上，那人指着远处的痕迹给你看。',
+  },
+};
+
+function buildProfessionScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext, actionId: string,
+): PlayerScene {
+  const config = PROFESSION_SCENE_CONFIG[actionId] || {
+    title: '行业互动',
+    act1: `${npcName}正在忙碌着。`,
+    act2: `${npcName}完成了手头的活计。`,
+  };
+  return {
+    id,
+    name: config.title,
+    description: `职业互动：${actionId}`,
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '同行', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}。${config.act1}\n\n${npcName}${voice.greet}。${topic ? `"${topic.detail}。"` : '"正好你来帮忙。"'}`,
+    entryPhase: 'prof_1',
+    phases: {
+      prof_1: {
+        phaseId: 'prof_1',
+        narrative: `${npcName}正忙着手头的活计。`,
+        choices: [
+          {
+            id: 'p1_work',
+            text: '撸起袖子干活',
+            consequence: { nextPhase: 'prof_2', immediateEffects: { health: -8 } },
+          },
+          {
+            id: 'p1_watch',
+            text: '在一旁观看学习',
+            consequence: { nextPhase: 'prof_2' },
+          },
+          {
+            id: 'p1_pay',
+            text: `[给15文] "辛苦了，买些茶水喝。"`,
+            condition: { field: 'copper', operator: 'gte' as const, value: 15 },
+            consequence: { nextPhase: 'prof_2', immediateEffects: { copper: -15 }, relationChange: 3 },
+          },
+        ],
+      },
+      prof_2: {
+        phaseId: 'prof_2',
+        narrative: `${config.act2}\n\n${npcName}${voice.chat}。`,
+        choices: [
+          {
+            id: 'p2_chat',
+            text: `"活干得漂亮！"`,
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}满意地擦了擦汗。\n\n"下次有空再来。"${getRelationTone(relation)}`,
+              relationChange: 2,
+              immediateEffects: { copper: 5 },
+            },
+          },
+          {
+            id: 'p2_learn',
+            text: '"能教我两手吗？"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.greet}\n\n"看你手脚还算麻利，我就教教你。"\n\n一番指点之后，你学到了不少。`,
+              relationChange: 3,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 组织事务 ──
+const FACTION_OPS_CONFIG: Record<string, { title: string; narrative: string }> = {
+  faction_ally: { title: '缔结同盟', narrative: '同盟文书已备好，只待双方画押。' },
+  faction_rival: { title: '势力对峙', narrative: '双方人马剑拔弩张。' },
+  faction_quest: { title: '帮派任务', narrative: '帮主交代了一桩差事。' },
+  faction_patrol: { title: '巡查领地', narrative: '你们在势力范围内巡视。' },
+  faction_dues: { title: '缴纳会费', narrative: '每月的例钱该交了。' },
+  guard_patrol: { title: '城门巡逻', narrative: '换岗的时间到了。' },
+  faction_order: { title: '传达命令', narrative: '上级有令，需要传达下去。' },
+  faction_meeting: { title: '堂会议事', narrative: '众人齐聚一堂，商议要事。' },
+  faction_reward: { title: '论功行赏', narrative: '任务完成，该论功行赏了。' },
+  faction_expand: { title: '扩张地盘', narrative: '新的地盘在招手。' },
+  faction_salary: { title: '领取俸禄', narrative: '到了领月俸的日子。' },
+  faction_recruit: { title: '招兵买马', narrative: '帮派需要新鲜血液。' },
+};
+
+function buildFactionOpsScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext, actionId: string,
+): PlayerScene {
+  const config = FACTION_OPS_CONFIG[actionId] || FACTION_OPS_CONFIG.faction_quest;
+  return {
+    id,
+    name: config.title,
+    description: `组织事务：${actionId}`,
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '同僚', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}。${config.narrative}\n\n${npcName}${voice.greet}。${relation >= 30 ? '"这事交给你，我放心。"' : '"按规矩来就行。"'}`,
+    entryPhase: 'fo_1',
+    phases: {
+      fo_1: {
+        phaseId: 'fo_1',
+        narrative: `${npcName}等着你的回应。`,
+        choices: [
+          {
+            id: 'fo_execute',
+            text: '认真执行',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `事情办得妥妥当当。${npcName}${voice.greet}\n\n"干得不错。"${getRelationTone(relation)}`,
+              relationChange: 2,
+              immediateEffects: { copper: 5 },
+            },
+          },
+          {
+            id: 'fo_social',
+            text: '"先聊聊再说。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `你和${npcName}聊了会公事，也聊了些私话。${npcName}${voice.chat}\n\n公事虽然耽误了些，但关系亲近了不少。`,
+              relationChange: 3,
+            },
+          },
+          {
+            id: 'fo_decline',
+            text: '"这事我不想管。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.upset}\n\n"随你吧。"`,
+              relationChange: -3,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 家族亲情 ──
+const FAMILY_OPS_CONFIG: Record<string, { title: string; narrative: string }> = {
+  family_feast: { title: '家宴团聚', narrative: '一家老小围坐在饭桌前，热气腾腾。' },
+  family_legacy: { title: '家训传承', narrative: '长辈翻开族谱，讲述着先辈的故事。' },
+  family_aid: { title: '患难与共', narrative: '家中有难，需要互相帮衬。' },
+};
+
+function buildFamilyScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext, actionId: string,
+): PlayerScene {
+  const config = FAMILY_OPS_CONFIG[actionId] || FAMILY_OPS_CONFIG.family_feast;
+  return {
+    id,
+    name: config.title,
+    description: `家族互动：${actionId}`,
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '家人', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}。${config.narrative}\n\n${npcName}${voice.greet}。${relation >= 30 ? '"一家人不说两家话。"' : '"坐吧。"'}`,
+    entryPhase: 'fm_1',
+    phases: {
+      fm_1: {
+        phaseId: 'fm_1',
+        narrative: '家人之间的温情时刻。',
+        choices: [
+          {
+            id: 'fm_support',
+            text: '"家里的事，我来扛。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}的眼眶微微泛红。\n\n"有你这句话，我就放心了。"\n\n亲情在困难面前显得格外珍贵。`,
+              relationChange: 5,
+              immediateEffects: { copper: -10 },
+            },
+          },
+          {
+            id: 'fm_chat',
+            text: '"最近家里都还好吧？"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.chat}\n\n你们聊了很久，关于家、关于未来。${topic ? `"说起${topic.topic}，${topic.detail}。"` : ''}`,
+              relationChange: 2,
+            },
+          },
+          {
+            id: 'fm_gift',
+            text: `[给20文] "这是我攒的一点心意。"`,
+            condition: { field: 'copper', operator: 'gte' as const, value: 20 },
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}接过铜钱，没有推辞。\n\n"家里人不用客气。"但你能看出，${npcName}心里很感动。`,
+              relationChange: 4,
+              immediateEffects: { copper: -20 },
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 地下交易 ──
+function buildBlackMarketScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext, actionId: string,
+): PlayerScene {
+  const isLoan = actionId === 'loan';
+  const mainChoice: PlayerSceneChoice = {
+    id: 'bm_deal',
+    text: isLoan ? '"借30文，一个月还。"' : '"给我看看货。"',
+    consequence: {
+      nextPhase: null,
+      endingNarrative: '',
+      resolution: { type: 'chance', successChance: 0.5 },
+      tieredResults: {
+        critical_success: {
+          narrative: `${npcName}${voice.chat}\n\n${isLoan ? '铜钱到手，爽快。' : '货物上乘，物有所值。'}`,
+          effects: isLoan ? { copper: 30 } : { copper: -25 },
+        },
+        success: {
+          narrative: `交易进行得很顺利。${npcName}似乎对你印象不错。\n\n${isLoan ? '"记得按时还钱。"' : '"以后有需要再来。"'}`,
+          effects: isLoan ? { copper: 30 } : { copper: -25 },
+        },
+        failure: {
+          narrative: `${npcName}${voice.upset}\n\n${isLoan ? '"你上次还没还清呢！"' : '"这货不卖了，你走吧。"'}`,
+          effects: {},
+        },
+      },
+      relationChange: 1,
+    },
+  };
+  if (!isLoan) {
+    mainChoice.condition = { field: 'copper', operator: 'gte' as const, value: 25 };
+  }
+  return {
+    id,
+    name: isLoan ? '借钱周旋' : '地下交易',
+    description: `灰色交易：${actionId}`,
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '交易对象', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}，你在僻静处找到了${npcName}。${npcName}${voice.greet}。\n\n${isLoan
+      ? '"借钱？利息三分，到期不还……你懂的。"'
+      : '"你要的东西我有，但价钱可不便宜。"'
+    }`,
+    entryPhase: 'bm_1',
+    phases: {
+      bm_1: {
+        phaseId: 'bm_1',
+        narrative: isLoan ? '借钱意味着未来的负担。' : '来路不正的货物。',
+        choices: [
+          mainChoice,
+          {
+            id: 'bm_negotiate',
+            text: '"能不能再便宜点？"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.upset}\n\n${relation >= 30 ? '最终还是给了你一个实惠的价。' : '"这已经是最低价了，爱要不要。"'}`,
+              relationChange: relation >= 30 ? 0 : -1,
+              immediateEffects: relation >= 30 ? (isLoan ? { copper: 35 } : { copper: -20 }) : {},
+            },
+          },
+          {
+            id: 'bm_leave',
+            text: '算了，转身离开',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}看着你的背影。\n\n"胆小鬼。"你假装没听见。`,
+            },
+          },
+        ],
+      },
+    },
+    weight: 10,
+    cooldownTicks: 5,
+  };
+}
+
+// ── 市井百态 ──
+function buildCivicScene(
+  id: string, npcName: string, voice: ReturnType<typeof getTraitVoice>,
+  topic: ReturnType<typeof getProfessionTopic>, relation: number,
+  timeDesc: string, ctx: DynamicSceneContext, actionId: string,
+): PlayerScene {
+  const civicConfig: Record<string, { nm: string; desc: string }> = {
+    collect_tax: { nm: '征收税款', desc: '你拿着税单，挨家挨户征收。' },
+    charity: { nm: '乐善好施', desc: '你拿出一些铜钱，接济困难的人家。' },
+    invite_travel: { nm: '邀人同游', desc: `你提议和${npcName}一起出去走走。` },
+  };
+  const cfg = civicConfig[actionId] || civicConfig.charity;
+
+  const mainChoice: PlayerSceneChoice = actionId === 'collect_tax'
+    ? {
+        id: 'cv_main',
+        text: '"该交的税一分不能少。"',
+        consequence: {
+          nextPhase: null,
+          endingNarrative: `${npcName}${voice.upset}\n\n虽然不情不愿，但铜钱还是掏了出来。\n\n"官字两个口……"`,
+          immediateEffects: { copper: 12 },
+          relationChange: -3,
+        },
+      }
+    : actionId === 'charity'
+      ? {
+          id: 'cv_main',
+          text: `[给15文] "这点心意，不成敬意。"`,
+          condition: { field: 'copper', operator: 'gte' as const, value: 15 },
+          consequence: {
+            nextPhase: null,
+            endingNarrative: `${npcName}连连道谢。\n\n"大恩大德，没齿难忘。"\n\n你摆摆手，心里觉得做了件好事。`,
+            immediateEffects: { copper: -15 },
+            relationChange: 5,
+          },
+        }
+      : {
+          id: 'cv_main',
+          text: '"走，出去转转。"',
+          consequence: {
+            nextPhase: null,
+            endingNarrative: `你和${npcName}一路说说走走，看遍了市井百态。\n\n${npcName}${voice.chat}\n\n"今天真痛快。"${getRelationTone(relation)}`,
+            relationChange: 3,
+          },
+        };
+
+  return {
+    id,
+    name: cfg.nm,
+    description: `公共事务：${actionId}`,
+    triggerCondition: { actorTraits: [], actorForbiddenTraits: [], targetRequired: false },
+    participants: [{ role: '街坊', minCount: 1, maxCount: 1 }],
+    openingNarrative: `${timeDesc}。${cfg.desc}\n\n${npcName}${voice.greet}。`,
+    entryPhase: 'civic_1',
+    phases: {
+      civic_1: {
+        phaseId: 'civic_1',
+        narrative: `${npcName}等着你的下一步。`,
+        choices: [
+          mainChoice,
+          {
+            id: 'cv_chat',
+            text: '"先聊聊近况吧。"',
+            consequence: {
+              nextPhase: null,
+              endingNarrative: `${npcName}${voice.chat}\n\n${topic ? `"说起${topic.topic}，${topic.detail}。"` : ''}\n\n你们聊了很久。`,
+              relationChange: 1,
             },
           },
         ],

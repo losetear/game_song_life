@@ -11,6 +11,18 @@ import { PropagationEngine } from './propagation/propagationEngine';
 import { BenchmarkReport } from './server/protocol';
 import { PLAYER_SOCIAL_SCENES } from './data/sceneLibrary/player/social';
 import { PLAYER_CRISIS_SCENES } from './data/sceneLibrary/player/crisis';
+import { PLAYER_ROMANCE_SCENES } from './data/sceneLibrary/player/playerRomance';
+import { PLAYER_WORK_SCENES } from './data/sceneLibrary/player/playerWork';
+import { PLAYER_LEISURE_SCENES } from './data/sceneLibrary/player/playerLeisure';
+import { PLAYER_SPIRITUAL_SCENES } from './data/sceneLibrary/player/playerSpiritual';
+import { PLAYER_FAMILY_SCENES } from './data/sceneLibrary/player/playerFamily';
+import { PLAYER_SECRETS_SCENES } from './data/sceneLibrary/player/playerSecrets';
+import { PLAYER_SEASONAL_SCENES } from './data/sceneLibrary/player/playerSeasonal';
+import { PLAYER_NATURE_SCENES } from './data/sceneLibrary/player/playerNature';
+import {
+  TRAVEL_RANDOM_EVENTS, WEATHER_RANDOM_EVENTS,
+  TIME_RANDOM_EVENTS, EMERGENT_RANDOM_EVENTS,
+} from './data/sceneLibrary/randomEvents';
 
 const args = process.argv.slice(2);
 const isBenchmarkOnly = args.includes('--benchmark');
@@ -44,7 +56,18 @@ const factionGen = generateFactions(engine.em, gen.l0Ids, gen.l1Ids);
 engine.registerFactions(factionGen.factions);
 
 // 注册玩家多步骤场景
-engine.sceneLib.registerPlayerScenes([...PLAYER_SOCIAL_SCENES, ...PLAYER_CRISIS_SCENES]);
+engine.sceneLib.registerPlayerScenes([
+  ...PLAYER_SOCIAL_SCENES, ...PLAYER_CRISIS_SCENES,
+  ...PLAYER_ROMANCE_SCENES, ...PLAYER_WORK_SCENES, ...PLAYER_LEISURE_SCENES,
+  ...PLAYER_SPIRITUAL_SCENES, ...PLAYER_FAMILY_SCENES, ...PLAYER_SECRETS_SCENES,
+  ...PLAYER_SEASONAL_SCENES, ...PLAYER_NATURE_SCENES,
+]);
+
+// 注册随机事件池
+engine.sceneLib.registerRandomEvents([
+  ...TRAVEL_RANDOM_EVENTS, ...WEATHER_RANDOM_EVENTS,
+  ...TIME_RANDOM_EVENTS, ...EMERGENT_RANDOM_EVENTS,
+]);
 
 // 构建关系网
 const propEngine = new PropagationEngine();

@@ -112,6 +112,15 @@ export function matchesL0Condition(
     if (!cond.requiredAnyNarrativeTags.some(t => tags.includes(t))) return null;
   }
 
+  // 选择历史条件（漫野奇谭化：过去选择影响未来场景）
+  const choices = ctx.choiceHistory || [];
+  if (cond.requiredChoiceHistory && cond.requiredChoiceHistory.length > 0) {
+    if (!cond.requiredChoiceHistory.every(c => choices.includes(c))) return null;
+  }
+  if (cond.requiredAnyChoiceHistory && cond.requiredAnyChoiceHistory.length > 0) {
+    if (!cond.requiredAnyChoiceHistory.some(c => choices.includes(c))) return null;
+  }
+
   // 目标NPC
   if (!cond.targetRequired) return nearbyNpcs.length > 0 ? nearbyNpcs[0] : null; // 占位，不实际使用
 
@@ -122,6 +131,9 @@ export function matchesL0Condition(
     if (cond.targetMaxCopper !== undefined && npc.copper > cond.targetMaxCopper) return false;
     if (cond.targetRelationType && !matchesRelation(npc.relationType, cond.targetRelationType)) return false;
     if (cond.targetMinHealth !== undefined && npc.health < cond.targetMinHealth) return false;
+    // 关系分数范围（新增）
+    if (cond.targetMinRelationScore !== undefined && npc.relationScore < cond.targetMinRelationScore) return false;
+    if (cond.targetMaxRelationScore !== undefined && npc.relationScore > cond.targetMaxRelationScore) return false;
     // 阵营匹配（新增）
     if (cond.targetSameFaction && ctx.factionId !== undefined && npc.factionId !== ctx.factionId) return false;
     if (cond.targetDifferentFaction && ctx.factionId !== undefined && npc.factionId === ctx.factionId) return false;
