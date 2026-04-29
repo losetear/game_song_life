@@ -22,7 +22,7 @@ export interface NpcReaction {
 export function generateNpcReaction(
   ctx: InteractionContext,
   actionType: string,
-  consequenceApplied: boolean,
+  _consequenceApplied: boolean,
 ): NpcReaction {
   const { npc, relationLevel, player } = ctx;
   const personality = npc.personality;

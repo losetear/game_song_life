@@ -1,4 +1,4 @@
-import type { VitalComponent, IdentityComponent, WalletComponent } from '../ecs/types';
+import type { VitalComponent, IdentityComponent } from '../ecs/types';
 
 export interface PlayerOrigin {
   id: string;

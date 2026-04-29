@@ -277,13 +277,13 @@ export class NpcInteractionEngine {
   private state: InteractionState | null = null;
   private em: EntityManager;
   private relations: RelationSystem;
-  private rng: SeededRandom;
   private _playerId: number | null = null;
 
-  constructor(em: EntityManager, relations: RelationSystem, rng: SeededRandom) {
+  constructor(em: EntityManager, relations: RelationSystem, _rng: SeededRandom) {
     this.em = em;
     this.relations = relations;
-    this.rng = rng;
+    // TODO: _rng 将在未来用于随机化交互选项和NPC反应
+    void _rng; // 暂时抑制未使用参数警告
     this.templates = createTemplates();
     this.specialScenes = createSpecialScenes();
   }

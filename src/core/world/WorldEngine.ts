@@ -14,7 +14,7 @@ import { clamp } from '../utils/clamp';
 import { DecisionEngine, type DecisionContext } from '../ai/DecisionEngine';
 import { createDefaultActionRegistry, type GameAction } from '../ai/ActionRegistry';
 import { matchEvent, isChoiceAvailable, type MatchContext } from '../ai/SceneLibrary/Matcher';
-import type { BranchEvent, EventConsequence, ActiveEvent } from '../ai/SceneLibrary/types';
+import type { EventConsequence, ActiveEvent } from '../ai/SceneLibrary/types';
 import { ALL_EVENTS } from '../data/SceneDefs';
 import { NpcInteractionEngine, type InteractionState } from '../ai/NpcInteractionEngine';
 import { ConsequenceEngine, type ConsequenceResult } from '../ai/ConsequenceEngine';

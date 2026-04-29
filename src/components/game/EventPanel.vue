@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { useGameStore } from '@/stores/gameStore';
 import { usePlayerStore } from '@/stores/playerStore';
-import { useWorldStore } from '@/stores/worldStore';
 import { useUiStore } from '@/stores/uiStore';
 
 const gameStore = useGameStore();
 const playerStore = usePlayerStore();
-const worldStore = useWorldStore();
 const uiStore = useUiStore();
 
 function makeChoice(choiceId: string) {

@@ -1,5 +1,4 @@
 import type { EntityManager } from '../ecs/EntityManager';
-import { EntityType } from '../ecs/types';
 
 export interface DeathCheckResult {
   isDead: boolean;

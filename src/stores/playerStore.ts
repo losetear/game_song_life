@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { useGameStore } from './gameStore';
-import type { PlayerSnapshot } from '@/core/world/WorldEngine';
 
 export const usePlayerStore = defineStore('player', () => {
   const hunger = ref(0);

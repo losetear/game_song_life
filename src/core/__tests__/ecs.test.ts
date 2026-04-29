@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ComponentStore, ComponentRegistry } from '../ecs/ComponentStore';
-import { EntityManager, type EntityType } from '../ecs/EntityManager';
+import { EntityManager } from '../ecs/EntityManager';
+import type { EntityType } from '../ecs/types';
 
 describe('ComponentStore', () => {
   it('应该能添加和获取组件', () => {
@@ -44,7 +45,7 @@ describe('ComponentStore', () => {
     store.set(1, { hp: 100 });
     store.set(2, { hp: 80 });
     const result: number[] = [];
-    store.forEach((id, comp) => {
+    store.forEach((id, _comp) => {
       result.push(id);
     });
     expect(result.sort()).toEqual([1, 2]);
@@ -134,7 +135,7 @@ describe('EntityManager', () => {
     const exported = em.exportEntity(id);
 
     const em2 = new EntityManager();
-    em2.importEntity(exported as ReturnType<typeof em.exportEntity>);
+    em2.importEntity(exported as Parameters<typeof em2.importEntity>[0]);
     const vital = em2.getComponent(id, 'Vital');
     expect(vital).toEqual({ hunger: 80, fatigue: 70, health: 100, mood: 60 });
     const identity = em2.getComponent(id, 'Identity');

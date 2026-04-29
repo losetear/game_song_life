@@ -1,7 +1,6 @@
-import type { SeededRandom } from '../utils/random';
+/** 时间系统 — 管理游戏世界的时辰、日期、季节 */
 
 export type Season = '春' | '夏' | '秋' | '冬';
-
 const SEASON_ORDER: Season[] = ['春', '夏', '秋', '冬'];
 const DAYS_PER_SEASON = 30;
 
