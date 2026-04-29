@@ -5,6 +5,7 @@ import { useWorldStore } from '@/stores/worldStore';
 import { useUiStore } from '@/stores/uiStore';
 import { getLocation } from '@/core/data/LocationDefs';
 import TopBar from '@/components/layout/TopBar.vue';
+import StartMenu from '@/components/layout/StartMenu.vue';
 import PlayerStatus from '@/components/game/PlayerStatus.vue';
 import CharacterCreation from '@/components/panels/CharacterCreation.vue';
 import RelationPanel from '@/components/panels/RelationPanel.vue';
@@ -20,10 +21,6 @@ const playerStore = usePlayerStore();
 const worldStore = useWorldStore();
 const uiStore = useUiStore();
 const interStore = useInteractionStore();
-
-function goToCreation() {
-  gameStore.setGameState('creating');
-}
 
 function endTurn() {
   if (!gameStore.engine) return;
@@ -120,12 +117,7 @@ function currentLocationName(): string {
 
     <main class="main-area">
       <!-- 主菜单 -->
-      <div v-if="gameStore.gameState === 'menu'" class="title-screen">
-        <h1 class="game-title">市井录</h1>
-        <p class="subtitle">北宋汴京 · 生活模拟</p>
-        <p class="tagline">漫野奇谭风格 · 文字MUD</p>
-        <button class="start-btn" @click="goToCreation">开始游戏</button>
-      </div>
+      <StartMenu v-if="gameStore.gameState === 'menu'" />
 
       <!-- 角色创建 -->
       <CharacterCreation v-else-if="gameStore.gameState === 'creating'" />
@@ -262,41 +254,6 @@ body {
 .main-area {
   flex: 1;
   display: flex;
-}
-
-/* 标题画面 */
-.title-screen {
-  text-align: center;
-  padding: 40px;
-  margin: auto;
-}
-.game-title {
-  font-size: 3rem;
-  margin-bottom: 12px;
-  color: #2c3e50;
-}
-.subtitle {
-  font-size: 1.2rem;
-  color: #7f8c8d;
-  margin-bottom: 4px;
-}
-.tagline {
-  font-size: 0.9rem;
-  color: #95a5a6;
-  margin-bottom: 32px;
-}
-.start-btn {
-  padding: 12px 48px;
-  font-size: 1.1rem;
-  background: #2c3e50;
-  color: #ecf0f1;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.start-btn:hover {
-  background: #34495e;
 }
 
 /* 游戏三栏布局 */
