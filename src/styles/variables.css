@@ -1,0 +1,22 @@
+:root {
+  /* 古风配色 */
+  --ink: #2c3e50;
+  --paper: #faf7f0;
+  --paper-dark: #f5f0e8;
+  --vermillion: #c0392b;
+  --gold: #b8860b;
+  --jade: #2d8659;
+  --indigo: #2c3e80;
+  --brown: #8b4513;
+  --muted: #7f8c8d;
+
+  /* 状态色 */
+  --hp-color: #c0392b;
+  --hunger-color: #e67e22;
+  --fatigue-color: #3498db;
+  --mood-color: #9b59b6;
+
+  /* 间距 */
+  --gap: 8px;
+  --radius: 4px;
+}
