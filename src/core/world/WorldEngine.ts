@@ -745,4 +745,31 @@ export class WorldEngine {
       entities,
     };
   }
+
+  /** 从存档数据恢复游戏状态 */
+  importSave(data: import('../save/SaveManager').SaveData): void {
+    // 恢复时间
+    const targetDay = data.time.day;
+    const currentDay = this.time.getDay();
+    if (targetDay > currentDay) {
+      for (let i = currentDay; i < targetDay; i++) {
+        this.time.advanceDay();
+      }
+    }
+
+    // 恢复天气
+    // （简化处理：直接设置，实际应通过WeatherSystem内部状态恢复）
+    this.weather.set(data.weather as any);
+
+    // 恢复玩家ID
+    this.playerId = data.playerId;
+
+    // 恢复事件冷却记录
+    this.usedEventIds = [...data.usedEventIds];
+
+    // 恢复所有实体
+    for (const entityData of data.entities) {
+      this.em.importEntity({ id: entityData.id, type: entityData.type as any, components: entityData.components });
+    }
+  }
 }
