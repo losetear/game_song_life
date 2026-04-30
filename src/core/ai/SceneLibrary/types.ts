@@ -7,7 +7,9 @@ export interface SceneCondition {
   actorMinCopper?: number;
   actorMaxCopper?: number;
   actorMinHealth?: number;
+  actorMaxHealth?: number;
   actorMinHunger?: number;
+  actorMaxHunger?: number;
   actorMaxMood?: number;
 
   // 环境条件

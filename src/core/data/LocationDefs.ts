@@ -60,6 +60,48 @@ export const LOCATIONS: Record<string, LocationDef> = {
     description: '铁匠铺、木匠铺林立，叮叮当当不绝于耳。',
     connections: ['street', 'market'],
   },
+  temple: {
+    id: 'temple',
+    name: '相国寺',
+    description: '汴京最大的佛寺，香火鼎盛，也是文人雅士聚会之所。',
+    connections: ['street', 'academy'],
+  },
+  academy: {
+    id: 'academy',
+    name: '书院',
+    description: '太学所在，书声琅琅，是求学问道之地。',
+    connections: ['temple', 'street'],
+  },
+  riverside: {
+    id: 'riverside',
+    name: '汴河畔',
+    description: '汴河边柳树成荫，游人如织，是踏青赏月的好去处。',
+    connections: ['dock', 'street'],
+  },
+  gambling_den: {
+    id: 'gambling_den',
+    name: '赌坊',
+    description: '暗巷中的赌坊，鱼龙混杂，输赢只在一念之间。',
+    connections: ['market'],
+  },
+  brothel: {
+    id: 'brothel',
+    name: '樊楼',
+    description: '汴京最负盛名的酒楼，歌舞升平，达官贵人常来光顾。',
+    connections: ['street'],
+  },
+  government_office: {
+    id: 'government_office',
+    name: '开封府',
+    description: '威严的官署衙门，断案理政之地，百姓敬畏。',
+    connections: ['street'],
+  },
+  ruins: {
+    id: 'ruins',
+    name: '废弃宅院',
+    description: '城郊一处荒废多年的宅院，传闻闹鬼，无人敢近。',
+    connections: ['farmland', 'mountain'],
+  },
 };
 
 export function getLocation(id: string): LocationDef | undefined {

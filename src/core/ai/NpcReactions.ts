@@ -1,7 +1,10 @@
 import type { InteractionContext } from './NpcInteractionEngine';
 
 /** NPC反应等级 */
-export type ReactionTone = 'positive' | 'neutral' | 'negative' | 'hostile' | 'grateful';
+export type ReactionTone = 'positive' | 'neutral' | 'negative' | 'hostile' | 'grateful'
+  | 'playful' | 'shy' | 'cold' | 'romantic' | 'sad' | 'loyal'
+  | 'hesitant' | 'mentor' | 'apologetic' | 'annoyed' | 'secretive'
+  | 'solemn';
 
 /** NPC反应结果 */
 export interface NpcReaction {
@@ -231,6 +234,119 @@ export function generateNpcReaction(
         text: `"我知道一些消息，也许对你有用。"`,
         consequenceId: 'ask_info',
       },
+    }),
+
+    flirt: () => {
+      if (personality.includes('害羞')) {
+        return { text: `${npc.name}脸涨得通红，支支吾吾说不出话来。`, tone: 'shy', continueDialogue: true };
+      }
+      if (personality.includes('开朗')) {
+        return { text: `${npc.name}挑了挑眉："哟，你今天倒是嘴甜。"`, tone: 'playful', continueDialogue: true };
+      }
+      if (personality.includes('阴沉')) {
+        return { text: `${npc.name}冷冷地看了你一眼，没有接话。`, tone: 'cold', continueDialogue: false };
+      }
+      return { text: `${npc.name}愣了一下，随即别过脸去。`, tone: 'neutral', continueDialogue: true };
+    },
+
+    bet_win: () => ({
+      text: personality.includes('豪爽')
+        ? `"哈哈！愿赌服输！"` : `"啧……算你运气好。"`,
+      tone: 'playful',
+      continueDialogue: true,
+    }),
+    bet_lose: () => ({
+      text: `"承让承让！运气也是实力的一部分嘛。"`,
+      tone: 'positive',
+      continueDialogue: true,
+    }),
+
+    compete_win: () => ({
+      text: personality.includes('暴躁')
+        ? `"哼，就这点本事？"` : `"你身手不错，再练练吧。"`,
+      tone: personality.includes('暴躁') ? 'hostile' : 'positive',
+      continueDialogue: true,
+    }),
+    compete_lose: () => ({
+      text: `"好！是我输了。改日再来！"`,
+      tone: 'grateful',
+      continueDialogue: true,
+    }),
+
+    confess_accept: () => ({
+      text: `${npc.name}沉默了很久，轻轻点了点头："其实……我也有同样的感觉。"`,
+      tone: 'romantic',
+      continueDialogue: true,
+    }),
+    confess_reject: () => ({
+      text: `${npc.name}避开你的目光："对不起……我只把你当朋友。"`,
+      tone: 'sad',
+      continueDialogue: false,
+    }),
+
+    recruit_accept: () => ({
+      text: `"跟了你这么久，早就信得过。有什么事尽管吩咐！"`,
+      tone: 'loyal',
+      continueDialogue: true,
+    }),
+    recruit_decline: () => ({
+      text: `"这事儿我得想想……不是不信你，只是牵扯太多。"`,
+      tone: 'hesitant',
+      continueDialogue: true,
+    }),
+
+    teach_agree: () => ({
+      text: `"难得有你这样肯学的。来，我先教你入门。"`,
+      tone: 'mentor',
+      continueDialogue: true,
+    }),
+
+    borrow_money_yes: () => ({
+      text: `"拿去吧。不急还，但记得——人情比钱重。"`,
+      tone: 'grateful',
+      continueDialogue: true,
+    }),
+    borrow_money_no: () => ({
+      text: `"实在对不住……我自己手头也紧。"`,
+      tone: 'apologetic',
+      continueDialogue: false,
+    }),
+
+    mock_angry: () => ({
+      text: personality.includes('暴躁')
+        ? `"你再笑一个试试？"` : `"喂！太过分了吧！"`,
+      tone: 'annoyed',
+      continueDialogue: true,
+    }),
+    mock_laugh: () => ({
+      text: `"行啊你，胆子不小！"`,
+      tone: 'playful',
+      continueDialogue: true,
+    }),
+
+    comfort_thanks: () => ({
+      text: `${npc.name}深吸一口气："谢谢你听我说这些。"`,
+      tone: 'grateful',
+      continueDialogue: true,
+    }),
+
+    conspire_interest: () => ({
+      text: `${npc.name}左右看了看，压低声音："这事……找个没人的地方细说。"`,
+      tone: 'secretive',
+      continueDialogue: true,
+    }),
+
+    blood_oath: () => ({
+      text: `"不求同年同月同日生，但求同年同月同日死！"`,
+      tone: 'solemn',
+      continueDialogue: true,
+    }),
+
+    drinking_challenge: () => ({
+      text: personality.includes('豪爽')
+        ? `"来来来！干了这一碗！"` : `"少喝点吧，明天还有事呢。"`,
+      tone: 'playful',
+      continueDialogue: true,
     }),
   };
 

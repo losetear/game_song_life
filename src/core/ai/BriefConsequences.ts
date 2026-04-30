@@ -108,6 +108,74 @@ export function getBriefConsequence(
       },
       nextAct: '__end__',
     }),
+
+    flirt: () => ({
+      narrative: () => {
+        if (ctx.relationLevel === '至交' || ctx.relationLevel === '好友') {
+          return `你半开玩笑地说了句俏皮话，${ctx.npc.name}脸一红，嗔怪地瞪了你一眼，嘴角却忍不住上扬。`;
+        }
+        if (ctx.relationLevel === '熟人') {
+          return `你试探性地开了个暧昧的玩笑，${ctx.npc.name}愣了一下，随即不自然地转移了话题。`;
+        }
+        return `你说了一句带点调笑意味的话，${ctx.npc.name}有些意外地看着你。`;
+      },
+      npcVital: { mood: 3 },
+      relationChange: 2,
+    }),
+
+    bet: () => {
+      const win = ctx.environment.day % 2 === 0;
+      return {
+        narrative: () =>
+          win
+            ? `你和${ctx.npc.name}打了个赌——猜下一个进门的人是男是女。你赢了！${ctx.npc.name}不情愿地掏出五文钱给你。`
+            : `你和${ctx.npc.name}打赌，结果你输了。五文钱进了对方的口袋。`,
+        playerCopper: win ? 5 : -5,
+        playerVital: { mood: win ? 5 : -3 },
+        relationChange: win ? 2 : 1,
+      };
+    },
+
+    compete: () => {
+      const playerWins = ctx.player.health > ctx.npc.health;
+      return {
+        narrative: () =>
+          playerWins
+            ? `你和${ctx.npc.name}比试了一番，你占了上风！${ctx.npc.name}气喘吁吁地认输："你的身手确实不错。"`
+            : `${ctx.npc.name}的身手比你更胜一筹。你输了比试，但不服输的劲头反而让关系更近了些。`,
+        playerVital: playerWins ? { mood: 10, fatigue: 8 } : { mood: -5, fatigue: 8 },
+        relationChange: playerWins ? 3 : 1,
+        ...(playerWins ? { narrativeTag: '胜过某人' } : {}),
+      };
+    },
+
+    introduce: () => ({
+      narrative: () =>
+        `你向${ctx.npc.name}提起自己认识的一些人，表示愿意引荐认识。${ctx.npc.name}感兴趣地问了几句详情。`,
+      relationChange: 2,
+    }),
+
+    mock: () => ({
+      narrative: () => {
+        if (ctx.npc.personality.includes('暴躁')) {
+          return `你戏弄了${ctx.npc.name}几句，对方脸色一沉："你再说一遍试试？"气氛顿时紧张起来。`;
+        }
+        if (ctx.npc.personality.includes('开朗')) {
+          return `你开了几个无伤大雅的玩笑，${ctx.npc.name}哈哈大笑，反过来也捉弄了你几句。两人闹成一团。`;
+        }
+        return `你调侃了${ctx.npc.name}几句，对方无奈地摇了摇头。`;
+      },
+      npcVital: { mood: ctx.npc.personality.includes('暴躁') ? -5 : 3 },
+      relationChange: ctx.npc.personality.includes('开朗') ? 2 : -1,
+    }),
+
+    comfort: () => ({
+      narrative: () =>
+        `你看${ctx.npc.name}心情不好，轻声安慰了几句。${ctx.npc.name}沉默了一会儿，低声说："谢谢你。"`,
+      npcVital: { mood: 6 },
+      playerVital: { mood: 2 },
+      relationChange: 3,
+    }),
   };
 
   const factory = map[templateId];

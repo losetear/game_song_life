@@ -196,6 +196,68 @@ function createTemplates(): InteractionTemplate[] {
       conditionHint: '没有需要道歉的事',
     },
     {
+      id: 'flirt', name: '调情', depth: 'brief', costAp: 0,
+      condition: (ctx) => ctx.relation >= 15 && ctx.relation < 60,
+      conditionHint: '关系不够亲密',
+    },
+    {
+      id: 'bet', name: '打赌', depth: 'scene', costAp: 1, costCopper: 5,
+      condition: (ctx) => ctx.player.copper >= 5 && ctx.relation >= 10,
+      conditionHint: '需5文铜钱+好感≥10',
+    },
+    {
+      id: 'compete', name: '比试', depth: 'scene', costAp: 1,
+      condition: (ctx) => ctx.relation >= 0 && ctx.player.health > 40,
+      conditionHint: '身体太虚弱',
+    },
+    {
+      id: 'confess', name: '表白', depth: 'drama', costAp: 1,
+      condition: (ctx) => ctx.relation >= 55 && !ctx.player.narrativeTags.includes('已表白过'),
+      conditionHint: '好感不够或已表白过',
+    },
+    {
+      id: 'recruit', name: '招募', depth: 'scene', costAp: 1,
+      condition: (ctx) => ctx.relation >= 40 && ctx.player.copper >= 50,
+      conditionHint: '需好感≥40且50文铜钱',
+    },
+    {
+      id: 'teach', name: '传授', depth: 'scene', costAp: 1,
+      condition: (ctx) => ctx.npc.profession !== ctx.player.profession && ctx.relation >= 35,
+      conditionHint: '需好感≥35且职业不同',
+    },
+    {
+      id: 'borrow_money', name: '借钱', depth: 'scene', costAp: 1,
+      condition: (ctx) => ctx.relation >= 45 && ctx.npc.copper >= 30,
+      conditionHint: '对方没钱或好感不够',
+    },
+    {
+      id: 'introduce', name: '引荐', depth: 'brief', costAp: 0,
+      condition: (ctx) => ctx.relation >= 50,
+      conditionHint: '需好感≥50',
+    },
+    {
+      id: 'mock', name: '戏弄', depth: 'brief', costAp: 0,
+      condition: (ctx) => ctx.relation > -20 && ctx.relation < 20,
+      conditionHint: '关系太熟或太差都不适合',
+    },
+    {
+      id: 'conspire', name: '密谋', depth: 'drama', costAp: 1,
+      condition: (ctx) => ctx.relation >= 55 && ctx.npc.personality.some(
+        (p) => ['阴沉', '狡猾', '暴躁'].includes(p),
+      ),
+      conditionHint: '需极高好感+特定性格',
+    },
+    {
+      id: 'comfort', name: '安慰', depth: 'brief', costAp: 0,
+      condition: (ctx) => ctx.npc.mood < 30 && ctx.relation >= 15,
+      conditionHint: '对方心情还行',
+    },
+    {
+      id: 'request_favor', name: '请求帮忙', depth: 'scene', costAp: 1,
+      condition: (ctx) => ctx.relation >= 30,
+      conditionHint: '需好感≥30',
+    },
+    {
       id: 'say_goodbye', name: '告别', depth: 'brief', costAp: 0,
       condition: () => true,
     },
@@ -265,6 +327,78 @@ function createSpecialScenes(): SpecialScene[] {
       depth: 'scene',
       condition: (ctx) =>
         ctx.npc.copper < 20 && ctx.relation >= 30 && ctx.player.copper >= 30,
+    },
+    {
+      id: 'romance_blossom',
+      name: '情愫暗生',
+      depth: 'scene',
+      condition: (ctx) =>
+        ctx.relation >= 35 && ctx.relation < 60 && ctx.environment.season === '春',
+    },
+    {
+      id: 'rivalry',
+      name: '较劲',
+      depth: 'scene',
+      condition: (ctx) =>
+        ctx.relation >= 10 && ctx.relation < 45 && ctx.npc.personality.includes('暴躁'),
+    },
+    {
+      id: 'mentorship',
+      name: '拜师学艺',
+      depth: 'drama',
+      condition: (ctx) =>
+        ctx.relation >= 50 && ctx.player.narrativeTags.includes('学过' + ctx.npc.profession),
+    },
+    {
+      id: 'business_partnership',
+      name: '合伙做生意',
+      depth: 'scene',
+      condition: (ctx) =>
+        ctx.relation >= 40 && ctx.player.copper >= 30 && ctx.npc.copper >= 20
+        && ['商贩', '掌柜', '茶馆老板'].includes(ctx.npc.profession),
+    },
+    {
+      id: 'blood_oath',
+      name: '结拜兄弟',
+      depth: 'drama',
+      condition: (ctx) =>
+        ctx.relation >= 65 && ctx.npc.personality.some(
+          (p) => ['豪爽', '义气', '正直'].includes(p),
+        ),
+    },
+    {
+      id: 'secret_shared',
+      name: '倾诉秘密',
+      depth: 'scene',
+      condition: (ctx) =>
+        ctx.relation >= 55 && ctx.player.narrativeTags.length >= 3,
+    },
+    {
+      id: 'rescue_from_danger',
+      name: '危难相救',
+      depth: 'drama',
+      condition: (ctx) =>
+        ctx.relation >= 30 && ctx.player.health < 30,
+    },
+    {
+      id: 'drinking_challenge',
+      name: '酒桌较量',
+      depth: 'scene',
+      condition: (ctx) =>
+        ctx.environment.locationId === 'teahouse' && ctx.relation >= 10,
+    },
+    {
+      id: 'gambling_debt_help',
+      name: '赌债纠纷',
+      depth: 'scene',
+      condition: (ctx) =>
+        ctx.npc.copper < 10 && ctx.relation >= 20 && ctx.player.copper >= 20,
+    },
+    {
+      id: 'family_introduction',
+      name: '引见家人',
+      depth: 'scene',
+      condition: (ctx) => ctx.relation >= 60,
     },
   ];
 }
