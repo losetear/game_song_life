@@ -432,4 +432,409 @@ export const ADVENTURE_EVENTS: BranchEvent[] = [
       },
     ],
   },
+  {
+    id: 'adventure_hidden_cave',
+    name: '隐秘洞窟',
+    goalCategory: 'adventure',
+    weight: 5,
+    cooldownDays: 32,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['mountain', 'forest'],
+      actorMinHealth: 45,
+      dayRange: [12, 999],
+      requiredAnyNarrativeTags: ['探索者', '知道山洞位置'],
+    },
+    openingNarrative:
+      '你在密林深处发现了一个被藤蔓遮蔽的洞口。扒开藤蔓，洞中透出微弱的蓝光。你犹豫了一下，点燃火把慢慢走了进去。洞壁上长满了发光的苔藓，空气中弥漫着奇异的花香。',
+    choices: [
+      {
+        id: 'cave_explore_deep',
+        text: '深入探索',
+        consequence: {
+          narrative:
+            '你沿着洞穴走了约莫百步，豁然开朗——这是一个巨大的地下溶洞！中央有一方碧绿的水潭，潭边生长着你从未见过的奇花异草。你小心翼翼地采了几株，这东西在药铺应该能卖个好价钱。',
+          effects: { copper: 35, mood: 15, fatigue: 12 },
+          narrativeTag: '发现秘境',
+          transformations: [
+            { type: 'gain_tag', value: '见闻广博', description: '探索过隐秘洞窟' },
+          ],
+        },
+      },
+      {
+        id: 'cave_collect_only',
+        text: '只采集些苔藓就离开',
+        consequence: {
+          narrative:
+            '你不想冒险深入，只在洞口采集了一些发光苔藓。这些苔藓拿回去可以当夜灯用，在黑市上也有销路。',
+          effects: { copper: 15, mood: 6 },
+          narrativeTag: '采集发光苔藓',
+        },
+      },
+      {
+        id: 'cave_mark_return',
+        text: '做个标记，改日再来',
+        consequence: {
+          narrative:
+            '你在洞口做了个记号，打算有准备之后再来探索。回家后你一直想着那个神秘的蓝光……',
+          effects: { mood: 3 },
+          narrativeTag: '发现秘洞位置',
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_old_well',
+    name: '古井秘密',
+    goalCategory: 'adventure',
+    weight: 4,
+    cooldownDays: 38,
+    narrativeWeight: 'milestone',
+    conditions: {
+      location: ['residential', 'farmland', 'temple'],
+      actorMinHealth: 40,
+      dayRange: [15, 999],
+      forbiddenNarrativeTags: ['古井探索者'],
+    },
+    openingNarrative:
+      '废弃的庭院里有一口干涸的古井。井口刻着"此地无银三百两"的字样。你探头往里看，井壁上似乎有蹬踏的痕迹，而且深处隐约有风吹来——井底另有乾坤！',
+    choices: [
+      {
+        id: 'well_climb_down',
+        text: '爬下去看看',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你顺着井壁小心翼翼地爬下去。井底果然有一条横向的地道！沿着地道走了数十步，你发现了一个密室——墙上挂着前朝的藏宝图一角和一袋银币。看来有人曾在这里藏匿财物。',
+          effects: { copper: 45, mood: 18, fatigue: 15, health: -5 },
+          narrativeTag: '古井探索者',
+          transformations: [
+            { type: 'gain_tag', value: '知道宝藏线索', description: '获得藏宝图一角' },
+          ],
+        },
+      },
+      {
+        id: 'well_throw_stone',
+        text: '扔块石头探探路',
+        consequence: {
+          narrative:
+            '你捡了块石头扔下去。过了很久才传来回声——井很深，而且底部似乎是空的。你不敢冒险下去，但心里一直想着那口井……',
+          effects: { mood: 2 },
+          narrativeTag: '古井好奇者',
+        },
+      },
+      {
+        id: 'well_ignore',
+        text: '太危险了，离开',
+        consequence: {
+          narrative:
+            '你摇摇头离开了。几天后你听说有人在附近挖出了前朝的文物，你心里隐隐有些后悔……',
+          effects: { mood: -3 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_abandoned_temple',
+    name: '荒庙夜话',
+    goalCategory: 'adventure',
+    weight: 5,
+    cooldownDays: 28,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['mountain', 'forest'],
+      weather: ['雨', '阴'],
+      actorMinHealth: 35,
+      dayRange: [8, 999],
+    },
+    openingNarrative:
+      '夜幕降临，雨越下越大。你在山中发现了一座破败的庙宇，决定进去避雨。庙中神像残破，但香案上却有一盏刚点燃的油灯——有人刚刚来过！',
+    choices: [
+      {
+        id: 'temple_wait',
+        text: '等雨停了再走',
+        consequence: {
+          narrative:
+            '你在角落里坐下，闭目养神。半夜时分，你听见外面有人说话的声音……"就在这儿交易……"你屏住呼吸，听出这是几个江湖人物的密谈。天快亮时他们离开了，你发现地上丢了一个小包袱。',
+          effects: { copper: 20, mood: 12 },
+          narrativeTag: '偷听到秘密',
+        },
+      },
+      {
+        id: 'temple_hide',
+        text: '躲起来看看是谁',
+        consequence: {
+          narrative:
+            '你躲到神像后面。不一会儿，三个黑衣人走了进来，开始搬运藏在神像后面的东西。你认出其中一人竟然是通缉的江洋大盗！等他们走后，你发现神像后面还有一个小箱子他们没来得及带走。',
+          effects: { copper: 40, mood: 10, fatigue: 8 },
+          narrativeTag: '神像藏宝',
+        },
+      },
+      {
+        id: 'temple_leave_immediately',
+        text: '此地不宜久留',
+        consequence: {
+          narrative:
+            '你不想惹麻烦，冒着雨离开了庙宇。第二天你听说那座庙被烧了，据说是因为江湖仇杀……',
+          effects: { health: -5, mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_waterfall_cave',
+    name: '瀑布洞穴',
+    goalCategory: 'adventure',
+    weight: 6,
+    cooldownDays: 35,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['mountain', 'riverbank'],
+      season: ['春', '夏'],
+      actorMinHealth: 50,
+      dayRange: [10, 999],
+    },
+    openingNarrative:
+      '山中瀑布飞流直下，水声震天。你注意到瀑布后面似乎有个凹陷，走近一看——果然有个洞穴！但水流湍急，要钻进去需要冒险。',
+    choices: [
+      {
+        id: 'waterfall_dash',
+        text: '冲过瀑布进入洞穴',
+        condition: { field: 'health', operator: 'gte', value: 60 },
+        consequence: {
+          narrative:
+            '你深吸一口气，猛地冲进瀑布！冰凉的水流打在身上，但你成功钻进了后面的洞穴。洞中干燥温暖，石壁上刻满了古代剑客的练功心得。你仔细研读了片刻，感觉受益匪浅。',
+          effects: { mood: 20, health: -8, fatigue: 10 },
+          narrativeTag: '水帘洞探险',
+          transformations: [
+            { type: 'gain_tag', value: '身手不凡', description: '学习古代剑客心得' },
+          ],
+        },
+      },
+      {
+        id: 'waterfall_observe',
+        text: '先观察一下',
+        consequence: {
+          narrative:
+            '你在岸边观察了许久，发现水流在某些时候会变小。你耐心等待，终于等到水流减弱的间隙，小心翼翼地钻了进去。洞穴中没什么特别的东西，但有几块漂亮的玉石。',
+          effects: { copper: 18, mood: 8, fatigue: 5 },
+          narrativeTag: '耐心探索',
+        },
+      },
+      {
+        id: 'waterfall_give_up',
+        text: '太危险了，放弃',
+        consequence: {
+          narrative:
+            '你看了看那湍急的水流，摇摇头离开了。虽然没看到洞穴里面是什么，但至少保住了平安。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_jungle_ruins',
+    name: '丛林遗迹',
+    goalCategory: 'adventure',
+    weight: 4,
+    cooldownDays: 45,
+    narrativeWeight: 'milestone',
+    conditions: {
+      location: ['mountain', 'forest'],
+      requiredAnyNarrativeTags: ['探索者', '古籍持有者'],
+      actorMinHealth: 45,
+      dayRange: [20, 999],
+    },
+    openingNarrative:
+      '深入密林后，你发现了一片被藤蔓覆盖的古老建筑。断壁残垣间依稀可见精美的石雕，似乎是一处前朝的遗迹。阳光透过树冠洒下，给这片废墟增添了神秘的色彩。',
+    choices: [
+      {
+        id: 'ruins_excavate',
+        text: '仔细挖掘',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你花了大半天时间清理废墟，发现了一块保存完好的石碑，上面记载着一段历史。更重要的是，你在石座下发现了一个精致的青铜器——这东西卖给古董商人能值不少钱！',
+          effects: { copper: 55, mood: 18, fatigue: 18 },
+          narrativeTag: '考古发现',
+          transformations: [
+            { type: 'gain_tag', value: '见闻广博', description: '研究过古代遗迹' },
+          ],
+        },
+      },
+      {
+        id: 'ruins_sketch',
+        text: '画下来，不挖掘',
+        consequence: {
+          narrative:
+            '你拿出纸笔，仔细绘制了遗迹的平面图和石碑上的文字。虽然没有得到实物，但这些资料卖给学者也能赚些钱。',
+          effects: { copper: 25, mood: 12 },
+          narrativeTag: '记录古迹',
+        },
+      },
+      {
+        id: 'ruins_leave',
+        text: '只是看看就走',
+        consequence: {
+          narrative:
+            '你在遗迹中漫步了一会儿，感受着历史的厚重。虽然没有得到什么，但这种与古人对话的感觉让你心中平静。',
+          effects: { mood: 8, fatigue: 3 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_mysterious_merchant',
+    name: '神秘商人',
+    goalCategory: 'adventure',
+    weight: 5,
+    cooldownDays: 30,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['mountain', 'forest', 'street'],
+      dayRange: [12, 999],
+      actorMinCopper: 20,
+      forbiddenNarrativeTags: ['神秘商人相识'],
+    },
+    openingNarrative:
+      '山间小路上，一个推着独轮车的商人叫住了你："年轻人，看看我的货？都是好东西。"车上摆满了各种奇奇怪怪的物品——石头、骨头、金属片……但最引人注目的是一个古旧的罗盘。',
+    choices: [
+      {
+        id: 'merchant_buy_compass',
+        text: '买下罗盘',
+        condition: { field: 'copper', operator: 'gte', value: 30 },
+        consequence: {
+          narrative:
+            '你花了三十文买下罗盘。商人嘿嘿一笑："这东西能指引你找到想要的东西……"你半信半疑，但后来发现罗盘确实有些奇怪——在某些地方指针会疯狂转动。',
+          effects: { copper: -30, mood: 10 },
+          narrativeTag: '神秘商人相识',
+          transformations: [
+            { type: 'gain_tag', value: '拥有奇物', description: '获得神秘罗盘' },
+          ],
+        },
+      },
+      {
+        id: 'merchant_chat',
+        text: '和他聊聊这些货物的来历',
+        consequence: {
+          narrative:
+            '你和商人攀谈起来。他告诉你这些东西都是从各地收集的"有缘之物"。聊着聊着，你发现他对江湖秘闻了如指掌。你请他喝了壶茶，他告诉你一个关于山中宝藏的线索。',
+          effects: { copper: -8, mood: 8 },
+          narrativeTag: '神秘商人相识',
+          transformations: [
+            { type: 'gain_tag', value: '知道宝藏线索', description: '从神秘商人处得知' },
+          ],
+        },
+      },
+      {
+        id: 'merchant_ignore',
+        text: '不感兴趣',
+        consequence: {
+          narrative:
+            '你摇摇头走开了。商人也不在意，继续推着车往前走。后来你听说有人从他那里买到了真正的好东西……',
+          effects: { mood: -1 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_battlefield_relics',
+    name: '古战场遗物',
+    goalCategory: 'adventure',
+    weight: 5,
+    cooldownDays: 40,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['mountain', 'farmland'],
+      actorMinHealth: 40,
+      dayRange: [15, 999],
+    },
+    openingNarrative:
+      '你在山中发现了多年前古战场的遗迹。残破的兵器、朽烂的盔甲散落在荒草中，风一吹发出呜呜的声响。这里曾是一场惨烈战役的发生地。',
+    choices: [
+      {
+        id: 'battlefield_search',
+        text: '仔细搜寻',
+        consequence: {
+          narrative:
+            '你在废墟中仔细翻找，发现了一把还能使用的断剑和一面盾牌。虽然不是什么宝物，但经过打磨修复还能用。更重要的是，你在尸骨下发现了一个钱袋。',
+          effects: { copper: 22, mood: 8, fatigue: 10 },
+          narrativeTag: '战场拾遗',
+          transformations: [
+            { type: 'gain_tag', value: '身手不凡', description: '获得战利品武器' },
+          ],
+        },
+      },
+      {
+        id: 'battlefield_pray',
+        text: '为死者祈祷',
+        consequence: {
+          narrative:
+            '你双手合十，为那些战死的英魂祈祷。不知是不是错觉，你感觉周围的阴冷气息消散了不少。离开时，你在路边发现了一块可以用来磨刀的好石头。',
+          effects: { mood: 12 },
+          narrativeTag: '祭奠亡灵',
+        },
+      },
+      {
+        id: 'battlefield_leave_quickly',
+        text: '速速离开',
+        consequence: {
+          narrative:
+            '你总觉得这里阴森森的，加快脚步离开了。虽然什么都没得到，但心里踏实多了。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'adventure_mountain_hermit',
+    name: '山中隐士',
+    goalCategory: 'adventure',
+    weight: 4,
+    cooldownDays: 50,
+    narrativeWeight: 'milestone',
+    conditions: {
+      location: ['mountain', 'temple'],
+      dayRange: [25, 999],
+      actorMaxMood: 60,
+      requiredAnyNarrativeTags: ['探索者', '身手不凡'],
+    },
+    openingNarrative:
+      '深山之中，你发现了一间简陋的茅屋。屋外种着几亩菜地，一个白发老者正在浇灌。看到你，他既不惊讶也不招呼，只是淡淡地说："难得有人能找到这里。"你突然意识到，这位老者定非等闲之辈。',
+    choices: [
+      {
+        id: 'hermit_seek_guidance',
+        text: '向他请教',
+        condition: { field: 'mood', operator: 'gte', value: 30 },
+        consequence: {
+          narrative:
+            '你在茅屋前跪下，恳求老者指点。老者看了你半晌，终于开口："心若如止水，万物自明。"他传授了你一套呼吸吐纳的方法。你按照方法修炼了几日，感觉身体轻盈了许多。',
+          effects: { health: 20, mood: 15, fatigue: -10 },
+          narrativeTag: '隐士传艺',
+          transformations: [
+            { type: 'gain_tag', value: '身手不凡', description: '习得养生之法' },
+          ],
+        },
+      },
+      {
+        id: 'hermit_help_work',
+        text: '帮他做些农活',
+        consequence: {
+          narrative:
+            '你二话不说，拿起锄头帮老者锄草、浇水。老者也不说话，只是默默看着。日落时分，他递给你一个布包，里面是一些草药和干粮，还有一张纸条："有缘再见。"',
+          effects: { hunger: 15, health: 5, mood: 10 },
+          narrativeTag: '隐世高人相识',
+        },
+      },
+      {
+        id: 'hermit_respect_bow',
+        text: '恭敬作揖后离开',
+        consequence: {
+          narrative:
+            '你不想打扰这位隐士的清净，恭敬作揖后告辞。老者微微点头，目送你离开。下山路上，你觉得神清气爽，仿佛卸下了什么重担。',
+          effects: { mood: 8, fatigue: -5 },
+        },
+      },
+    ],
+  },
 ];

@@ -404,4 +404,314 @@ export const DISASTER_EVENTS: BranchEvent[] = [
       },
     ],
   },
+  {
+    id: 'disaster_blizzard',
+    name: '风雪围困',
+    goalCategory: 'disaster',
+    weight: 4,
+    cooldownDays: 45,
+    narrativeWeight: 'major',
+    conditions: {
+      season: ['冬'],
+      weather: ['雪'],
+      dayRange: [30, 999],
+      location: ['mountain', 'street', 'residential'],
+    },
+    openingNarrative:
+      '一场突如其来的暴风雪封锁了道路，积雪没过了膝盖。你被困在了半路的一家客栈里，和十几个路人挤在一起取暖。外面的风声呼啸，谁也不知道这雪要下到什么时候。',
+    choices: [
+      {
+        id: 'blizzard_share',
+        text: '分享食物和干粮',
+        condition: { field: 'hunger', operator: 'gte', value: 30 },
+        consequence: {
+          narrative:
+            '你拿出自己的干粮分给大家。一个小女孩把她的半块烤红薯塞给你吃。风雪中人们互相取暖，度过了最难熬的三天。雪停后，你们互相扶持着走出了困境。',
+          effects: { hunger: -15, mood: 10 },
+          narrativeTag: '雪中互助',
+          relationChange: 6,
+        },
+      },
+      {
+        id: 'blizzard_wait',
+        text: '节省粮食等待雪停',
+        consequence: {
+          narrative:
+            '你精打细算地分配每一口食物，一个人缩在角落里等。第三天雪终于停了，你冻得几乎失去知觉，但总算活下来了。',
+          effects: { hunger: -20, health: -8, mood: -5 },
+          narrativeTag: '雪灾幸存',
+        },
+      },
+      {
+        id: 'blizzard_brave',
+        text: '冒险冒雪前行',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你裹紧衣服，一头冲进风雪中。走了半个时辰，体力不支倒在雪地里。幸好被后来的搜救队发现，捡回一条命。',
+          effects: { health: -15, fatigue: 15, hunger: -10, mood: -8 },
+          narrativeTag: '雪中遇险',
+        },
+      },
+    ],
+  },
+  {
+    id: 'disaster_landslide',
+    name: '山体滑坡',
+    goalCategory: 'disaster',
+    weight: 3,
+    cooldownDays: 55,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['mountain', 'farmland'],
+      weather: ['雨'],
+      dayRange: [15, 999],
+      actorMinHealth: 35,
+    },
+    openingNarrative:
+      '连日暴雨后，山上传来轰隆隆的闷响。你抬头望去——半座山都在往下滑！泥石流如黑色巨龙般冲了下来，直奔山下的村庄！',
+    choices: [
+      {
+        id: 'landslide_warn',
+        text: '大声警告村民',
+        condition: { field: 'health', operator: 'gte', value: 40 },
+        consequence: {
+          narrative:
+            '你一边往村里跑一边大喊"快跑！泥石流来了！"村民们听到你的喊声纷纷逃命。泥石流摧毁了十几间房屋，但因为你的警告，无人死亡。村民们感激涕零。',
+          effects: { health: -5, fatigue: 10, mood: 15 },
+          narrativeTag: '预警救命',
+          relationChange: 12,
+          transformations: [
+            { type: 'gain_tag', value: '救命恩人', description: '泥石流预警' },
+          ],
+        },
+      },
+      {
+        id: 'landslide_rescue',
+        text: '帮助被困的人',
+        consequence: {
+          narrative:
+            '你冲进即将被泥石流吞没的区域，背出了一个被困的老人。刚跑到高处，身后的房屋就被泥石流冲垮了。老人握着你的手不停地颤抖。',
+          effects: { health: -8, fatigue: 12, mood: 12 },
+          narrativeTag: '泥石流救人',
+          relationChange: 10,
+        },
+      },
+      {
+        id: 'landslide_run',
+        text: '先逃命要紧',
+        consequence: {
+          narrative:
+            '你转身就往高处跑，头也不回。身后是泥石流吞没房屋的巨响。你安全了，但心里一直惦记着那些来不及逃跑的人……',
+          effects: { fatigue: 8, mood: -5 },
+          narrativeTag: '泥石流逃生',
+        },
+      },
+    ],
+  },
+  {
+    id: 'disaster_food_poisoning',
+    name: '食物中毒',
+    goalCategory: 'disaster',
+    weight: 5,
+    cooldownDays: 40,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['residential', 'street', 'market'],
+      dayRange: [8, 999],
+      actorMaxHealth: 60,
+    },
+    openingNarrative:
+      '城中突然爆发了集体食物中毒事件！据说是有人在米铺出售霉变的陈米，已经有几十人上吐下泻被抬进了医馆。官府紧急封锁了那家米铺，正在追查米铺老板。',
+    choices: [
+      {
+        id: 'poison_help',
+        text: '去医馆帮忙',
+        condition: { field: 'health', operator: 'gte', value: 45 },
+        consequence: {
+          narrative:
+            '你主动到医馆帮忙照顾病人、煎药喂药。忙活了两三天，你也累得够呛，但看到病人们一个个好转，心里很欣慰。郎中送了你一包好茶叶。',
+          effects: { copper: 3, health: -5, fatigue: 12, mood: 8 },
+          narrativeTag: '医患互助',
+          relationChange: 5,
+        },
+      },
+      {
+        id: 'poison_expose',
+        text: '揭露米铺黑幕',
+        consequence: {
+          narrative:
+            '你听说过那家米铺以前就干过这种事，主动到衙门作证。你的证词帮助官府定案，米铺老板被罚得倾家荡产。受害者们听说后纷纷来感谢你。',
+          effects: { mood: 12 },
+          narrativeTag: '伸张正义',
+          relationChange: 8,
+        },
+      },
+      {
+        id: 'poison_avoid',
+        text: '庆幸自己没买那家的米',
+        consequence: {
+          narrative:
+            '你想起来前几天差点就在那家米铺买米了，幸好临时改了主意。看着那些中毒的人，你既同情又后怕。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'disaster_bridge_collapse',
+    name: '桥梁坍塌',
+    goalCategory: 'disaster',
+    weight: 4,
+    cooldownDays: 50,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['dock', 'riverbank', 'street'],
+      dayRange: [20, 999],
+      weather: ['雨', '阴'],
+    },
+    openingNarrative:
+      '汴河上的大桥突然发出断裂的巨响！桥面从中间垮塌，正在桥上行走的人们纷纷坠入河中。岸上人群发出惊恐的尖叫，有人已经跳下去救人。',
+    choices: [
+      {
+        id: 'bridge_rescue',
+        text: '跳下去救人',
+        condition: { field: 'health', operator: 'gte', value: 55 },
+        consequence: {
+          narrative:
+            '你毫不犹豫地跳进湍急的河水中。连拖带拽，你救起了三个人，自己也被水呛得半死，小腿还被木头划伤。上岸后，获救者的家人跪在地上向你磕头。',
+          effects: { health: -12, fatigue: 15, mood: 15, copper: 8 },
+          narrativeTag: '水中救人',
+          relationChange: 15,
+          transformations: [
+            { type: 'gain_tag', value: '乐善好施', description: '水中救人' },
+          ],
+        },
+      },
+      {
+        id: 'bridge_assist',
+        text: '在岸边协助',
+        consequence: {
+          narrative:
+            '你不会游泳，但在岸边帮忙拉人、找绳索、倒热水。虽然没有直接下水，但也尽了力。救援结束后你累得浑身是汗。',
+          effects: { fatigue: 10, mood: 6 },
+          narrativeTag: '协助救援',
+          relationChange: 3,
+        },
+      },
+      {
+        id: 'bridge_watch',
+        text: '在旁边看着',
+        consequence: {
+          narrative:
+            '你站在人群中，看着这惊心动魄的一幕。有人指责你为什么不去帮忙，你无言以对。事后你捐了五文钱给遇难者家属。',
+          effects: { copper: -5, mood: -8 },
+          narrativeTag: '袖手旁观',
+          relationChange: -5,
+        },
+      },
+    ],
+  },
+  {
+    id: 'disaster_granary_theft',
+    name: '粮仓失窃',
+    goalCategory: 'disaster',
+    weight: 4,
+    cooldownDays: 60,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['residential', 'street'],
+      dayRange: [25, 999],
+      season: ['冬', '春'],
+    },
+    openingNarrative:
+      '官府的粮仓被盗了！数百石粮食一夜之间不翼而飞。这是灾年的救命粮，现在却不知去向。官府震怒，全城戒严搜查，家家户户都被盘问。',
+    choices: [
+      {
+        id: 'theft_report',
+        text: '提供线索',
+        condition: { field: 'mood', operator: 'gte', value: 35 },
+        consequence: {
+          narrative:
+            '你前几天夜里看到几辆马车从粮仓方向驶出，形迹可疑。主动向捕快提供线索后，官府根据你的描述抓住了盗贼团伙。你领到了十文赏金。',
+          effects: { copper: 10, mood: 10 },
+          narrativeTag: '破案有功',
+          relationChange: 8,
+        },
+      },
+      {
+        id: 'theft_suspect',
+        text: '被当作嫌疑人',
+        consequence: {
+          narrative:
+            '因为你最近买了一些粮食，被怀疑是赃物。被带到衙门盘问了半天才洗清嫌疑。虽然放回来了，但心里憋屈得很。',
+          effects: { mood: -10, fatigue: 5 },
+          narrativeTag: '被冤枉',
+        },
+      },
+      {
+        id: 'theft_ignore',
+        text: '不参与这事',
+        consequence: {
+          narrative:
+            '你闭门不出，等待事态平息。半个月后案子破了，盗粮的是粮仓内部的人监守自盗。你庆幸自己没卷进去。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'disaster_corvee',
+    name: '强征劳役',
+    goalCategory: 'disaster',
+    weight: 4,
+    cooldownDays: 70,
+    narrativeWeight: 'milestone',
+    conditions: {
+      location: ['residential', 'street', 'farmland'],
+      dayRange: [30, 999],
+      actorMinHealth: 40,
+      forbiddenNarrativeTags: ['服过劳役'],
+    },
+    openingNarrative:
+      '官府贴出告示——朝廷要修筑河堤/城墙，征召民夫。每家必须出一人劳役三个月，不去的要缴纳役银三十文。差役已经开始挨家抓人了。',
+    choices: [
+      {
+        id: 'corvee_accept',
+        text: '去服劳役',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你和其他民夫一起被押送到工地。从早干到晚，吃的是粗茶淡饭，睡的是工棚。三个月后你被释放时，瘦了二十斤，手上全是老茧，但也练就了一身力气。',
+          effects: { health: -15, fatigue: 25, copper: -5, mood: -10 },
+          narrativeTag: '服过劳役',
+          transformations: [
+            { type: 'gain_tag', value: '吃苦耐劳', description: '服过劳役' },
+          ],
+        },
+      },
+      {
+        id: 'corvee_pay',
+        text: '交钱免役',
+        condition: { field: 'copper', operator: 'gte', value: 30 },
+        consequence: {
+          narrative:
+            '你咬咬牙拿出三十文铜钱交了役银。这笔钱是你好不容易攒下的，但想想工地上的苦，还是花钱买平安吧。',
+          effects: { copper: -30, mood: -5 },
+          narrativeTag: '纳钱免役',
+        },
+      },
+      {
+        id: 'corvee_hide',
+        text: '躲起来',
+        consequence: {
+          narrative:
+            '你躲到了山里的亲戚家避风头。差役抓不到你，把你家的东西搬走了一些抵债。三个月后你回来，家中空了不少，但人没事。',
+          effects: { copper: -10, mood: -8, hunger: -15 },
+          narrativeTag: '逃避劳役',
+          relationChange: -3,
+        },
+      },
+    ],
+  },
 ];

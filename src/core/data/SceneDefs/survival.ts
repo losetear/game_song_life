@@ -432,4 +432,357 @@ export const SURVIVAL_EVENTS: BranchEvent[] = [
       },
     ],
   },
+  {
+    id: 'famine_year',
+    name: '灾年饥荒',
+    goalCategory: 'survival',
+    weight: 5,
+    cooldownDays: 30,
+    narrativeWeight: 'major',
+    conditions: {
+      dayRange: [20, 999],
+      season: ['春', '夏'],
+      actorMaxCopper: 30,
+    },
+    openingNarrative: '今年年景不好，连续三个月没下一场像样的雨。田里的庄稼大片枯死，米价飞涨。街边的乞丐越来越多，连寻常人家也开始勒紧裤腰带过日子。',
+    choices: [
+      {
+        id: 'eat_less',
+        text: '缩减口粮',
+        consequence: {
+          narrative: '你开始每天只吃两顿，每顿只吃半饱。虽然省下了一些钱，但整个人日渐消瘦，干活也没力气了。',
+          effects: { hunger: -15, health: -8, fatigue: 10, copper: 8 },
+          narrativeTag: '忍饥度荒年',
+        },
+      },
+      {
+        id: 'find_alt_food',
+        text: '找替代食物',
+        condition: { field: 'health', operator: 'gte', value: 40 },
+        consequence: {
+          narrative: '你去城外挖野菜、剥树皮，甚至抓田鼠。虽然不好吃，但总算填饱了肚子。村里人都佩服你的生存本事。',
+          effects: { hunger: 10, mood: -5, fatigue: -5 },
+          narrativeTag: '度过饥荒',
+        },
+      },
+      {
+        id: 'rely_on_community',
+        text: '参加村舍共济',
+        consequence: {
+          narrative: '村里组织了共济会，每家每户凑出一点粮食，统一分配。你虽然分的不多，但好歹有口饭吃。大家共渡难关，感情也加深了。',
+          effects: { hunger: 12, mood: 5 },
+          narrativeTag: '参与共济',
+          relationChange: 8,
+        },
+      },
+    ],
+  },
+  {
+    id: 'lost_in_wild',
+    name: '荒野迷路',
+    goalCategory: 'survival',
+    weight: 6,
+    cooldownDays: 20,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['mountain'],
+      actorMinHealth: 30,
+    },
+    openingNarrative: '你在山林里追逐猎物，不知不觉越走越远。等你反应过来时，四周都是一模一样的树木，根本分不清东南西北。太阳已经开始西斜，山林间暗了下来。',
+    choices: [
+      {
+        id: 'climb_tree',
+        text: '爬树观察地形',
+        condition: { field: 'health', operator: 'gte', value: 45 },
+        consequence: {
+          narrative: '你爬上一棵大树，仔细观察四周。终于看到远处有炊烟升起！你记住了方向，小心地顺着那走，两个时辰后终于看到了村子的灯光。',
+          effects: { fatigue: -15, health: -5, mood: 8 },
+          narrativeTag: '独自识途',
+        },
+      },
+      {
+        id: 'follow_water',
+        text: '顺着溪流走',
+        consequence: {
+          narrative: '你记得老人说过"水流终归入江河"，于是沿着溪流往下走。溪流越来越大，最终汇入汴河。你沿着河岸走，终于看到了熟悉的码头。',
+          effects: { fatigue: -20, hunger: -15, health: -8, mood: 5 },
+          narrativeTag: '循水识路',
+        },
+      },
+      {
+        id: 'wait_dawn',
+        text: '等待天亮再找路',
+        consequence: {
+          narrative: '你找个避风的山洞蜷缩了一夜。第二天清晨，透过树叶的缝隙，你辨认出了方向。虽然饿了一晚，但总算平安回到了村子。',
+          effects: { hunger: -20, fatigue: -10, mood: -3 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'cold_wave',
+    name: '寒潮来袭',
+    goalCategory: 'survival',
+    weight: 5,
+    cooldownDays: 15,
+    narrativeWeight: 'minor',
+    conditions: {
+      season: ['冬'],
+      location: ['residential', 'street'],
+    },
+    openingNarrative: '一场突如其来的寒潮让气温骤降。窗户纸都被吹破了，屋里和外面一样冷。你裹着所有能找到的衣物，还是冻得直打哆嗦。',
+    choices: [
+      {
+        id: 'buy_charcoal',
+        text: '买炭取暖',
+        condition: { field: 'copper', operator: 'gte', value: 15 },
+        consequence: {
+          narrative: '你跑到集市买了一筐炭。点上火盆，屋子里终于暖和起来了。虽然花了不少钱，但这冷天没火实在熬不住。',
+          effects: { copper: -15, health: 5, mood: 10 },
+          narrativeTag: '购置过冬炭',
+        },
+      },
+      {
+        id: 'borrow_heat',
+        text: '去邻居家蹭火',
+        condition: { field: 'mood', operator: 'gte', value: 25 },
+        consequence: {
+          narrative: '你抱着被子来到邻居家，说能不能挤一挤。邻居爽快地答应了，几家人围坐在一起烤火取暖，聊了一晚上的天。',
+          effects: { health: 3, mood: 8 },
+          narrativeTag: '邻里互助',
+          relationChange: 6,
+        },
+      },
+      {
+        id: 'exercise_warm',
+        text: '运动取暖',
+        consequence: {
+          narrative: '你在屋里不停做运动——跳跃、俯卧撑、来回踱步。折腾了半个时辰，身上终于暖和了些，但也饿得更快了。',
+          effects: { fatigue: -10, hunger: -10, health: 3 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'plague_outbreak',
+    name: '疫病蔓延',
+    goalCategory: 'survival',
+    weight: 4,
+    cooldownDays: 35,
+    narrativeWeight: 'milestone',
+    conditions: {
+      dayRange: [30, 999],
+      season: ['春', '夏'],
+    },
+    openingNarrative: '城里开始流行一种怪病——发热、咳嗽、浑身无力。药铺门口排起了长龙，已经有好几个人病死了。街上的行人都用布掩住口鼻，神色匆匆。',
+    choices: [
+      {
+        id: 'quarantine_self',
+        text: '自我隔离',
+        consequence: {
+          narrative: '你把门窗封死，除了采买什么人都不见，每天喝药铺卖的预防汤药。虽然憋闷，但你活了下来，而邻居家已经有两个人染病了。',
+          effects: { mood: -10, health: 3, copper: -10 },
+          narrativeTag: '躲过瘟疫',
+        },
+      },
+      {
+        id: 'help_sick',
+        text: '帮助病人',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative: '你加入了志愿者队伍，帮着给病人送药、送饭。虽然很危险，但你觉得总得有人站出来。幸运的是你没被感染，还救了几个人。',
+          effects: { health: -15, mood: 15 },
+          narrativeTag: '抗疫英雄',
+          relationChange: 15,
+        },
+      },
+      {
+        id: 'flee_city',
+        text: '暂时离开城里',
+        condition: { field: 'copper', operator: 'gte', value: 20 },
+        consequence: {
+          narrative: '你觉得城里太危险，收拾行李去乡下亲戚家避了半个月。回来时疫病已经平息，但你错过了不少赚钱的机会。',
+          effects: { copper: -20, mood: -5 },
+          narrativeTag: '避疫离城',
+        },
+      },
+    ],
+  },
+  {
+    id: 'well_drying',
+    name: '水井干涸',
+    goalCategory: 'survival',
+    weight: 6,
+    cooldownDays: 18,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['residential', 'farmland'],
+      season: ['夏', '秋'],
+    },
+    openingNarrative: '村口那口老井——村里人祖祖辈辈喝水的井——今天居然打不上水了！你探头一看，井底只剩下一滩浑水。几个老人围在井边叹气，说几十年没遇过这种事。',
+    choices: [
+      {
+        id: 'dig_deeper',
+        text: '组织人挖深井',
+        condition: { field: 'health', operator: 'gte', value: 40 },
+        consequence: {
+          narrative: '你提议挖深井，带头干了起来。几个壮劳力也加入了。挖了三天三夜，终于找到了新的水源！村民们纷纷感谢你，说你救了全村人。',
+          effects: { fatigue: -25, health: -10, mood: 15 },
+          narrativeTag: '为村挖井',
+          relationChange: 12,
+        },
+      },
+      {
+        id: 'find_river',
+        text: '去远处河里取水',
+        consequence: {
+          narrative: '你每天天不亮就起床，走三里路去汴河取水。一来一回要一个多时辰，累得半死，但总比没水强。',
+          effects: { fatigue: -15, mood: -8 },
+          narrativeTag: '远途取水',
+        },
+      },
+      {
+        id: 'collect_rainwater',
+        text: '收集雨水',
+        consequence: {
+          narrative: '你把家里所有能装水的容器都拿出来，放在院里接雨水。虽然不够喝，但煮饭烧水勉强够用。就是等雨来的这几天渴得难受。',
+          effects: { health: -5, mood: -5 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'dog_pack_attack',
+    name: '野狗围攻',
+    goalCategory: 'survival',
+    weight: 5,
+    cooldownDays: 16,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['street', 'residential'],
+      dayRange: [10, 999],
+      actorMinHealth: 35,
+    },
+    openingNarrative: '你走在巷子里，突然发现前后都被堵住了——七八只瘦骨嶙峋的野狗慢慢围了上来，眼睛里闪着凶光。它们显然把你当成了猎物，龇着獠牙低吼着。',
+    choices: [
+      {
+        id: 'fight_dogs',
+        text: '拔出棍棒反击',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative: '你抄起路边的木棍，猛打领头那只狗的脑袋。其他狗见状吓得四散奔逃。你腿上被咬了一口，但总算赶跑了它们。',
+          effects: { health: -12, mood: 10 },
+          narrativeTag: '打退野狗',
+        },
+      },
+      {
+        id: 'climb_wall',
+        text: '爬到高处躲避',
+        consequence: {
+          narrative: '你敏捷地翻上了旁边的院墙。野狗们在下面转了几圈，没找到办法上来，最后悻悻地走了。你在墙上等了半个时辰才敢下来。',
+          effects: { fatigue: -5, mood: 5 },
+          narrativeTag: '避过野狗',
+        },
+      },
+      {
+        id: 'throw_food',
+        text: '扔食物引开',
+        condition: { field: 'hunger', operator: 'lte', value: 60 },
+        consequence: {
+          narrative: '你掏出怀里半个馒头，用力扔向远处。野狗们立刻扑了上去，争抢起来。你趁机溜走，可惜那本来是你今天的午饭。',
+          effects: { hunger: -8, mood: 3 },
+          narrativeTag: '舍食保命',
+        },
+      },
+    ],
+  },
+  {
+    id: 'house_collapse',
+    name: '房屋坍塌',
+    goalCategory: 'survival',
+    weight: 3,
+    cooldownDays: 40,
+    narrativeWeight: 'milestone',
+    conditions: {
+      location: ['residential'],
+      weather: ['雨', '雪'],
+      dayRange: [15, 999],
+    },
+    openingNarrative: '夜深人静，你正准备睡觉，突然听到梁柱发出"咔咔"的响声。还没反应过来，屋顶的一角就塌了下来！尘土飞扬中，你意识到整间屋子随时可能倒塌。',
+    choices: [
+      {
+        id: 'escape_immediately',
+        text: '立刻冲出去',
+        consequence: {
+          narrative: '你什么都没拿就往外冲。刚跑出院子，整个屋子就轰然倒塌了。你站在寒风中，只穿了单衣，庆幸自己反应快。但家当全没了……',
+          effects: { copper: -25, mood: -20, health: -8 },
+          narrativeTag: '房屋倒塌',
+        },
+      },
+      {
+        id: 'save_important',
+        text: '抢救重要物品',
+        condition: { field: 'health', operator: 'gte', value: 45 },
+        consequence: {
+          narrative: '你冒着危险冲进屋里，抢救出了几件重要物品和铜钱。房梁在你身后砸下，你滚了出来，受了些伤，但保住了最重要的东西。',
+          effects: { copper: -10, health: -18, mood: -5 },
+          narrativeTag: '险中求生',
+        },
+      },
+      {
+        id: 'warn_neighbors',
+        text: '先提醒邻居',
+        condition: { field: 'mood', operator: 'gte', value: 30 },
+        consequence: {
+          narrative: '你先跑到邻居家敲门叫人，然后才去抢救自己的东西。邻居一家安全出来了，但你的损失更重了。邻居拉着你的手说要报答你。',
+          effects: { copper: -20, health: -12, mood: 5 },
+          narrativeTag: '舍己救人',
+          relationChange: 15,
+        },
+      },
+    ],
+  },
+  {
+    id: 'exhaustion_collapse',
+    name: '过劳倒下',
+    goalCategory: 'survival',
+    weight: 7,
+    cooldownDays: 14,
+    narrativeWeight: 'minor',
+    conditions: {
+      dayRange: [8, 999],
+      actorMinFatigue: 70,
+    },
+    openingNarrative: '这些天你一直在连轴转——白天干活，晚上还熬夜。今天早上起来，你突然觉得眼前一黑，双腿发软，差点站不住。心脏跳得厉害，手也在发抖。',
+    choices: [
+      {
+        id: 'rest_properly',
+        text: '好好休息几天',
+        consequence: {
+          narrative: '你咬咬牙推掉了所有活计，躺了整整两天。虽然少赚了钱，但身体总算恢复了。以后可不能再这样拼命了。',
+          effects: { fatigue: 30, health: 10, copper: -8, mood: 5 },
+          narrativeTag: '注重身体',
+        },
+      },
+      {
+        id: 'push_through',
+        text: '继续硬撑',
+        consequence: {
+          narrative: '你觉得不能休息，强撑着继续干活。第三天你在工地上晕倒了，被人抬回家。躺了一周才缓过来，得不偿失。',
+          effects: { health: -25, fatigue: -10, copper: -15, mood: -15 },
+          narrativeTag: '过劳伤身',
+        },
+      },
+      {
+        id: 'seek_medical',
+        text: '去看郎中调理',
+        condition: { field: 'copper', operator: 'gte', value: 10 },
+        consequence: {
+          narrative: '你去了药铺，郎中给你把脉后说是"劳伤过度"，开了一些补养的药。你按时服药，好好休息，身体慢慢恢复了。',
+          effects: { copper: -10, health: 15, fatigue: 15, mood: 8 },
+          narrativeTag: '调理身体',
+        },
+      },
+    ],
+  },
 ];

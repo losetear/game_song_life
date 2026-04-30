@@ -11,6 +11,8 @@ export interface SceneCondition {
   actorMinHunger?: number;
   actorMaxHunger?: number;
   actorMaxMood?: number;
+  actorMinFatigue?: number;
+  actorMaxFatigue?: number;
 
   // 环境条件
   location?: string[];

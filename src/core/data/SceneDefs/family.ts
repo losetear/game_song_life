@@ -332,4 +332,295 @@ export const FAMILY_EVENTS: BranchEvent[] = [
       },
     ],
   },
+  {
+    id: 'family_reunion_dinner',
+    name: '团圆家宴',
+    goalCategory: 'family',
+    weight: 6,
+    cooldownDays: 60,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['residential'],
+      season: ['冬'],
+      dayRange: [80, 100],
+      actorMinCopper: 20,
+    },
+    openingNarrative:
+      '除夕将至，你在汴京的几位族中亲戚商议着一起吃个团圆饭。大家凑份子买菜做酒，热闹热闹。有人提议到你那儿聚——毕竟你住的地方还算宽敞。',
+    choices: [
+      {
+        id: 'reunion_host',
+        text: '欣然同意做东',
+        condition: { field: 'copper', operator: 'gte', value: 25 },
+        consequence: {
+          narrative:
+            '你买了鸡鸭鱼肉和好酒，和亲人们一起忙活了一整天。席间推杯换盏，叙旧话新。虽然花了不少钱，但这份温情是钱买不到的。',
+          effects: { copper: -25, mood: 15, hunger: 20 },
+          narrativeTag: '团圆年',
+          relationChange: 6,
+        },
+      },
+      {
+        id: 'reunion_contribute',
+        text: '同意但只出一份钱',
+        consequence: {
+          narrative:
+            '你说场地没问题，但钱要大家AA。亲戚们也觉得公平。大家一起出钱出力，吃了一顿热热闹闹的年夜饭。',
+          effects: { copper: -15, mood: 12, hunger: 18 },
+          narrativeTag: '共度除夕',
+          relationChange: 4,
+        },
+      },
+      {
+        id: 'reunion_decline',
+        text: '今年不方便',
+        consequence: {
+          narrative:
+            '你推说今年有事。亲戚们理解地去别处聚了。除夕夜你一个人吃着冷饭，听着邻里的欢声笑语，心里有些孤寂。',
+          effects: { mood: -8 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'family_elder_advice',
+    name: '长者教诲',
+    goalCategory: 'family',
+    weight: 5,
+    cooldownDays: 45,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['residential', 'teahouse'],
+      dayRange: [20, 999],
+    },
+    openingNarrative:
+      '族中的一位德高望重的长辈找你谈话。他语重心长地说："你年纪也不小了，该为将来做些打算。不要只顾眼前，要着眼长远啊。"',
+    choices: [
+      {
+        id: 'advice_listen_attentively',
+        text: '虚心请教',
+        condition: { field: 'mood', operator: 'gte', value: 40 },
+        consequence: {
+          narrative:
+            '你恭敬地请长辈指点。他讲了做人的道理、经商的门道、处世的经验。你听得频频点头，感觉胜读十年书。临走时他还给了你一些实用的建议。',
+          effects: { mood: 10 },
+          narrativeTag: '受长者教诲',
+          relationChange: 5,
+        },
+      },
+      {
+        id: 'advice_polite',
+        text: '礼貌应付',
+        consequence: {
+          narrative:
+            '你表面上应承着，心里并不太在意。长者看出你的敷衍，叹了口气便不再多言。你后来才意识到，他说的许多话确实有道理。',
+          effects: { mood: 2 },
+        },
+      },
+      {
+        id: 'advice_decline',
+        text: '委婉拒绝说教',
+        consequence: {
+          narrative:
+            '你笑着说晚辈有自己的打算。长者也不勉强，只是意味深长地说："年轻人都这样，等吃了亏就明白了。"',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'family_cousin_competition',
+    name: '堂兄弟较劲',
+    goalCategory: 'family',
+    weight: 5,
+    cooldownDays: 50,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['residential', 'street'],
+      dayRange: [15, 999],
+    },
+    openingNarrative:
+      '你的一位堂兄最近发了财，回乡来摆阔。他在酒席上得意洋洋地说起自己的生意经，言语间总带着点优越感。几个亲戚也跟着附和夸他能干。',
+    choices: [
+      {
+        id: 'compete_congratulate',
+        text: '大方祝贺',
+        consequence: {
+          narrative:
+            '你端起酒杯："堂兄有本事，做弟弟的佩服！"堂兄很高兴，当晚也没少喝。虽然他爱显摆，但确实凭本事挣的钱，你也由衷替他高兴。',
+          effects: { mood: 5 },
+          narrativeTag: '堂兄和睦',
+          relationChange: 3,
+        },
+      },
+      {
+        id: 'compete_show_off',
+        text: '也不示弱',
+        condition: { field: 'copper', operator: 'gte', value: 20 },
+        consequence: {
+          narrative:
+            '你也不甘示弱，说了自己最近的一些成就。两人你来我往地较量着，其他亲戚看得直乐。酒散时你们都喝多了，但谁也没服谁。',
+          effects: { copper: -20, mood: 3, health: -3 },
+          narrativeTag: '兄弟较劲',
+        },
+      },
+      {
+        id: 'compete_ignore',
+        text: '不参与这种比较',
+        consequence: {
+          narrative:
+            '你低头吃饭，偶尔回应几句。这种场合多言无益，随他们去说吧。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'family_ancestral_graves',
+    name: '祭扫祖坟',
+    goalCategory: 'family',
+    weight: 5,
+    cooldownDays: 70,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['mountain', 'farmland'],
+      season: ['春'],
+      dayRange: [25, 45],
+    },
+    openingNarrative:
+      '清明节前夕，族中组织人去祭扫祖坟。几位长辈年纪大了走不动山路，正年轻力壮的你被推举参加。这是一件关乎孝道的大事。',
+    choices: [
+      {
+        id: 'graves_participate',
+        text: '积极参加',
+        condition: { field: 'health', operator: 'gte', value: 45 },
+        consequence: {
+          narrative:
+            '你和其他几个年轻人一起上山，除草、培土、上香、烧纸。站在祖先的坟前，你感受到了血脉延续的厚重。下山时族长夸你们是好后生。',
+          effects: { fatigue: 10, mood: 10, health: -2 },
+          narrativeTag: '祭祖功臣',
+          relationChange: 4,
+        },
+      },
+      {
+        id: 'graves_pay_fine',
+        text: '出钱请人代替',
+        condition: { field: 'copper', operator: 'gte', value: 15 },
+        consequence: {
+          narrative:
+            '你实在走不开，出了十五文钱请族中一位年轻人代你去祭扫。虽然不是自己去的，但礼数也到了。',
+          effects: { copper: -15, mood: 2 },
+          narrativeTag: '出钱祭祖',
+        },
+      },
+      {
+        id: 'graves_decline',
+        text: '借口不去',
+        consequence: {
+          narrative:
+            '你说身体不适推辞了。族中长辈有些失望，但也没有勉强。后来听说祭祖时有人提到了你的名字，说希望明年你能来。',
+          effects: { mood: -3 },
+          narrativeTag: '缺席祭祖',
+        },
+      },
+    ],
+  },
+  {
+    id: 'family_rival_reconcile',
+    name: '化解宿怨',
+    goalCategory: 'family',
+    weight: 4,
+    cooldownDays: 55,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['residential', 'teahouse'],
+      dayRange: [25, 999],
+      requiredNarrativeTags: ['因忙误事', '拒绝过远亲'],
+    },
+    openingNarrative:
+      '族中有人来为之前的不愉快向你道歉。原来之前因为一些误会，双方有些隔阂。现在对方主动来化解，希望冰释前嫌。',
+    choices: [
+      {
+        id: 'reconcile_accept',
+        text: '大度接受道歉',
+        condition: { field: 'mood', operator: 'gte', value: 35 },
+        consequence: {
+          narrative:
+            '你笑着说了句"过去的事就别提了"，两人握手言和。从此族中的关系和睦了许多，大家都称赞你心胸宽广。',
+          effects: { mood: 12 },
+          narrativeTag: '化解恩怨',
+          relationChange: 8,
+        },
+      },
+      {
+        id: 'reconcile_cautious',
+        text: '表示还需要时间',
+        consequence: {
+          narrative:
+            '你说"好吧，我看以后的表现"。对方有些尴尬，但也只能接受。你们的关系有所缓和，但恢复如初还需要时间。',
+          effects: { mood: 3 },
+          narrativeTag: '关系缓和',
+        },
+      },
+      {
+        id: 'reconcile_reject',
+        text: '拒绝和解',
+        consequence: {
+          narrative:
+            '你冷冷地说"有些事不是道歉就能算了"。对方悻悻地走了。族中有人说你太固执，也有人理解你的立场。',
+          effects: { mood: -2 },
+          narrativeTag: '记仇',
+          relationChange: -3,
+        },
+      },
+    ],
+  },
+  {
+    id: 'family_tutor_younger',
+    name: '教导后辈',
+    goalCategory: 'family',
+    weight: 5,
+    cooldownDays: 40,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['residential'],
+      dayRange: [18, 999],
+      requiredAnyNarrativeTags: ['读过书', '学过打铁', '身手不凡'],
+    },
+    openingNarrative:
+      '族中几个晚辈想跟你学些本事——有的想读书识字，有的想学门手艺。他们的父母也来恳求你："孩子们就佩服你，你教教他们吧。"',
+    choices: [
+      {
+        id: 'tutor_accept',
+        text: '答应教导',
+        condition: { field: 'mood', operator: 'gte', value: 40 },
+        consequence: {
+          narrative:
+            '你每周抽出时间教这几个晚辈。虽然占用了自己的时间，但看着他们一天天进步，心里很有成就感。孩子们的父母也常常送些土特产来感谢你。',
+          effects: { mood: 12, fatigue: 5, copper: 8, hunger: 5 },
+          narrativeTag: '为人师表',
+          relationChange: 6,
+        },
+      },
+      {
+        id: 'tutor_part_time',
+        text: '偶尔指点一下',
+        consequence: {
+          narrative:
+            '你说自己时间有限，但可以偶尔指点。这样既尽了本分，也不会太累。孩子们也很珍惜每次请教的机会。',
+          effects: { mood: 6 },
+          narrativeTag: '指点过后辈',
+        },
+      },
+      {
+        id: 'tutor_decline',
+        text: '现在没有精力',
+        consequence: {
+          narrative:
+            '你婉拒了。虽然有些遗憾，但你现在确实忙于生计，分身乏术。族中人也表示理解。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
 ];

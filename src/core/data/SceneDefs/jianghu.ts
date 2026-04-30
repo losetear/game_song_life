@@ -471,4 +471,401 @@ export const JIANGHU_EVENTS: BranchEvent[] = [
       },
     ],
   },
+  {
+    id: 'jianghu_duel_invitation',
+    name: '决斗邀约',
+    goalCategory: 'jianghu',
+    weight: 5,
+    cooldownDays: 40,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['street', 'teahouse', 'residential'],
+      requiredAnyNarrativeTags: ['身手不凡', '擂台冠军'],
+      dayRange: [20, 999],
+      actorMinHealth: 50,
+    },
+    openingNarrative:
+      '一个年轻剑客找到你，递上拜帖："家师听闻阁下身手不凡，特派在下前来邀约，三日后城外十里亭切磋一二，点到为止。"对方态度恭敬，但字里行间透着几分不怀好意。',
+    choices: [
+      {
+        id: 'duel_accept',
+        text: '接受挑战',
+        condition: { field: 'health', operator: 'gte', value: 60 },
+        consequence: {
+          narrative:
+            '你如期赴约。对方的师父是一位中年剑客，剑法凌厉。你们斗了百十回合不分胜负，最后收剑言和。对方说"后生可畏"，你从他身上也学到了不少。',
+          effects: { health: -8, fatigue: 12, mood: 15 },
+          narrativeTag: '剑客切磋',
+          relationChange: 6,
+        },
+      },
+      {
+        id: 'duel_decline_polite',
+        text: '婉拒',
+        consequence: {
+          narrative:
+            '你拱手道："在下愧不敢当，请代我向令师致歉。"年轻人有些失望，但也只能作罢。后来你听说那个门派四处找人比武，赢的少输的多……',
+          effects: { mood: 2 },
+        },
+      },
+      {
+        id: 'duel_trap',
+        text: '怀疑有诈，先调查',
+        consequence: {
+          narrative:
+            '你没有立刻答应，而是托人打听了那个门派的底细。原来他们专门用这种方式设局讹钱！你回绝了邀请，避免了麻烦。',
+          effects: { copper: -2, mood: 8 },
+          narrativeTag: '识破阴谋',
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_bounty_hunter',
+    name: '悬赏通缉',
+    goalCategory: 'jianghu',
+    weight: 5,
+    cooldownDays: 45,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['street', 'teahouse', 'market'],
+      dayRange: [15, 999],
+      requiredAnyNarrativeTags: ['身手不凡', '帮派成员'],
+      actorMinHealth: 45,
+    },
+    openingNarrative:
+      '官府贴出告示：悬赏五十文捉拿一名逃犯。此人武功不弱，已经伤了三名捕快。告示前围满了江湖人士——有人想发财，有人想扬名。',
+    choices: [
+      {
+        id: 'bounty_pursue',
+        text: '参与追捕',
+        condition: { field: 'health', operator: 'gte', value: 55 },
+        consequence: {
+          narrative:
+            '你根据线索追踪了三天，终于在城外破庙中发现了逃犯。经过一番恶斗，你将其制服带回衙门。五十文赏金到手，你在江湖上也小有名气了。',
+          effects: { copper: 50, health: -12, fatigue: 15, mood: 18 },
+          narrativeTag: '捕快助手',
+          relationChange: 10,
+        },
+      },
+      {
+        id: 'bounty_cooperate',
+        text: '和捕快合作',
+        consequence: {
+          narrative:
+            '你主动找到负责此案的捕头，提供线索并协助布控。逃犯被捕后，捕快分给你二十文钱："多谢兄弟帮忙，这是你应得的。"',
+          effects: { copper: 20, mood: 10 },
+          narrativeTag: '协助捕快',
+          relationChange: 8,
+        },
+      },
+      {
+        id: 'bounty_ignore',
+        text: '不参与此事',
+        consequence: {
+          narrative:
+            '这种事风险太大，你不想惹麻烦。后来听说逃犯被一个武林高手抓住了，那个高手得了五十文赏金，在江湖上声名大噪。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_secret_society',
+    name: '秘密会社',
+    goalCategory: 'jianghu',
+    weight: 4,
+    cooldownDays: 60,
+    narrativeWeight: 'milestone',
+    conditions: {
+      location: ['teahouse', 'street', 'residential'],
+      dayRange: [30, 999],
+      actorMinCopper: 30,
+      forbiddenNarrativeTags: ['秘密会社成员'],
+    },
+    openingNarrative:
+      '深夜，一个神秘人找到你，递上一块黑铁令牌："我们看中你的才能，想邀请你加入。入会费三十文，每月可分红，遇事有兄弟照应。当然，有些事是秘密，不可对外人道。"',
+    choices: [
+      {
+        id: 'society_join',
+        text: '加入秘密会社',
+        condition: { field: 'copper', operator: 'gte', value: 30 },
+        consequence: {
+          narrative:
+            '你交了入会费，成了这个秘密会社的成员。他们原来是互助性质的地下组织，成员来自各行各业，彼此照应。你在城里多了一张保护网，但也背负了保密的义务。',
+          effects: { copper: -30, mood: 10 },
+          narrativeTag: '秘密会社成员',
+          relationChange: 5,
+        },
+      },
+      {
+        id: 'society_investigate',
+        text: '先调查一下底细',
+        consequence: {
+          narrative:
+            '你没有贸然加入，而是托人打听了这个组织的来历。原来他们确实是互助性质，但也做过一些灰色的事。你权衡再三，决定还是不卷入为好。',
+          effects: { copper: -5, mood: 3 },
+          narrativeTag: '了解过秘密会社',
+        },
+      },
+      {
+        id: 'society_refuse',
+        text: '拒绝邀请',
+        consequence: {
+          narrative:
+            '你摇摇头拒绝了。神秘人也不纠缠，只是说："机会只有一次，好自为之。"后来你听说加入他们的人有的发了财，有的惹了麻烦……',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_martial_manual',
+    name: '武林秘籍',
+    goalCategory: 'jianghu',
+    weight: 4,
+    cooldownDays: 55,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['market', 'street', 'teahouse'],
+      dayRange: [25, 999],
+      requiredAnyNarrativeTags: ['身手不凡', '身手不凡'],
+      actorMinCopper: 20,
+    },
+    openingNarrative:
+      '集市地摊上，一本破旧的书册引起了你的注意。摊主神神秘秘地说："这是前朝一位武学大家的遗作，里面记载着绝世武功。五十文，不二价。"翻开一看，里面确实有些奇怪的图画和文字。',
+    choices: [
+      {
+        id: 'manual_buy',
+        text: '买下来研究',
+        condition: { field: 'copper', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你花了五十文买下那本书。回家仔细研读，虽然有些内容看不懂，但你照着练习了几个月，身手确实有了进步。后来听行家说，这本书确实有些价值。',
+          effects: { copper: -50, mood: 15, health: 5 },
+          narrativeTag: '得获秘籍',
+          transformations: [
+            { type: 'gain_tag', value: '身手不凡', description: '通过秘籍提升武功' },
+          ],
+        },
+      },
+      {
+        id: 'manual_bargain',
+        text: '讨价还价',
+        condition: { field: 'copper', operator: 'gte', value: 30 },
+        consequence: {
+          narrative:
+            '你和摊主讨价还价，最后以三十文成交。虽然拿到手了，但你总觉得可能是被忽悠了——这本书看起来太破了，能是真的吗？',
+          effects: { copper: -30, mood: 5 },
+          narrativeTag: '买了本可疑的书',
+        },
+      },
+      {
+        id: 'manual_ignore',
+        text: '不上当',
+        consequence: {
+          narrative:
+            '你摇摇头走开了。后来听说有人买到了真秘籍，也有人买到了废纸。这种事情真假难辨，还是算了。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_escort_mission',
+    name: '护送任务',
+    goalCategory: 'jianghu',
+    weight: 5,
+    cooldownDays: 38,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['market', 'teahouse', 'street'],
+      dayRange: [18, 999],
+      requiredAnyNarrativeTags: ['身手不凡', '帮派成员'],
+      actorMinHealth: 50,
+    },
+    openingNarrative:
+      '一位富商在茶馆寻找护卫："有一批货物要运往邻州，路上不太平。酬劳二十文，来回十天。需要身手好的。"周围几个武林人士已经开始打听了。',
+    choices: [
+      {
+        id: 'escort_accept',
+        text: '接受任务',
+        condition: { field: 'health', operator: 'gte', value: 55 },
+        consequence: {
+          narrative:
+            '你接下了这个活。路上果然遇到了一伙劫匪，你奋力保护货物，虽然受了些伤，但货物完好无损地送到。富商很满意，额外赏了你五文钱。',
+          effects: { copper: 25, health: -8, fatigue: 18, mood: 12 },
+          narrativeTag: '完成护送',
+          relationChange: 6,
+        },
+      },
+      {
+        id: 'escort_gather_info',
+        text: '先打听路线情况',
+        consequence: {
+          narrative:
+            '你没有立刻接下，而是向熟悉路况的人打听。原来那条路最近确实不太平，已经好几批商队被劫了。你庆幸自己没有贸然接活——这趟差事风险太大。',
+          effects: { copper: -2, mood: 3 },
+          narrativeTag: '谨慎行事',
+        },
+      },
+      {
+        id: 'escort_decline',
+        text: '风险太大，拒绝',
+        consequence: {
+          narrative:
+            '你婉言谢绝了。后来听说接活的人在路上遇劫，一人受了重伤。你心里暗自庆幸没有接这趟活。',
+          effects: { mood: 2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_tavern_brawl',
+    name: '酒馆斗殴',
+    goalCategory: 'jianghu',
+    weight: 6,
+    cooldownDays: 20,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['teahouse', 'market'],
+      dayRange: [8, 999],
+      actorMinHealth: 45,
+    },
+    openingNarrative:
+      '酒馆里几个醉汉开始寻衅滋事，掀翻了邻桌的酒菜。有人劝架，结果被打了。场面眼看就要失控，酒保急得团团转却不敢上前。',
+    choices: [
+      {
+        id: 'brawl_stop',
+        text: '出面制止',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你站起来走到醉汉面前："各位，差不多就行了。"领头醉汉挥拳就打，你侧身避开，一招将他制服在地。其他醉汉见状都清醒了七分，乖乖赔了钱溜了。',
+          effects: { health: -3, mood: 10, fatigue: 5 },
+          narrativeTag: '制止斗殴',
+          relationChange: 5,
+        },
+      },
+      {
+        id: 'brawl_help_victim',
+        text: '帮被打的人',
+        consequence: {
+          narrative:
+            '你没有直接和醉汉对上，而是把被打的人扶到安全地带。那人连连道谢，非要请你喝酒。',
+          effects: { mood: 6, copper: -3, hunger: 5 },
+          narrativeTag: '帮助受害者',
+        },
+      },
+      {
+        id: 'brawl_leave',
+        text: '不惹麻烦',
+        consequence: {
+          narrative:
+            '你趁乱结账离开了。后来听说醉汉们被赶来的巡街捕快带走了，酒馆一片狼藉。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_weapon_master',
+    name: '兵器大师',
+    goalCategory: 'jianghu',
+    weight: 4,
+    cooldownDays: 50,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['workshop', 'market'],
+      dayRange: [22, 999],
+      requiredAnyNarrativeTags: ['身手不凡', '擂台冠军'],
+      actorMinCopper: 40,
+    },
+    openingNarrative:
+      '城中来了一位据说曾是军中兵器大师的铁匠，手艺绝伦。他开的铺子门口排起了长龙，都想求得一把神兵利器。但大师脾气古怪，不是有钱就能买到。',
+    choices: [
+      {
+        id: 'weapon_request',
+        text: '请大师打造兵器',
+        condition: { field: 'copper', operator: 'gte', value: 50 },
+        consequence: {
+          narrative:
+            '你在门口等了三天，终于见到了大师。他上下打量你一番："你有武人的眼神，好，我给你打一把。"又等了七天，你得到了一把精钢刀，削铁如泥！五十文花得值。',
+          effects: { copper: -50, mood: 20, fatigue: 8 },
+          narrativeTag: '神兵在手',
+          transformations: [
+            { type: 'gain_tag', value: '身手不凡', description: '获得精良兵器' },
+          ],
+        },
+      },
+      {
+        id: 'weapon_apprentice',
+        text: '想拜师学艺',
+        consequence: {
+          narrative:
+            '你提出想学他的手艺。大师摇头："我这套手艺传男不传女，而且……算了，看你是块料，教你几招实用的吧。"你学到了一些兵器保养和简单的锻造知识。',
+          effects: { mood: 8 },
+          narrativeTag: '学过锻造',
+        },
+      },
+      {
+        id: 'weapon_wait',
+        text: '排队太久了，放弃',
+        consequence: {
+          narrative:
+            '你看了看那长长的队伍，摇摇头走了。后来听说买到大师兵器的人都如获至宝，你有些后悔当初没有坚持。',
+          effects: { mood: -2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'jianghu_underground_arena',
+    name: '地下斗技',
+    goalCategory: 'jianghu',
+    weight: 4,
+    cooldownDays: 42,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['street', 'teahouse'],
+      dayRange: [20, 999],
+      requiredAnyNarrativeTags: ['身手不凡', '擂台冠军'],
+      actorMinHealth: 55,
+      forbiddenNarrativeTags: ['地下斗士'],
+    },
+    openingNarrative:
+      '有人暗中找到你，低声说："城外地窖里每晚都有地下比武，赌注很大。你身手不错，要不要来试试？赢了能翻倍，输了……就当被打一顿吧。"',
+    choices: [
+      {
+        id: 'underground_fight',
+        text: '去试试',
+        condition: { field: 'health', operator: 'gte', value: 60 },
+        consequence: {
+          narrative:
+            '你去了地下竞技场，押了自己十文钱。三场比武下来，你赢了两场输了一场，最后净赚十五文！虽然身上挂了彩，但钱包鼓了不少。',
+          effects: { copper: 15, health: -10, fatigue: 12, mood: 8 },
+          narrativeTag: '地下斗士',
+        },
+      },
+      {
+        id: 'underground_lose',
+        text: '去试试（可能输）',
+        consequence: {
+          narrative:
+            '你去了地下竞技场，但对手太强，第一场就被打趴下了。赌输的十文钱不算什么，主要是丢脸。',
+          effects: { copper: -10, health: -15, fatigue: 8, mood: -10 },
+          narrativeTag: '地下斗败',
+        },
+      },
+      {
+        id: 'underground_decline',
+        text: '太危险，不参与',
+        consequence: {
+          narrative:
+            '你拒绝了。后来听说那个地下竞技场被官府抄了，参与的人都被抓了。你庆幸自己没有卷进去。',
+          effects: { mood: 2 },
+        },
+      },
+    ],
+  },
 ];

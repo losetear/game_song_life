@@ -446,4 +446,359 @@ export const WORK_EVENTS: BranchEvent[] = [
       },
     ],
   },
+  {
+    id: 'merchant_caravan',
+    name: '商队招募',
+    goalCategory: 'work',
+    weight: 5,
+    cooldownDays: 25,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['market', 'dock'],
+      dayRange: [10, 999],
+      actorMinHealth: 50,
+    },
+    openingNarrative: '一个领头的商人在茶馆招募护卫，说是要往南边运送一批丝绸，路途遥远，可能会遇到山匪。每天给二十文钱，到目的地再给五十文赏钱。',
+    choices: [
+      {
+        id: 'join_caravan',
+        text: '加入商队',
+        condition: { field: 'health', operator: 'gte', value: 60 },
+        consequence: {
+          narrative: '你跟着商队走了十天九夜，路上确实遇到了两次山匪，但都击退了。到达目的地后，商人兑现了承诺，你揣着沉甸甸的铜钱，觉得这趟苦没白吃。',
+          effects: { copper: 80, fatigue: -35, health: -10, mood: 12 },
+          narrativeTag: '护送过商队',
+          relationChange: 10,
+        },
+      },
+      {
+        id: 'negotiate_pay',
+        text: '讨价还价',
+        condition: { field: 'mood', operator: 'gte', value: 40 },
+        consequence: {
+          narrative: '"老板，这价太低了。路上山匪横行，我这可是把命别在裤腰带上。"商人叹了口气："好吧，每天加五文，到头再给三十文。"你满意地点点头。',
+          effects: { copper: 35, fatigue: -30, health: -8, mood: 8 },
+          narrativeTag: '议价护卫费',
+        },
+      },
+      {
+        id: 'decline_caravan',
+        text: '风险太大，算了吧',
+        consequence: {
+          narrative: '你摇摇头走了。后来听说商队确实被劫了，护卫死了一个。你庆幸自己没去，但也错过了那笔钱。',
+          effects: { mood: 2 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'harvest_season',
+    name: '秋收季节',
+    goalCategory: 'work',
+    weight: 8,
+    cooldownDays: 30,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['farmland'],
+      season: ['秋'],
+      actorMinHealth: 35,
+    },
+    openingNarrative: '秋收时节，田里一片金黄。李大户站在田埂上高声喊道："招短工！割一天稻子三十文，管饭！手脚麻利的来！"周围的人纷纷报名。',
+    choices: [
+      {
+        id: 'work_harvest',
+        text: '报名干活',
+        consequence: {
+          narrative: '你从早干到晚，腰酸背痛，手上磨出了水泡。但拿到三十文钱时，心里的疲惫一扫而空。晚上的晚饭虽然简单，但也吃得格外香。',
+          effects: { copper: 30, hunger: 15, fatigue: -20, health: -5, mood: 5 },
+          narrativeTag: '参加秋收',
+        },
+      },
+      {
+        id: 'work_overtime',
+        text: '多干半天',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative: '你白天干满，晚上又主动加班收剩下的稻子。李大户看你勤快，额外给了你十文钱。你拖着沉重的身子回家，但口袋沉甸甸的。',
+          effects: { copper: 40, hunger: 20, fatigue: -35, health: -8, mood: 8 },
+          narrativeTag: '勤劳肯干',
+          relationChange: 5,
+        },
+      },
+      {
+        id: 'skip_harvest',
+        text: '太累了，算了',
+        consequence: {
+          narrative: '你看了看火辣辣的太阳，摇摇头走了。虽然少了三十文钱，但今天的清闲也是难得。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'craftsman_commission',
+    name: '匠人订单',
+    goalCategory: 'work',
+    weight: 6,
+    cooldownDays: 18,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['workshop'],
+      actorMinHealth: 40,
+      dayRange: [5, 999],
+    },
+    openingNarrative: '一个财大气粗的员外来到工坊，说要定制一套上好的红木家具，限期七天完成。工钱八十文，但做工必须精细。',
+    choices: [
+      {
+        id: 'accept_commission',
+        text: '接下订单',
+        condition: { field: 'health', operator: 'gte', value: 45 },
+        consequence: {
+          narrative: '你接下来七天日夜赶工，精雕细琢。员外来取货时，连连称赞"好手艺"，额外赏了你二十文。你累得直不起腰，但看着自己的作品，心里美滋滋的。',
+          effects: { copper: 100, fatigue: -40, health: -10, mood: 15 },
+          narrativeTag: '完成定制',
+          relationChange: 10,
+        },
+      },
+      {
+        id: 'rush_job',
+        text: '赶工（质量可能下降）',
+        consequence: {
+          narrative: '你想早点完事，三天就做完了。员外来看时，皱着眉头说"太粗糙了"，只给了六十文。你虽然早几天休息，但心里不是滋味。',
+          effects: { copper: 60, fatigue: -20, mood: -8 },
+          narrativeTag: '粗制滥造',
+          relationChange: -5,
+        },
+      },
+      {
+        id: 'decline_commission',
+        text: '时间太紧，接不了',
+        consequence: {
+          narrative: '你看了看自己手头的活，摇摇头："员外，实在对不住，活儿排满了。"员外也不勉强，转身去找别的匠人了。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'night_shift',
+    name: '夜班守更',
+    goalCategory: 'work',
+    weight: 5,
+    cooldownDays: 12,
+    narrativeWeight: 'flavor',
+    conditions: {
+      location: ['street', 'residential'],
+      dayRange: [8, 999],
+      actorMinHealth: 40,
+    },
+    openingNarrative: '巡街的捕头在招人帮忙守夜——最近城里不太平，得有人夜里巡逻。一宿十文钱，天亮结账。',
+    choices: [
+      {
+        id: 'take_night_shift',
+        text: '接下夜班',
+        consequence: {
+          narrative: '你拿着灯笼，在街上来回走了一宿。困得眼皮打架，但好在没出什么事。天亮时拿到铜钱，回家补觉去了。',
+          effects: { copper: 10, fatigue: -25, health: -3, mood: -5 },
+          narrativeTag: '守过夜',
+        },
+      },
+      {
+        id: 'catch_thief',
+        text: '认真巡逻（可能抓贼）',
+        condition: { field: 'mood', operator: 'gte', value: 30 },
+        consequence: {
+          narrative: '你打起精神仔细巡视，果然在后巷抓住了两个偷鸡贼！捕头夸奖你，额外给了你二十文赏钱。一夜没白熬！',
+          effects: { copper: 30, fatigue: -28, health: -5, mood: 12 },
+          narrativeTag: '抓获窃贼',
+          relationChange: 8,
+        },
+      },
+      {
+        id: 'decline_night',
+        text: '身体受不了',
+        consequence: {
+          narrative: '你摇摇头："最近太累了，熬不动夜。"捕头也理解，转身去找别人了。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'fishing_competition',
+    name: '捕鱼比赛',
+    goalCategory: 'work',
+    weight: 5,
+    cooldownDays: 22,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['dock', 'riverside'],
+      season: ['春', '夏'],
+      actorMinHealth: 35,
+    },
+    openingNarrative: '汴河上的渔民们今天举办捕鱼比赛，谁捕的鱼最多，就能赢得五十文钱和"渔王"的称号。你也有一艘小船，想不想试试？',
+    choices: [
+      {
+        id: 'join_competition',
+        text: '参加比赛',
+        condition: { field: 'health', operator: 'gte', value: 45 },
+        consequence: {
+          narrative: '你撒网收网，忙活了一天。最后称重时，你捕的鱼虽然不是最多，但也进了前十，得到了十五文钱的鼓励奖。不算白忙活！',
+          effects: { copper: 15, hunger: 12, fatigue: -18, mood: 8 },
+          narrativeTag: '参加渔赛',
+        },
+      },
+      {
+        id: 'help_competitor',
+        text: '帮别人比赛',
+        condition: { field: 'mood', operator: 'gte', value: 35 },
+        consequence: {
+          narrative: '你帮着老张头划船、收网。老张头经验丰富，在你配合下得了第三名！他高兴地分给你二十五文钱，说有你一半功劳。',
+          effects: { copper: 25, hunger: 8, fatigue: -15, mood: 10 },
+          narrativeTag: '合作捕鱼',
+          relationChange: 10,
+        },
+      },
+      {
+        id: 'just_fish',
+        text: '自己打鱼就好',
+        consequence: {
+          narrative: '你不想比赛，自己找个角落打鱼。一天下来打了些鱼，拿到集市卖了，也挣了十几文。安稳踏实。',
+          effects: { copper: 12, hunger: 10, fatigue: -12, mood: 5 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'herbal_gathering',
+    name: '采药进山',
+    goalCategory: 'work',
+    weight: 6,
+    cooldownDays: 15,
+    narrativeWeight: 'minor',
+    conditions: {
+      location: ['mountain'],
+      actorMinHealth: 40,
+      dayRange: [7, 999],
+    },
+    openingNarrative: '药铺的郎中说最近急需几味草药——人参、黄芪、当归，如果有人能采来，他愿意高价收购。你记得山林深处有这些药。',
+    choices: [
+      {
+        id: 'gather_herbs',
+        text: '进山采药',
+        condition: { field: 'health', operator: 'gte', value: 50 },
+        consequence: {
+          narrative: '你在山林里转了两天，终于找到了那几味药。虽然被蚊子咬了一身包，也差点从山坡上滚下去，但把药卖给郎中后，得了四十五文，觉得值了。',
+          effects: { copper: 45, health: -8, fatigue: -20, mood: 10 },
+          narrativeTag: '采过草药',
+          relationChange: 5,
+        },
+      },
+      {
+        id: 'hire_guide',
+        text: '雇人带路',
+        condition: { field: 'copper', operator: 'gte', value: 10 },
+        consequence: {
+          narrative: '你花了十文钱雇了个熟悉山路的猎户带路。果然事半功倍，半天就采齐了药。扣除带路费，还赚了三十文。',
+          effects: { copper: 30, fatigue: -12, mood: 8 },
+          narrativeTag: '雇人采药',
+        },
+      },
+      {
+        id: 'too_dangerous',
+        text: '山林里太危险',
+        consequence: {
+          narrative: '你摇摇头放弃了。最近听说山里有野兽出没，犯不着为了几十文钱冒险。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
+  {
+    id: 'business_partner',
+    name: '合伙提议',
+    goalCategory: 'work',
+    weight: 4,
+    cooldownDays: 28,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['market', 'teahouse'],
+      dayRange: [15, 999],
+      actorMinCopper: 50,
+    },
+    openingNarrative: '你常去买东西的那个杂货铺老板王掌柜，今天把你拉到一边："小兄弟，我看你为人实在，跟你商量个事。我想扩大生意，但本金不够，你入个股怎么样？利润三七开，你三我七。"',
+    choices: [
+      {
+        id: 'invest_partner',
+        text: '投资五十文',
+        condition: { field: 'copper', operator: 'gte', value: 50 },
+        consequence: {
+          narrative: '你拿出五十文钱给了王掌柜。三个月后，他带着一百文钱来找你："生意不错，这是你的分红。"你尝到了甜头，觉得投资这条路子或许可行。',
+          effects: { copper: 50, mood: 15 },
+          narrativeTag: '做过投资',
+          transformations: [{ type: 'gain_tag', value: '有经商经验', description: '参与过商业投资' }],
+          relationChange: 12,
+        },
+      },
+      {
+        id: 'decline_partner',
+        text: '风险太大',
+        consequence: {
+          narrative: '"掌柜的，多谢好意。但这钱来得不易，我还是守着它踏实。"王掌柜也不勉强，笑笑说理解。后来听说他生意确实不错，但你也不后悔。',
+          effects: { mood: -2 },
+        },
+      },
+      {
+        id: 'ask_details',
+        text: '先问清楚生意计划',
+        consequence: {
+          narrative: '你详细问了王掌柜的经营计划，觉得还算靠谱。但你还是说"容我考虑几天"，想再观察观察。',
+          effects: { mood: 3 },
+          narrativeTag: '了解过经商',
+        },
+      },
+    ],
+  },
+  {
+    id: 'government_project',
+    name: '官府征工',
+    goalCategory: 'work',
+    weight: 6,
+    cooldownDays: 35,
+    narrativeWeight: 'major',
+    conditions: {
+      location: ['street', 'government_office'],
+      dayRange: [20, 999],
+      actorMinHealth: 45,
+    },
+    openingNarrative: '官府贴出告示，说要修筑河堤，招民夫。一个月工期，每天给二十五文钱，管饭。就是活儿重，得从早干到晚。',
+    choices: [
+      {
+        id: 'join_project',
+        text: '报名干活',
+        consequence: {
+          narrative: '你干了一个月，累得像条狗。但拿到七百五十文钱时，觉得一切辛苦都值了。回家好好休息了三天才缓过来。',
+          effects: { copper: 75, hunger: 30, fatigue: -50, health: -15, mood: 5 },
+          narrativeTag: '修过河堤',
+        },
+      },
+      {
+        id: 'work_half_month',
+        text: '干半个月试试',
+        consequence: {
+          narrative: '你干了半个月就撑不住了，领了三百七十五文钱回家了。工头说你"吃不了苦"，但你觉得量力而行也挺好。',
+          effects: { copper: 37, hunger: 15, fatigue: -25, health: -8, mood: 0 },
+          narrativeTag: '短期苦力',
+        },
+      },
+      {
+        id: 'decline_project',
+        text: '这活儿太重了',
+        consequence: {
+          narrative: '你看了看工地上那些累得直不起腰的民夫，摇摇头走了。这钱不是一般人能挣的。',
+          effects: { mood: 0 },
+        },
+      },
+    ],
+  },
 ];
