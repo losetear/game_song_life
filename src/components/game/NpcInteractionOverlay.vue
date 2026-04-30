@@ -158,18 +158,19 @@ if (interStore.lastResult) {
 
         <!-- 数值变化和标签 -->
         <transition name="fade-in">
-        <div class="result-changes" v-if="interStore.lastResult.playerChanges.length > 0 || interStore.lastResult.relationChange !== 0">
-          <span v-for="c in interStore.lastResult.playerChanges" :key="c" class="change-tag">{{ c }}</span>
-          <span v-if="interStore.lastResult.relationChange > 0" class="change-tag relation-up">
-            好感+{{ interStore.lastResult.relationChange }}
-          </span>
-          <span v-if="interStore.lastResult.relationChange < 0" class="change-tag relation-down">
-            好感{{ interStore.lastResult.relationChange }}
-          </span>
-          <span v-if="interStore.lastResult.gainedTag" class="change-tag tag-gained">
-            获得: {{ interStore.lastResult.gainedTag }}
-          </span>
-        </div>
+          <div class="result-changes" v-if="interStore.lastResult.playerChanges.length > 0 || interStore.lastResult.relationChange !== 0">
+            <span v-for="c in interStore.lastResult.playerChanges" :key="c" class="change-tag">{{ c }}</span>
+            <span v-if="interStore.lastResult.relationChange > 0" class="change-tag relation-up">
+              好感+{{ interStore.lastResult.relationChange }}
+            </span>
+            <span v-if="interStore.lastResult.relationChange < 0" class="change-tag relation-down">
+              好感{{ interStore.lastResult.relationChange }}
+            </span>
+            <span v-if="interStore.lastResult.gainedTag" class="change-tag tag-gained">
+              获得: {{ interStore.lastResult.gainedTag }}
+            </span>
+          </div>
+        </transition>
       </div>
 
       <!-- NPC反应 -->
