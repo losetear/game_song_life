@@ -11,7 +11,8 @@ export interface ActionContext {
 export interface GameAction {
   id: string;
   name: string;
-  category: 'survival' | 'work' | 'social' | 'leisure' | 'move';
+  category: 'survival' | 'work' | 'social' | 'leisure' | 'move'
+    | 'jianghu' | 'romance' | 'culture' | 'disaster';
   cost: { fatigue?: number; copper?: number; ap?: number };
   effects: Record<string, number>;  // 需求改善量
   conditions: {
@@ -323,5 +324,340 @@ export function createDefaultActionRegistry(): ActionRegistry {
     narrative: (ctx) => `${ctx.name}在布庄挑了块好料子，打算做件新衣裳。`,
   });
 
-  return reg;
+  // === 江湖类 ===
+  reg.register({
+    id: 'practice_martial_arts',
+    name: '练功',
+    category: 'jianghu',
+    cost: { fatigue: 20, ap: 1 },
+    effects: { health: 5, mood: 3 },
+    conditions: { minHealth: 30, atLocation: ['mountain', 'residential', 'ruins'] },
+    narrative: (ctx) => `${ctx.name}找了个僻静处，扎起马步，一练就是两个时辰。`,
+  });
+
+  reg.register({
+    id: 'duel_arena',
+    name: '擂台比武',
+    category: 'jianghu',
+    cost: { fatigue: 25, copper: 5, ap: 1 },
+    effects: { mood: 10, social: 8 },
+    conditions: { minHealth: 50, minCopper: 5, atLocation: ['temple'] },
+    narrative: (ctx) => `${ctx.name}登上擂台，与对手过了几招，引得台下叫好连连。`,
+  });
+
+  reg.register({
+    id: 'steal',
+    name: '行窃',
+    category: 'jianghu',
+    cost: { fatigue: 15, ap: 1 },
+    effects: { copper: 20, mood: -5 },
+    conditions: { atLocation: ['market', 'street', 'dock'] },
+    narrative: (ctx) => `${ctx.name}趁乱摸了几个钱袋，心跳得厉害。`,
+  });
+
+  reg.register({
+    id: 'gamble_dice',
+    name: '赌钱',
+    category: 'jianghu',
+    cost: { copper: 10, ap: 1 },
+    effects: { copper: 2, mood: 1 },
+    conditions: { minCopper: 10, atLocation: ['gambling_den'] },
+    narrative: (ctx) => `${ctx.name}在赌坊押了注，${ctx.day % 3 !== 0 ? '手气不错！' : '输了个精光……'}`,
+  });
+
+  reg.register({
+    id: 'beg',
+    name: '乞讨',
+    category: 'jianghu',
+    cost: { fatigue: 5, ap: 1 },
+    effects: { copper: 3, mood: -8, social: -2 },
+    conditions: { atLocation: ['street', 'market', 'teahouse'] },
+    narrative: (ctx) => `${ctx.name}在路边蹲了半天，讨得几文铜钱。`,
+  });
+
+  reg.register({
+    id: 'spy_info',
+    name: '刺探消息',
+    category: 'jianghu',
+    cost: { fatigue: 10, ap: 1 },
+    effects: { social: 5, mood: 2 },
+    conditions: { atLocation: ['teahouse', 'brothel', 'street'] },
+    narrative: (ctx) => `${ctx.name}装作不经意地打听，从茶客闲谈中拼凑出些有用的消息。`,
+  });
+
+  reg.register({
+    id: 'escort_caravan',
+    name: '走镖',
+    category: 'jianghu',
+    cost: { fatigue: 25, ap: 1 },
+    effects: { copper: 25, mood: 5 },
+    conditions: { minHealth: 60, profession: ['猎户', '捕快', '铁匠'], atLocation: ['street', 'dock'] },
+    narrative: (ctx) => `${ctx.name}接了一趟镖活儿，护送商队出城，一路小心谨慎。`,
+  });
+
+  // === 情感类 ===
+  reg.register({
+    id: 'write_love_letter',
+    name: '写情书',
+    category: 'romance',
+    cost: { fatigue: 5, ap: 1 },
+    effects: { mood: 8 },
+    conditions: {},
+    narrative: (ctx) => `${ctx.name}铺开信纸，斟酌再三，写下了几行心事。`,
+  });
+
+  reg.register({
+    id: 'send_fine_gift',
+    name: '赠送精品',
+    category: 'romance',
+    cost: { copper: 30, ap: 1 },
+    effects: { mood: 10, social: 12 },
+    conditions: { minCopper: 30, atLocation: ['market', 'street'] },
+    narrative: (ctx) => `${ctx.name}在首饰铺挑了一支精致的簪子，小心翼翼收好。`,
+  });
+
+  reg.register({
+    id: 'invite_riverside',
+    name: '邀约河畔',
+    category: 'romance',
+    cost: { copper: 8, ap: 1 },
+    effects: { mood: 15, social: 8 },
+    conditions: { minCopper: 8, season: ['春', '夏'], atLocation: ['riverside'] },
+    narrative: (ctx) => `${ctx.name}约了人来到汴河畔，柳丝轻拂，波光粼粼。`,
+  });
+
+  reg.register({
+    id: 'visit_brothel',
+    name: '逛樊楼',
+    category: 'romance',
+    cost: { copper: 50, fatigue: 10, ap: 1 },
+    effects: { mood: 18, hunger: 10, social: 5 },
+    conditions: { minCopper: 50, minHealth: 40, atLocation: ['brothel'] },
+    narrative: (ctx) => `${ctx.name}踏入樊楼，笙歌曼舞，脂粉香气扑面而来。`,
+  });
+
+  reg.register({
+    id: 'moonlight_date',
+    name: '月下相会',
+    category: 'romance',
+    cost: { fatigue: 5, ap: 1 },
+    effects: { mood: 20, social: 6 },
+    conditions: { weather: ['晴', '多云'], atLocation: ['riverside', 'temple', 'mountain'] },
+    narrative: (ctx) => `月色如水，${ctx.name}与人并肩而立，说了许多平日不敢说的话。`,
+  });
+
+  // === 文化类 ===
+  reg.register({
+    id: 'compose_poetry',
+    name: '作诗',
+    category: 'culture',
+    cost: { fatigue: 8, ap: 1 },
+    effects: { mood: 12, social: 5 },
+    conditions: { profession: ['书生', '匠人', '郎中'], atLocation: ['academy', 'teahouse', 'riverside'] },
+    narrative: (ctx) => `${ctx.name}灵感来了，提笔挥毫，一首七绝跃然纸上。`,
+  });
+
+  reg.register({
+    id: 'attend_lantern',
+    name: '赏灯会',
+    category: 'culture',
+    cost: { copper: 5, fatigue: 10, ap: 1 },
+    effects: { mood: 18, social: 12 },
+    conditions: { minCopper: 5, season: ['春'], atLocation: ['street', 'temple', 'riverside'] },
+    narrative: (ctx) => `元宵灯会，花灯如海。${ctx.name}挤在人群中猜灯谜、看杂耍，好不热闹。`,
+  });
+
+  reg.register({
+    id: 'drink_wine',
+    name: '饮酒',
+    category: 'culture',
+    cost: { copper: 12, fatigue: 5, ap: 1 },
+    effects: { mood: 14, hunger: 8, social: 8 },
+    conditions: { minCopper: 12, minHealth: 40, atLocation: ['teahouse', 'brothel', 'riverside'] },
+    narrative: (ctx) => `${ctx.name}要了一壶好酒，自斟自饮，渐入佳境。`,
+  });
+
+  reg.register({
+    id: 'play_instrument',
+    name: '奏乐',
+    category: 'culture',
+    cost: { fatigue: 5, ap: 1 },
+    effects: { mood: 16, social: 6 },
+    conditions: { atLocation: ['teahouse', 'brothel', 'academy', 'riverside'] },
+    narrative: (ctx) => `${ctx.name}取出乐器，指尖流淌出的曲调引来路人驻足倾听。`,
+  });
+
+  reg.register({
+    id: 'paint_art',
+    name: '作画',
+    category: 'culture',
+    cost: { fatigue: 8, copper: 5, ap: 1 },
+    effects: { mood: 12 },
+    conditions: { minCopper: 5, atLocation: ['academy', 'riverside', 'residential'] },
+    narrative: (ctx) => `${ctx.name}摊开宣纸，研墨运笔，山水花鸟渐渐成形。`,
+  });
+
+  reg.register({
+    id: 'play_chess',
+    name: '下棋',
+    category: 'culture',
+    cost: { fatigue: 6, ap: 1 },
+    effects: { mood: 10, social: 4 },
+    conditions: { atLocation: ['teahouse', 'academy', 'temple'] },
+    narrative: (ctx) => `${ctx.name}与人对弈，棋盘上杀得难解难分。`,
+  });
+
+  reg.register({
+    id: 'tea_ceremony',
+    name: '斗茶',
+    category: 'culture',
+    cost: { copper: 8, ap: 1 },
+    effects: { mood: 10, social: 8 },
+    conditions: { minCopper: 8, atLocation: ['teahouse', 'academy'] },
+    narrative: (ctx) => `${ctx.name}与几位雅士比试点茶技艺，汤花细腻，清香四溢。`,
+  });
+
+  reg.register({
+    id: 'worship_temple',
+    name: '拜佛祈福',
+    category: 'culture',
+    cost: { copper: 5, fatigue: 5, ap: 1 },
+    effects: { mood: 12 },
+    conditions: { minCopper: 5, atLocation: ['temple'] },
+    narrative: (ctx) => `${ctx.name}在相国寺大殿前上了三炷香，默默许下了心愿。`,
+  });
+
+  reg.register({
+    id: 'watch_opera',
+    name: '听戏',
+    category: 'culture',
+    cost: { copper: 6, fatigue: 5, ap: 1 },
+    effects: { mood: 14, social: 4 },
+    conditions: { minCopper: 6, atLocation: ['teahouse', 'brothel', 'street'] },
+    narrative: (ctx) => `${ctx.name}坐在戏台前，看着台上唱念做打，听得入迷。`,
+  });
+
+  reg.register({
+    id: 'calligraphy',
+    name: '习字',
+    category: 'culture',
+    cost: { fatigue: 6, ap: 1 },
+    effects: { mood: 7 },
+    conditions: { atLocation: ['academy', 'residential'] },
+    narrative: (ctx) => `${ctx.name}铺纸研墨，一笔一划临摹着碑帖，心神渐渐沉静。`,
+  });
+
+  // === 灾变/义举类 ===
+  reg.register({
+    id: 'donate_relief',
+    name: '捐助赈灾',
+    category: 'disaster',
+    cost: { copper: 30, ap: 1 },
+    effects: { mood: 15, social: 20 },
+    conditions: { minCopper: 30, atLocation: ['temple', 'government_office', 'street'] },
+    narrative: (ctx) => `${ctx.name}将铜钱捐给了赈灾的僧人，对方合十道谢。`,
+  });
+
+  reg.register({
+    id: 'help_rebuild',
+    name: '帮忙重建',
+    category: 'disaster',
+    cost: { fatigue: 25, ap: 1 },
+    effects: { copper: 8, mood: 10, social: 12 },
+    conditions: { minHealth: 40, atLocation: ['residential', 'street', 'farmland'] },
+    narrative: (ctx) => `${ctx.name}帮邻居修葺被损的房屋，干了大半天，手都磨出了泡。`,
+  });
+
+  reg.register({
+    id: 'flee_city',
+    name: '逃难',
+    category: 'disaster',
+    cost: { fatigue: 20, copper: 10, ap: 1 },
+    effects: { health: -5, mood: -10 },
+    conditions: { minCopper: 10, minHealth: 30 },
+    narrative: (ctx) => `城内局势不稳，${ctx.name}收拾细软，匆匆出了城门。`,
+  });
+
+  reg.register({
+    id: 'treat_plague_victim',
+    name: '救治病患',
+    category: 'disaster',
+    cost: { fatigue: 20, copper: 5, ap: 1 },
+    effects: { copper: 10, mood: 8, social: 10 },
+    conditions: { minHealth: 50, profession: ['郎中'], atLocation: ['clinic', 'residential'] },
+    narrative: (ctx) => `${ctx.name}日夜照料染病的百姓，熬了几大碗汤药送过去。`,
+  });
+
+  reg.register({
+    id: 'fight_fire',
+    name: '救火',
+    category: 'disaster',
+    cost: { fatigue: 30, ap: 1 },
+    effects: { health: -10, copper: 15, mood: 12, social: 18 },
+    conditions: { minHealth: 50, atLocation: ['street', 'residential', 'market'] },
+    narrative: (ctx) => `${ctx.name}冲进火场帮忙递水桶，烟熏火燎却顾不上。`,
+  });
+
+  reg.register({
+    id: 'patrol_disaster',
+    name: '灾后巡逻',
+    category: 'disaster',
+    cost: { fatigue: 15, ap: 1 },
+    effects: { copper: 10, mood: -3 },
+    conditions: { profession: ['捕快'], atLocation: ['street', 'market'] },
+    narrative: (ctx) => `${ctx.name}在满目疮痍的街上巡视，防止有人趁乱抢劫。`,
+  });
+
+  // === 更多休闲/社交 ===
+  reg.register({
+    id: 'gossip_chat',
+    name: '听八卦',
+    category: 'social',
+    cost: { copper: 2, ap: 1 },
+    effects: { mood: 10, social: 6 },
+    conditions: { minCopper: 2, atLocation: ['teahouse', 'market'] },
+    narrative: (ctx) => `${ctx.name}买了碟瓜子，坐在一旁听街坊们聊最近的奇闻轶事。`,
+  });
+
+  reg.register({
+    id: 'visit_ruins',
+    name: '探废弃宅院',
+    category: 'leisure',
+    cost: { fatigue: 15, ap: 1 },
+    effects: { mood: 8 },
+    conditions: { minHealth: 50, atLocation: ['ruins'] },
+    narrative: (ctx) => `${ctx.name}壮着胆子走进那座荒废多年的宅院，似乎听到了什么动静……`,
+  });
+
+  reg.register({
+    id: 'fishing_leisure',
+    name: '垂钓',
+    category: 'leisure',
+    cost: { fatigue: 8, ap: 1 },
+    effects: { mood: 12, hunger: 5 },
+    conditions: { atLocation: ['riverside', 'dock'] },
+    narrative: (ctx) => `${ctx.name}在河边架起鱼竿，静静等待鱼儿上钩。`,
+  });
+
+  reg.register({
+    id: 'boating',
+    name: '泛舟汴河',
+    category: 'leisure',
+    cost: { copper: 10, fatigue: 5, ap: 1 },
+    effects: { mood: 16, social: 4 },
+    conditions: { minCopper: 10, season: ['春', '夏'], atLocation: ['riverside', 'dock'] },
+    narrative: (ctx) => `${ctx.name}租了条小船，顺流而下，两岸风光尽收眼底。`,
+  });
+
+  reg.register({
+    id: 'meditate',
+    name: '打坐冥想',
+    category: 'leisure',
+    cost: { fatigue: -5, ap: 1 },
+    effects: { mood: 8, health: 3 },
+    conditions: { atLocation: ['temple', 'academy', 'mountain'] },
+    narrative: (ctx) => `${ctx.name}盘膝而坐，闭目凝神，将纷乱的思绪一一理清。`,
+  });
+
+   return reg;
 }
