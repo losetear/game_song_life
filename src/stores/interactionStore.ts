@@ -26,6 +26,16 @@ export const useInteractionStore = defineStore('interaction', () => {
     richPerformance?: import('@/core/ai/NpcInteractionEngine').RichPerformance;
   } | null>(null);
 
+  /** 安全拷贝 InteractionState，避免 Vue 响应式代理 Set 的问题 */
+  function safeCopyState(s: InteractionState): InteractionState {
+    return {
+      ...s,
+      usedOptionIds: s.usedOptionIds instanceof Set
+        ? new Set(s.usedOptionIds)
+        : new Set<string>(),
+    };
+  }
+
   function startInteraction(npcId: number) {
     const gameStore = useGameStore();
     if (!gameStore.engine) return;
@@ -33,7 +43,7 @@ export const useInteractionStore = defineStore('interaction', () => {
     const result = gameStore.engine.startNpcInteraction(npcId);
     if (!result) return;
 
-    state.value = result;
+    state.value = safeCopyState(result);
     refreshNpcInfo(npcId);
 
     lastResult.value = null;
@@ -100,7 +110,7 @@ export const useInteractionStore = defineStore('interaction', () => {
     // NPC继续对话：刷新交互状态
     const currentState = gameStore.engine.interaction.getState();
     if (currentState) {
-      state.value = { ...currentState };
+      state.value = safeCopyState(currentState);
 
       // 刷新动态选项（从引擎获取环境信息）
       let refreshedOptions: InteractionOption[] | null = null;
@@ -117,7 +127,7 @@ export const useInteractionStore = defineStore('interaction', () => {
         }
       }
       if (refreshedOptions) {
-        state.value.options = refreshedOptions;
+        state.value = { ...state.value!, options: refreshedOptions };
       }
     }
 
