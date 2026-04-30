@@ -7,34 +7,16 @@ export function getBriefConsequence(
   ctx: InteractionContext,
 ): InteractionConsequence {
   const map: Record<string, () => InteractionConsequence> = {
-    chat: () => ({
-      narrative: () => {
-        const topics = ['天气', '街上的新鲜事', '最近的物价', '邻居的趣闻'];
-        const topic = topics[ctx.environment.day % topics.length]!;
-        const responses: Record<string, string[]> = {
-          '至交': [
-            `你和${ctx.npc.name}畅聊了一番关于${topic}的话题，聊得十分投机。`,
-            `${ctx.npc.name}跟你讲了几个关于${topic}的笑话，你笑得前仰后合。`,
-          ],
-          '好友': [
-            `你和${ctx.npc.name}聊了聊${topic}，气氛融洽。`,
-            `${ctx.npc.name}分享了些关于${topic}的见闻。`,
-          ],
-          '熟人': [
-            `你和${ctx.npc.name}简单聊了聊${topic}。`,
-            `${ctx.npc.name}客气地回应了你关于${topic}的话题。`,
-          ],
-          default: [
-            `你和${ctx.npc.name}寒暄了几句。`,
-            `${ctx.npc.name}简短地回应了你的搭话。`,
-          ],
-        };
-        const options = responses[ctx.relationLevel] ?? responses['default']!;
-        return options[ctx.environment.day % options.length]!;
-      },
-      playerVital: { mood: 2 },
-      relationChange: 1,
-    }),
+    chat: () => {
+      // 根据上下文选择不同变体
+      const variant = selectChatVariant(ctx);
+      return {
+        narrative: () => variant.actionNarrative,
+        stageDirection: variant.stageDirection ? () => variant.stageDirection! : undefined,
+        playerVital: { mood: 2 },
+        relationChange: 1,
+      };
+    },
 
     gift: () => ({
       narrative: () => {
@@ -342,3 +324,163 @@ export function getSceneConsequence(
   }
   return factory();
 }
+
+// === Chat 闲聊多变体系统 ===
+
+interface ChatVariant {
+  actionNarrative: string;
+  stageDirection?: string;
+  npcResponse?: {
+    expression: string;
+    gesture: string;
+    dialogue: string;
+    innerThought?: string;
+  };
+  atmosphere?: string;
+  followUpHint?: string;
+  relationChange: number;
+  playerMood: number;
+}
+
+function selectChatVariant(ctx: InteractionContext): ChatVariant {
+  const isHighRelation = ctx.relation >= 40;
+  const bothGoodMood = ctx.player.mood > 60 && ctx.npc.mood > 60;
+  const bothBadMood = ctx.player.mood < 40 && ctx.npc.mood < 40;
+  const isRainy = ctx.environment.weather === '雨';
+  const hasGossip = ctx.player.narrativeTags.some((t) =>
+    ['八卦', '传闻', '消息'].some((k) => t.includes(k))
+  );
+
+  if (isHighRelation && bothGoodMood) {
+    return 回忆往事变体(ctx);
+  }
+  if (bothBadMood) {
+    return 吐槽抱怨变体(ctx);
+  }
+  if (isRainy) {
+    return 天气话题变体(ctx);
+  }
+  if (isHighRelation && bothGoodMood) {
+    return 规划未来变体(ctx);
+  }
+  if (hasGossip) {
+    return 八卦消息变体(ctx);
+  }
+
+  return 职业话题变体(ctx);
+}
+
+const 回忆往事变体 = (ctx: InteractionContext): ChatVariant => ({
+  actionNarrative: `你向${ctx.npc.name}提起从前的种种，两人都沉浸在回忆里。"还记得那年..."${ctx.npc.name}眼里泛着光，声音温柔了许多。`,
+  stageDirection: '时光仿佛倒流，两人的神情都柔和下来。',
+  npcResponse: {
+    expression: '眼神柔和，嘴角含笑',
+    gesture: '轻轻点头，时而感叹',
+    dialogue: `是啊，那时候真傻...但也真快乐。`,
+    innerThought: '那些日子，是我们共同的记忆。',
+  },
+  atmosphere: '周围的人来人往仿佛都远去了，只剩下你们两人的回忆。',
+  followUpHint: '似乎还有更多往事想要倾诉...',
+  relationChange: 3,
+  playerMood: 4,
+});
+
+const 吐槽抱怨变体 = (ctx: InteractionContext): ChatVariant => ({
+  actionNarrative: `你叹了口气，开始吐槽最近的烦心事。${ctx.npc.name}也有同感，接过了话头："我也是！最近..."两人你一句我一句，越说越投机。`,
+  stageDirection: '两人眉头紧锁，但说着说着都笑了出来。',
+  npcResponse: {
+    expression: '先是愁眉苦脸，后来释然一笑',
+    gesture: '摊开双手，叹气',
+    dialogue: `唉，生活就是这样，说说就好多了。`,
+    innerThought: '原来不止我一个人这么烦。',
+  },
+  atmosphere: '虽然话题沉重，但两人都轻松了不少。',
+  followUpHint: '吐槽完之后，心情好多了。',
+  relationChange: 2,
+  playerMood: 3,
+});
+
+const 天气话题变体 = (_ctx: InteractionContext): ChatVariant => ({
+  actionNarrative: `你望向窗外的雨，感叹道："这雨下得真大..."对方顺着你的目光看去，说道："是啊，听说城南都淹了。"两人聊起天气，又聊到雨水对收成的影响。`,
+  stageDirection: '雨声淅淅沥沥，两人望着窗外出神。',
+  npcResponse: {
+    expression: '有些担忧',
+    gesture: '指着窗外，摇头',
+    dialogue: `希望雨快点停，不然今年又要难过了。`,
+    innerThought: '这种天气，真让人心情沉重。',
+  },
+  atmosphere: '雨中的对话，带着一丝愁绪。',
+  followUpHint: '或许可以聊聊其他话题，转换心情。',
+  relationChange: 1,
+  playerMood: 1,
+});
+
+const 规划未来变体 = (ctx: InteractionContext): ChatVariant => {
+  const plans = ['开一家小店', '去外地闯闯', '学一门新手艺', '安顿下来成家'];
+  const plan = plans[ctx.environment.day % plans.length]!;
+  return {
+    actionNarrative: `你聊起对未来的打算："我在想，要不要${plan}..."${ctx.npc.name}眼睛一亮："这个想法不错！我支持你。"`,
+    stageDirection: '两人都坐直了身子，眼里闪烁着期待。',
+    npcResponse: {
+      expression: '兴奋，眼神明亮',
+      gesture: '拍拍你的肩膀',
+      dialogue: `如果你真的要做，我一定帮你！`,
+      innerThought: '他/她有理想，真不错。',
+    },
+    atmosphere: '充满希望的氛围，未来似乎光明起来。',
+    followUpHint: '或许可以请对方帮忙出出主意。',
+    relationChange: 3,
+    playerMood: 4,
+  };
+};
+
+const 八卦消息变体 = (ctx: InteractionContext): ChatVariant => {
+  const gossip = ctx.player.narrativeTags.find((t) =>
+    ['八卦', '传闻', '消息'].some((k) => t.includes(k))
+  ) ?? '最近的传闻';
+  return {
+    actionNarrative: `你压低声音，把"${gossip}"的消息告诉了${ctx.npc.name}。对方瞪大了眼睛："真的假的？快说说详情！"`,
+    stageDirection: '两人凑近，神秘兮兮地交谈。',
+    npcResponse: {
+      expression: '好奇又惊讶',
+      gesture: '身体前倾，压低声音',
+      dialogue: `这事儿...可别跟别人说啊。`,
+      innerThought: '这消息有点意思，得记住。',
+    },
+    atmosphere: '神秘兮兮的氛围，仿佛在分享什么秘密。',
+    followUpHint: '对方似乎还想了解更多。',
+    relationChange: 2,
+    playerMood: 2,
+  };
+};
+
+const 职业话题变体 = (ctx: InteractionContext): ChatVariant => {
+  const professionTopics: Record<string, string> = {
+    '铁匠': '最近打铁生意如何？听说城里来了个新客户。',
+    '郎中': '最近病人多吗？换季的时候总是忙碌。',
+    '商贩': '最近生意怎么样？物价好像又涨了。',
+    '农夫': '今年收成如何？雨水够不够？',
+    '书生': '最近在读什么书？可有新的见解？',
+    '渔夫': '最近鱼情如何？听说河里鱼多了。',
+    '猎户': '山林里可有什么发现？最近野兽出没频繁。',
+    '茶馆老板': '茶馆生意兴隆啊！有什么新茶吗？',
+    '画工': '最近画了什么新作？可否一饱眼福？',
+    '伶人': '最近学了什么新曲？什么时候能听到？',
+  };
+  const topic = professionTopics[ctx.npc.profession] ?? '最近过得怎么样？';
+
+  return {
+    actionNarrative: `你聊起${ctx.npc.name}的职业，${topic}对方眼睛一亮，打开了话匣子。`,
+    stageDirection: '对方聊到专业领域，神采飞扬。',
+    npcResponse: {
+      expression: '专业，自信',
+      gesture: '比划，讲解',
+      dialogue: `这个你算是问对人了！我告诉你...`,
+      innerThought: '终于有人懂我的行了。',
+    },
+    atmosphere: '专业又融洽的对话氛围。',
+    followUpHint: '可以趁机请教对方。',
+    relationChange: 2,
+    playerMood: 2,
+  };
+};

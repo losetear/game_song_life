@@ -1,6 +1,6 @@
 import type { EntityManager } from '../ecs/EntityManager';
 import { clamp } from '../utils/clamp';
-import type { InteractionContext } from './NpcInteractionEngine';
+import type { InteractionContext, RichPerformance } from './NpcInteractionEngine';
 import { RelationSystem } from '../world/RelationSystem';
 import type { NpcReaction } from './NpcReactions';
 
@@ -8,6 +8,9 @@ import type { NpcReaction } from './NpcReactions';
 export interface InteractionConsequence {
   narrative: (ctx: InteractionContext) => string;
   stageDirection?: (ctx: InteractionContext) => string;
+
+  // RichPerformance 多阶段演出数据（可选）
+  richPerformance?: (ctx: InteractionContext) => RichPerformance;
 
   // 玩家自身
   playerVital?: Partial<Record<'hunger' | 'fatigue' | 'health' | 'mood', number>>;
@@ -38,6 +41,8 @@ export interface ConsequenceResult {
   nextAct?: string;
   npcReaction?: NpcReaction;
   actionType?: string;
+  // RichPerformance 数据
+  richPerformance?: RichPerformance;
 }
 
 export class ConsequenceEngine {
@@ -57,6 +62,11 @@ export class ConsequenceEngine {
 
     if (consequence.stageDirection) {
       result.stageDirection = consequence.stageDirection(ctx);
+    }
+
+    // 处理 RichPerformance 数据
+    if (consequence.richPerformance) {
+      result.richPerformance = consequence.richPerformance(ctx);
     }
 
     // 应用玩家效果

@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { useGameStore } from './gameStore';
 import { usePlayerStore } from './playerStore';
 import { RelationSystem } from '@/core/world/RelationSystem';
-import type { InteractionState } from '@/core/ai/NpcInteractionEngine';
+import type { InteractionState, InteractionOption } from '@/core/ai/NpcInteractionEngine';
 import type { NpcReaction } from '@/core/ai/NpcReactions';
 
 export const useInteractionStore = defineStore('interaction', () => {
@@ -22,6 +22,8 @@ export const useInteractionStore = defineStore('interaction', () => {
     ended: boolean;
     npcReaction?: NpcReaction;
     actionType?: string;
+    // RichPerformance 数据
+    richPerformance?: import('@/core/ai/NpcInteractionEngine').RichPerformance;
   } | null>(null);
 
   function startInteraction(npcId: number) {
@@ -99,6 +101,24 @@ export const useInteractionStore = defineStore('interaction', () => {
     const currentState = gameStore.engine.interaction.getState();
     if (currentState) {
       state.value = { ...currentState };
+
+      // 刷新动态选项（从引擎获取环境信息）
+      let refreshedOptions: InteractionOption[] | null = null;
+      if (gameStore.engine) {
+        const pid = gameStore.engine.getPlayerId();
+        if (pid !== null) {
+          const pos = gameStore.engine.em.getComponent(pid, 'Position');
+          refreshedOptions = gameStore.engine.interaction.refreshOptions({
+            locationId: pos?.locationId ?? 'street',
+            weather: gameStore.engine.weather.get(),
+            season: gameStore.engine.time.getSeason(),
+            day: gameStore.engine.time.getDay(),
+          });
+        }
+      }
+      if (refreshedOptions) {
+        state.value.options = refreshedOptions;
+      }
     }
 
     // 显示结果（但交互不关闭）
@@ -111,6 +131,7 @@ export const useInteractionStore = defineStore('interaction', () => {
       ended: false,
       npcReaction: result.npcReaction,
       actionType: result.actionType,
+      richPerformance: result.richPerformance,
     };
 
     // 刷新NPC信息（好感度可能变了）
