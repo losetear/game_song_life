@@ -12,9 +12,12 @@ import RelationPanel from '@/components/panels/RelationPanel.vue';
 import EventPanel from '@/components/game/EventPanel.vue';
 import GameOverScreen from '@/components/game/GameOverScreen.vue';
 import NpcInteractionOverlay from '@/components/game/NpcInteractionOverlay.vue';
+import InventoryPanel from '@/components/game/InventoryPanel.vue';
+import ShopPanel from '@/components/game/ShopPanel.vue';
 import { SaveManager } from '@/core/save/SaveManager';
 import { LegacySystem } from '@/core/world/LegacySystem';
 import { useInteractionStore } from '@/stores/interactionStore';
+import { ref } from 'vue';
 
 const gameStore = useGameStore();
 const playerStore = usePlayerStore();
@@ -108,6 +111,26 @@ function currentLocationName(): string {
   const loc = getLocation(playerStore.locationId);
   return loc?.name ?? playerStore.locationId;
 }
+
+// 背包和商店面板控制
+const showInventory = ref(false);
+const showShop = ref(false);
+const selectedShopId = ref<string | null>(null);
+
+function openInventory() {
+  showInventory.value = true;
+}
+
+function openShop(shopId: string) {
+  selectedShopId.value = shopId;
+  showShop.value = true;
+}
+
+function getCurrentShopId(): string | null {
+  if (!gameStore.engine) return null;
+  const shops = gameStore.engine.getShopsAtCurrentLocation();
+  return shops.length > 0 ? shops[0]!.id : null;
+}
 </script>
 
 <template>
@@ -199,6 +222,16 @@ function currentLocationName(): string {
               <button class="action-btn end-turn-btn" @click="endTurn">
                 结束回合
               </button>
+			  <button class="action-btn inventory-btn" @click="openInventory">
+			    背包
+			  </button>
+			  <button
+			    v-if="getCurrentShopId()"
+			    class="action-btn shop-btn"
+			    @click="openShop(getCurrentShopId()!)"
+			  >
+			    进店
+			  </button>
             </div>
           </section>
         </div>
@@ -213,6 +246,11 @@ function currentLocationName(): string {
 
     <!-- NPC交互面板 -->
     <NpcInteractionOverlay v-if="gameStore.gameState === 'interacting'" />
+		<!-- 背包面板 -->
+	    <InventoryPanel v-if="showInventory" @close="showInventory = false" />
+
+		<!-- 商店面板 -->
+	    <ShopPanel v-if="showShop && selectedShopId" :shop-id="selectedShopId" @close="showShop = false" />
   </div>
 </template>
 
@@ -409,5 +447,19 @@ body {
 }
 .end-turn-btn:hover {
   background: #34495e;
+}
+.inventory-btn {
+  border-color: #9b59b6;
+  color: #9b59b6;
+}
+.inventory-btn:hover {
+  background: #f4ecf7;
+}
+.shop-btn {
+  border-color: #e67e22;
+  color: #e67e22;
+}
+.shop-btn:hover {
+  background: #fef5e7;
 }
 </style>

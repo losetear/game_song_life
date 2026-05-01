@@ -58,6 +58,16 @@ export interface NpcScheduleComponent {
   schedule: Record<string, string>;  // 时段 -> locationId
 }
 
+export interface InventoryComponent {
+  items: InventorySlot[];
+  capacity: number;  // 最大格子数，默认20
+}
+
+export interface InventorySlot {
+  itemId: string;
+  count: number;
+}
+
 // --- 类型映射 ---
 
 export type ComponentTypeMap = {
@@ -70,6 +80,7 @@ export type ComponentTypeMap = {
   Memory: MemoryComponent;
   ActionState: ActionStateComponent;
   NpcSchedule: NpcScheduleComponent;
+  Inventory: InventoryComponent;
 };
 
 export type ComponentName = keyof ComponentTypeMap;

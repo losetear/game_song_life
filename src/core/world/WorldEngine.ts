@@ -20,6 +20,8 @@ import { NpcInteractionEngine, type InteractionState } from '../ai/NpcInteractio
 import { ConsequenceEngine, type ConsequenceResult } from '../ai/ConsequenceEngine';
 import { generateNpcReaction } from '../ai/NpcReactions';
 import { RumorSystem } from '../ai/RumorSystem';
+import { getItem, type ItemDef } from '../data/ItemDefs';
+import { getShop, getShopsAtLocation, type ShopDef } from '../data/ShopDefs';
 
 export interface DayResult {
   day: number;
@@ -147,6 +149,10 @@ export class WorldEngine {
     this.em.addComponent(id, 'ActionState', {
       lastActionId: null,
       actionHistory: [],
+    });
+    this.em.addComponent(id, 'Inventory', {
+      items: [],
+      capacity: 20,
     });
 
     return id;
@@ -771,5 +777,324 @@ export class WorldEngine {
     for (const entityData of data.entities) {
       this.em.importEntity({ id: entityData.id, type: entityData.type as any, components: entityData.components });
     }
+  }
+
+  // ==================== 背包系统 ====================
+
+  /** 添加物品到背包 */
+  addItem(itemId: string, count: number = 1): { success: boolean; message: string } {
+    if (this.playerId === null) return { success: false, message: '无玩家角色' };
+
+    const itemDef = getItem(itemId);
+    if (!itemDef) return { success: false, message: '未知物品' };
+
+    const inventory = this.em.getComponent(this.playerId, 'Inventory');
+    if (!inventory) return { success: false, message: '背包异常' };
+
+    // 检查是否已存在该物品（可堆叠）
+    if (itemDef.stackable) {
+      const existingSlot = inventory.items.find(slot => slot.itemId === itemId);
+      if (existingSlot) {
+        existingSlot.count += count;
+        return { success: true, message: `获得了 ${itemDef.name} x${count}` };
+      }
+    }
+
+    // 检查背包容量
+    if (inventory.items.length >= inventory.capacity) {
+      return { success: false, message: '背包已满' };
+    }
+
+    // 添加新格子
+    inventory.items.push({ itemId, count });
+    return { success: true, message: `获得了 ${itemDef.name} x${count}` };
+  }
+
+  /** 从背包移除物品 */
+  removeItem(itemId: string, count: number = 1): { success: boolean; message: string } {
+    if (this.playerId === null) return { success: false, message: '无玩家角色' };
+
+    const inventory = this.em.getComponent(this.playerId, 'Inventory');
+    if (!inventory) return { success: false, message: '背包异常' };
+
+    const slotIndex = inventory.items.findIndex(slot => slot.itemId === itemId);
+    if (slotIndex === -1) {
+      return { success: false, message: '背包中没有该物品' };
+    }
+
+    const slot = inventory.items[slotIndex]!;
+    if (slot.count < count) {
+      return { success: false, message: '物品数量不足' };
+    }
+
+    // 减少数量或移除
+    if (slot.count === count) {
+      inventory.items.splice(slotIndex, 1);
+    } else {
+      slot.count -= count;
+    }
+
+    const itemDef = getItem(itemId);
+    return { success: true, message: `消耗了 ${itemDef?.name ?? itemId} x${count}` };
+  }
+
+  /** 检查背包中是否有某物品（且数量足够） */
+  hasItem(itemId: string, count: number = 1): boolean {
+    if (this.playerId === null) return false;
+
+    const inventory = this.em.getComponent(this.playerId, 'Inventory');
+    if (!inventory) return false;
+
+    const slot = inventory.items.find(s => s.itemId === itemId);
+    return slot !== undefined && slot.count >= count;
+  }
+
+  /** 使用物品 */
+  useItem(itemId: string): { success: boolean; message: string } {
+    if (this.playerId === null) return { success: false, message: '无玩家角色' };
+
+    // 检查是否有该物品
+    if (!this.hasItem(itemId)) {
+      return { success: false, message: '背包中没有该物品' };
+    }
+
+    const itemDef = getItem(itemId);
+    if (!itemDef) return { success: false, message: '未知物品' };
+
+    if (!itemDef.usable) {
+      return { success: false, message: '该物品无法直接使用' };
+    }
+
+    // 消耗物品
+    const removeResult = this.removeItem(itemId, 1);
+    if (!removeResult.success) {
+      return removeResult;
+    }
+
+    // 应用效果到玩家
+    const vital = this.em.getComponent(this.playerId, 'Vital');
+    const identity = this.em.getComponent(this.playerId, 'Identity');
+    if (!vital || !identity) return { success: false, message: '状态异常' };
+
+    if (itemDef.effects.hunger) vital.hunger = clamp(vital.hunger + itemDef.effects.hunger, 0, 100);
+    if (itemDef.effects.fatigue) vital.fatigue = clamp(vital.fatigue + itemDef.effects.fatigue, 0, 100);
+    if (itemDef.effects.health) vital.health = clamp(vital.health + itemDef.effects.health, 0, 100);
+    if (itemDef.effects.mood) vital.mood = clamp(vital.mood + itemDef.effects.mood, 0, 100);
+
+    // 生成叙事文本
+    const narrative = itemDef.useNarrative
+      ? itemDef.useNarrative.replace(/{name}/g, identity.name)
+      : `使用了${itemDef.name}`;
+
+    return { success: true, message: narrative };
+  }
+
+  /** 获取背包内容 */
+  getInventory(): Array<{ itemId: string; itemDef: ItemDef; count: number }> {
+    if (this.playerId === null) return [];
+
+    const inventory = this.em.getComponent(this.playerId, 'Inventory');
+    if (!inventory) return [];
+
+    return inventory.items.map(slot => {
+      const itemDef = getItem(slot.itemId);
+      return {
+        itemId: slot.itemId,
+        itemDef: itemDef!,
+        count: slot.count,
+      };
+    }).filter(item => item.itemDef !== undefined);
+  }
+
+  // ==================== 店铺交易系统 ====================
+
+  /** 获取店铺信息 */
+  getShopInfo(shopId: string): (ShopDef & { sellItemsWithPrice: Array<{ itemId: string; itemDef: ItemDef; price: number }> }) | null {
+    if (this.playerId === null) return null;
+
+    const shopDef = getShop(shopId);
+    if (!shopDef) return null;
+
+    // 计算季节价格系数
+    const season = this.time.getSeason();
+    let seasonMultiplier = 1.0;
+    if (season === '冬') {
+      seasonMultiplier = 1.2; // 冬天物价上涨
+    } else if (season === '秋') {
+      seasonMultiplier = 0.9; // 秋天收获，物价下跌
+    }
+
+    // 计算每个物品的实际售价
+    const sellItemsWithPrice = shopDef.sellItems.map(itemId => {
+      const itemDef = getItem(itemId);
+      if (!itemDef) return null;
+      const price = Math.floor(itemDef.basePrice * shopDef.sellPriceMultiplier * seasonMultiplier);
+      return {
+        itemId,
+        itemDef,
+        price,
+      };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return {
+      ...shopDef,
+      sellItemsWithPrice,
+    };
+  }
+
+  /** 获取当前地点的店铺 */
+  getShopsAtCurrentLocation(): ShopDef[] {
+    if (this.playerId === null) return [];
+
+    const pos = this.em.getComponent(this.playerId, 'Position');
+    if (!pos) return [];
+
+    return getShopsAtLocation(pos.locationId);
+  }
+
+  /** 购买物品 */
+  buyItem(shopId: string, itemId: string): { success: boolean; message: string } {
+    if (this.playerId === null) return { success: false, message: '无玩家角色' };
+
+    // 获取店铺信息
+    const shopInfo = this.getShopInfo(shopId);
+    if (!shopInfo) return { success: false, message: '店铺不存在' };
+
+    // 检查玩家是否在店铺所在地点
+    const pos = this.em.getComponent(this.playerId, 'Position');
+    if (!pos || pos.locationId !== shopInfo.locationId) {
+      return { success: false, message: '你不在该店铺所在地点' };
+    }
+
+    // 检查物品是否在该店铺出售
+    const sellItem = shopInfo.sellItemsWithPrice.find(item => item.itemId === itemId);
+    if (!sellItem) {
+      return { success: false, message: '该店铺不出售此物品' };
+    }
+
+    // 获取玩家铜钱
+    const wallet = this.em.getComponent(this.playerId, 'Wallet');
+    if (!wallet) return { success: false, message: '状态异常' };
+
+    // 检查铜钱是否足够
+    if (wallet.copper < sellItem.price) {
+      return { success: false, message: `铜钱不足，需要${sellItem.price}文` };
+    }
+
+    // 检查背包容量
+    const inventory = this.em.getComponent(this.playerId, 'Inventory');
+    if (!inventory) return { success: false, message: '背包异常' };
+
+    const itemDef = sellItem.itemDef;
+    const existingSlot = inventory.items.find(slot => slot.itemId === itemId);
+    if (!existingSlot && inventory.items.length >= inventory.capacity) {
+      return { success: false, message: '背包已满' };
+    }
+
+    // 扣除铜钱
+    wallet.copper -= sellItem.price;
+
+    // 添加到背包
+    const addResult = this.addItem(itemId, 1);
+    if (!addResult.success) {
+      // 回退铜钱
+      wallet.copper += sellItem.price;
+      return addResult;
+    }
+
+    // 生成叙事文本
+    const narrative = `你在${shopInfo.name}花了${sellItem.price}文买了${itemDef.name}，${this.generatePurchaseNarrative(itemDef)}`;
+
+    return { success: true, message: narrative };
+  }
+
+  /** 出售物品 */
+  sellItem(itemId: string, shopId?: string): { success: boolean; message: string } {
+    if (this.playerId === null) return { success: false, message: '无玩家角色' };
+
+    // 检查背包中是否有该物品
+    if (!this.hasItem(itemId)) {
+      return { success: false, message: '背包中没有该物品' };
+    }
+
+    const itemDef = getItem(itemId);
+    if (!itemDef) return { success: false, message: '未知物品' };
+
+    // 如果指定了店铺，检查是否在店铺地点
+    if (shopId) {
+      const shopDef = getShop(shopId);
+      if (!shopDef) return { success: false, message: '店铺不存在' };
+
+      const pos = this.em.getComponent(this.playerId, 'Position');
+      if (!pos || pos.locationId !== shopDef.locationId) {
+        return { success: false, message: '你不在该店铺所在地点' };
+      }
+
+      // 检查店铺是否收购该类别
+      if (!shopDef.buyCategories.includes(itemDef.category)) {
+        return { success: false, message: '该店铺不收购此类物品' };
+      }
+    }
+
+    // 获取当前地点的店铺（如果没有指定店铺）
+    let targetShop: ShopDef | undefined;
+    if (shopId) {
+      targetShop = getShop(shopId);
+    } else {
+      const shops = this.getShopsAtCurrentLocation();
+      targetShop = shops.find(shop => shop.buyCategories.includes(itemDef.category));
+    }
+
+    if (!targetShop) {
+      return { success: false, message: '当前地点没有收购此物品的店铺' };
+    }
+
+    // 计算收购价
+    const buyPrice = Math.floor(itemDef.basePrice * targetShop.buyPriceMultiplier);
+
+    // 从背包移除
+    const removeResult = this.removeItem(itemId, 1);
+    if (!removeResult.success) {
+      return removeResult;
+    }
+
+    // 增加铜钱
+    const wallet = this.em.getComponent(this.playerId, 'Wallet');
+    if (!wallet) return { success: false, message: '状态异常' };
+
+    wallet.copper += buyPrice;
+
+    // 生成叙事文本
+    const narrative = `你把${itemDef.name}卖给了${targetShop.name}，获得了${buyPrice}文铜钱。`;
+
+    return { success: true, message: narrative };
+  }
+
+  /** 生成购买物品的叙事文本 */
+  private generatePurchaseNarrative(itemDef: ItemDef): string {
+    const narratives: string[] = [
+      `东西还算不错。`,
+      `掌柜的笑着把你送出门。`,
+      `希望这笔买卖划算。`,
+      `在手里掂量了几下，还算满意。`,
+      `街上人来人往，你小心收好。`,
+    ];
+
+    // 根据物品类型添加特定描述
+    if (itemDef.category === 'food' || itemDef.category === 'drink') {
+      narratives.push(`看着就让人食指大动。`);
+      narratives.push(`香味扑鼻而来。`);
+    } else if (itemDef.category === 'medicine') {
+      narratives.push(`希望能治好身上的不适。`);
+      narratives.push(`药香隐隐约约。`);
+    } else if (itemDef.category === 'weapon') {
+      narratives.push(`沉甸甸的，让人有安全感。`);
+      narratives.push(`寒光闪闪，似是把利器。`);
+    } else if (itemDef.category === 'luxury') {
+      narratives.push(`这可是稀罕货。`);
+      narratives.push(`小心翼翼地收起来。`);
+    }
+
+    return narratives[Math.floor(this.rng.next() * narratives.length)]!;
   }
 }

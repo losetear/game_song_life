@@ -102,6 +102,18 @@ export const LOCATIONS: Record<string, LocationDef> = {
     description: '城郊一处荒废多年的宅院，传闻闹鬼，无人敢近。',
     connections: ['farmland', 'mountain'],
   },
+  inn: {
+    id: 'inn',
+    name: '客栈',
+    description: '往来商旅投宿之地，提供酒水和住宿。',
+    connections: ['street'],
+  },
+  bookshop: {
+    id: 'bookshop',
+    name: '书店',
+    description: '书香满屋，售卖各类书籍文房。',
+    connections: ['street'],
+  },
 };
 
 export function getLocation(id: string): LocationDef | undefined {

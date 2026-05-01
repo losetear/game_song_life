@@ -659,5 +659,336 @@ export function createDefaultActionRegistry(): ActionRegistry {
     narrative: (ctx) => `${ctx.name}盘膝而坐，闭目凝神，将纷乱的思绪一一理清。`,
   });
 
+  // ==================== 新增行动系统丰富化 ====================
+
+  // === 工作类（赚钱） ===
+  reg.register({
+    id: 'work_porter',
+    name: '码头搬运',
+    category: 'work',
+    cost: { fatigue: 20, ap: 1 },
+    effects: { copper: 15 },
+    conditions: { atLocation: ['dock'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在码头扛了一天的货，汗流浃背，挣了几个辛苦钱。`,
+        `码头货物堆积如山，${ctx.name}来回奔波，手臂都酸了。`,
+        `${ctx.name}帮商行搬运布匹，掌柜的还算大方。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'work_woodcut',
+    name: '砍柴',
+    category: 'work',
+    cost: { fatigue: 25, ap: 1 },
+    effects: { copper: 20 },
+    conditions: { atLocation: ['mountain', 'farmland'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在山林里砍了一捆柴，背到集市卖了。`,
+        `斧头挥了一整天，${ctx.name}砍了满满一车柴火。`,
+        `${ctx.name}砍得手都起泡了，好在柴火能卖个好价钱。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'work_fishing',
+    name: '钓鱼',
+    category: 'work',
+    cost: { fatigue: 15, ap: 1 },
+    effects: { copper: 12, hunger: 5 },
+    conditions: { atLocation: ['riverside', 'dock'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在汴河边钓了一下午，收获了几条鲜鱼。`,
+        `鱼竿一动，${ctx.name}拉起来一条大鱼，今天运气不错！`,
+        `守了半天，${ctx.name}总算钓到几条小鱼，勉强换几个钱。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'work_farming',
+    name: '种田',
+    category: 'work',
+    cost: { fatigue: 25, ap: 1 },
+    effects: { copper: 18 },
+    conditions: { atLocation: ['farmland'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在田间劳作了一整天，腰酸背痛。`,
+        `春耕时节，${ctx.name}弯腰插秧，汗水滴入泥土。`,
+        `${ctx.name}给庄稼浇水施肥，盼望秋天有好收成。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'work_scribe',
+    name: '代写书信',
+    category: 'work',
+    cost: { fatigue: 10, ap: 1 },
+    effects: { copper: 25 },
+    conditions: { atLocation: ['teahouse', 'street'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在茶馆摆了张桌子，帮不识字的百姓写家书。`,
+        `一位大娘托${ctx.name}给儿子写封信，塞了几个铜板。`,
+        `${ctx.name}笔走龙蛇，一封家书写得情真意切。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'work_hawker',
+    name: '摆摊叫卖',
+    category: 'work',
+    cost: { fatigue: 12, ap: 1 },
+    effects: { copper: 10 },
+    conditions: { atLocation: ['street', 'market'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在街边摆了个小摊，吆喝了半天。`,
+        `集市上人潮涌动，${ctx.name}的摊位总算有些生意。`,
+        `${ctx.name}沿街叫卖，嗓子都快哑了。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  // === 生活类（维持生存） ===
+  reg.register({
+    id: 'eat_street_food',
+    name: '吃小食',
+    category: 'survival',
+    cost: { copper: 10, ap: 1 },
+    effects: { hunger: 20, mood: 3 },
+    conditions: { minCopper: 10, atLocation: ['street', 'market'] },
+    narrative: (ctx) => {
+      if (ctx.weather === '晴') {
+        return `${ctx.name}在路边摊坐下，要了一份炊饼。阳光照在身上暖洋洋的，炊饼刚出炉，外酥里嫩。`;
+      } else if (ctx.weather === '雨') {
+        return `${ctx.name}冒雨走到一个遮雨棚下，买了一碗热气腾腾的面条。虽然简陋，但雨天里吃碗热面格外舒坦。`;
+      } else if (ctx.season === '冬') {
+        return `寒风中，${ctx.name}裹紧衣服走向路边摊，一碗羊肉汤下肚，从胃里暖到心里。`;
+      }
+      return `${ctx.name}在路边摊买了点吃的，简单填饱肚子。`;
+    },
+  });
+
+  reg.register({
+    id: 'eat_restaurant',
+    name: '下馆子',
+    category: 'survival',
+    cost: { copper: 80, ap: 1 },
+    effects: { hunger: 50, mood: 15 },
+    conditions: { minCopper: 80, atLocation: ['brothel', 'teahouse'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在樊楼点了一桌好菜，酒足饭饱，心满意足。`,
+        `小二端上八道菜，${ctx.name}细细品味，虽然贵但值得。`,
+        `${ctx.name}难得下馆子，点了些硬菜，好好犒劳自己。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'drink_tea_simple',
+    name: '喝茶',
+    category: 'survival',
+    cost: { copper: 8, ap: 1 },
+    effects: { fatigue: -8, mood: 8 },
+    conditions: { minCopper: 8, atLocation: ['teahouse'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在茶馆坐定，要了一壶茶，慢慢品着。`,
+        `茶香袅袅，${ctx.name}靠在椅子上，放松疲惫的身心。`,
+        `${ctx.name}听着茶客闲谈，喝着热茶，悠闲自在。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'rest_inn',
+    name: '住客栈',
+    category: 'survival',
+    cost: { copper: 30, ap: 1 },
+    effects: { fatigue: 40, mood: 5 },
+    conditions: { minCopper: 30, atLocation: ['inn', 'residential'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}在客栈开了间房，躺在干净的床上沉沉睡去。`,
+        `客栈的被褥还算干净，${ctx.name}一觉睡到大天亮。`,
+        `${ctx.name}花三十文住了晚客栈，睡得比在家里还香。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'rest_street',
+    name: '露宿街头',
+    category: 'survival',
+    cost: { ap: 1 },
+    effects: { fatigue: 10, health: -5 },
+    conditions: { atLocation: ['street', 'temple'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}蜷缩在墙角，盖着破衣烂衫睡了一晚，醒来浑身酸痛。`,
+        `夜风刺骨，${ctx.name}躲在屋檐下瑟瑟发抖，勉强挨过一夜。`,
+        `${ctx.name}在相国寺门口找了个角落，勉强休息了一会儿。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'visit_doctor_advanced',
+    name: '看大夫',
+    category: 'survival',
+    cost: { copper: 50, ap: 1 },
+    effects: { health: 35 },
+    conditions: { minCopper: 50, atLocation: ['clinic'], minHealth: 60 },
+    narrative: (ctx) => {
+      const narratives = [
+        `郎中给${ctx.name}把了脉，开了几副名贵药材，煎服后感觉好多了。`,
+        `${ctx.name}花大价钱看了名医，开了方子抓了药，果然药到病除。`,
+        `老郎中仔细检查了${ctx.name}的身子，开了几味补药，嘱咐好生休养。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  // === 社交类 ===
+  reg.register({
+    id: 'buy_drink_for_npc',
+    name: '请客喝酒',
+    category: 'social',
+    cost: { copper: 15, ap: 1 },
+    effects: { mood: 10, social: 15 },
+    conditions: { minCopper: 15, atLocation: ['teahouse', 'brothel'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}叫来一壶好酒，请邻座的人共饮，大家相谈甚欢。`,
+        `${ctx.name}大方地请客，满座的人都举起酒杯致谢。`,
+        `酒过三巡，${ctx.name}和周围的人称兄道弟起来。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'give_gift',
+    name: '送礼',
+    category: 'social',
+    cost: { copper: 30, ap: 1 },
+    effects: { mood: 12, social: 20 },
+    conditions: { minCopper: 30 },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}送上一份精心挑选的礼物，对方笑逐颜开。`,
+        `${ctx.name}送礼送到心坎上，对方连声道谢。`,
+        `礼轻情意重，${ctx.name}的礼物让人心生好感。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'play_chess',
+    name: '下棋',
+    category: 'social',
+    cost: { ap: 1 },
+    effects: { mood: 12 },
+    conditions: { atLocation: ['teahouse', 'academy'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}与人对弈，棋盘上厮杀激烈，围观的人啧啧称奇。`,
+        `一局棋下完，${ctx.name}虽败犹荣，约定来日再战。`,
+        `${ctx.name}落子如飞，对手渐渐招架不住，周围一片叫好。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'listen_story',
+    name: '听书',
+    category: 'social',
+    cost: { copper: 3, ap: 1 },
+    effects: { mood: 15 },
+    conditions: { minCopper: 3, atLocation: ['teahouse'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `说书人拍案惊堂，${ctx.name}听得入迷，连喝彩都忘了。`,
+        `那书说到精彩处，${ctx.name}和满座听众一起鼓掌叫好。`,
+        `${ctx.name}在茶馆听了一场评书，听得津津有味。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  // === 学习类 ===
+  reg.register({
+    id: 'study_book',
+    name: '读书',
+    category: 'leisure',
+    cost: { fatigue: 8, ap: 1 },
+    effects: { mood: 8 },
+    conditions: { atLocation: ['academy', 'residential', 'teahouse'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}翻开书卷，沉浸在知识的海洋中。`,
+        `灯火下，${ctx.name}认真读书，不知不觉夜深了。`,
+        `${ctx.name}读到精彩处，忍不住拍案叫绝。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'practice_calligraphy',
+    name: '练字',
+    category: 'leisure',
+    cost: { fatigue: 6, ap: 1 },
+    effects: { mood: 6 },
+    conditions: { atLocation: ['academy', 'residential'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}铺纸研墨，一笔一划临摹着碑帖。`,
+        `练了一下午字，${ctx.name}的手腕都酸了，但字确实有进步。`,
+        `${ctx.name}专注地写着字，心神渐渐沉静下来。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
+  reg.register({
+    id: 'learn_trade',
+    name: '学手艺',
+    category: 'work',
+    cost: { copper: 40, ap: 1 },
+    effects: { mood: 5 },
+    conditions: { minCopper: 40, atLocation: ['workshop', 'market'] },
+    narrative: (ctx) => {
+      const narratives = [
+        `${ctx.name}拜了个师傅，交了学费，开始学手艺。`,
+        `师傅手把手地教，${ctx.name}学得很认真。`,
+        `${ctx.name}花了点钱，向匠人请教了不少门道。`,
+      ];
+      return narratives[ctx.day % narratives.length]!;
+    },
+  });
+
    return reg;
 }
