@@ -36,6 +36,12 @@ const importantEvents = computed(() => {
   );
 });
 
+/** 计算净收入 */
+const netIncome = computed(() => {
+  if (!result.value) return 0;
+  return (result.value.dailyIncome || 0) - (result.value.dailyExpense || 0);
+});
+
 /** 返回游戏 */
 function backToGame() {
   gameStore.setGameState('playing');
@@ -89,6 +95,58 @@ function backToGame() {
             <span class="value">{{ result?.playerState.actionPoints ?? 0 }}/4</span>
           </div>
         </div>
+      </div>
+
+      <!-- 收支明细 -->
+      <div class="finance-summary" v-if="result && (result.dailyIncome > 0 || result.dailyExpense > 0)">
+        <h3>今日收支</h3>
+        <div class="finance-grid">
+          <div class="finance-item income">
+            <span class="label">收入</span>
+            <span class="value">+{{ result.dailyIncome }}文</span>
+          </div>
+          <div class="finance-item expense">
+            <span class="label">支出</span>
+            <span class="value">-{{ result.dailyExpense }}文</span>
+          </div>
+          <div class="finance-item net" :class="{ positive: netIncome > 0, negative: netIncome < 0 }">
+            <span class="label">净收支</span>
+            <span class="value">{{ netIncome > 0 ? '+' : '' }}{{ netIncome }}文</span>
+          </div>
+        </div>
+        <div class="transaction-list" v-if="result.transactions.length > 0">
+          <div class="transaction-header">交易明细</div>
+          <ul class="transactions">
+            <li v-for="(txn, i) in result.transactions.slice(0, 8)" :key="i" :class="{ income: txn.includes('+'), expense: txn.includes('-') }">
+              {{ txn }}
+            </li>
+            <li v-if="result.transactions.length > 8" class="more-hint">
+              ……还有 {{ result.transactions.length - 8 }} 笔交易
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 健康警告 -->
+      <div class="health-warnings" v-if="result && result.healthWarnings.length > 0">
+        <h3 class="warning-title">⚠ 健康警告</h3>
+        <ul class="warning-list">
+          <li v-for="(warning, i) in result.healthWarnings" :key="i" class="warning-item">
+            {{ warning }}
+          </li>
+        </ul>
+      </div>
+
+      <!-- 夜间事件 -->
+      <div class="night-event" v-if="result && result.nightEvent">
+        <h3>🌙 夜间事件</h3>
+        <p class="night-event-text">{{ result.nightEvent }}</p>
+      </div>
+
+      <!-- 次日天气 -->
+      <div class="next-day-weather" v-if="result && result.nextDayWeather">
+        <span class="weather-icon">🌤</span>
+        <span class="weather-text">{{ result.nextDayWeather }}</span>
       </div>
 
       <!-- NPC行动摘要 -->
@@ -307,6 +365,154 @@ function backToGame() {
   color: #999;
   font-size: 0.9rem;
   margin-bottom: 16px;
+}
+
+/* 收支明细 */
+.finance-summary {
+  margin-bottom: 16px;
+}
+.finance-summary h3 {
+  font-size: 1rem;
+  color: #8b4513;
+  margin-bottom: 8px;
+}
+.finance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.finance-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f5f0e8;
+}
+.finance-item .label {
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 4px;
+}
+.finance-item .value {
+  font-size: 1rem;
+  font-weight: bold;
+}
+.finance-item.income .value {
+  color: #27ae60;
+}
+.finance-item.expense .value {
+  color: #e74c3c;
+}
+.finance-item.net .value {
+  color: #7f8c8d;
+}
+.finance-item.net.positive .value {
+  color: #27ae60;
+}
+.finance-item.net.negative .value {
+  color: #e74c3c;
+}
+.transaction-list {
+  margin-top: 8px;
+}
+.transaction-header {
+  font-size: 0.8rem;
+  color: #666;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed #ddd;
+}
+.transactions {
+  margin: 0;
+  padding-left: 20px;
+}
+.transactions li {
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: #555;
+}
+.transactions li.income {
+  color: #27ae60;
+}
+.transactions li.expense {
+  color: #e74c3c;
+}
+.transactions li.more-hint {
+  color: #999;
+  font-style: italic;
+  list-style: none;
+  margin-left: -20px;
+}
+
+/* 健康警告 */
+.health-warnings {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fdf2f2;
+  border: 1px solid #e74c3c;
+  border-radius: 6px;
+  animation: flash-warning 2s ease-in-out 3;
+}
+@keyframes flash-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.health-warnings h3 {
+  font-size: 1rem;
+  color: #c0392b;
+  margin-bottom: 8px;
+}
+.warning-list {
+  margin: 0;
+  padding-left: 20px;
+}
+.warning-item {
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: #a93226;
+  list-style: disc;
+}
+
+/* 夜间事件 */
+.night-event {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
+}
+.night-event h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+  color: white;
+}
+.night-event-text {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin: 0;
+  font-style: italic;
+}
+
+/* 次日天气 */
+.next-day-weather {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: #ecf0f1;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+.weather-icon {
+  font-size: 1.5rem;
+}
+.weather-text {
+  font-size: 0.9rem;
+  color: #555;
+  font-weight: 500;
 }
 
 /* 操作按钮 */

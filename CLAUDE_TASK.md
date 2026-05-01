@@ -1,294 +1,201 @@
-# 丰富性开发任务 — 物品/背包系统 + 店铺交易 + 日常细化
+# 丰富性开发任务二 — 地点描述 + 日终结算 + 存档集成 + gameStore完善
 
 ## 背景
-
-项目已完成：ECS引擎、时间/天气/季节系统、50个NPC+效用AI、场景事件系统（195个/10类别）、NPC交互系统（动态选项+演出+反应）、传闻/经济/关系/死亡系统。
-当前处于第二→三阶段之间。玩家可以走动、看事件、和NPC交互，但缺少"赚钱→花钱→生存"的闭环体验。
-
-## 总体目标
-
-让玩家的每一天都有丰富的选择和后果，形成完整的每日循环。
+上一轮已完成了物品/背包系统、店铺交易系统、行动丰富化。本轮继续完善游戏体验闭环。
 
 ---
 
-## 任务一：物品与背包系统（P0，核心刚需）
+## 任务一：地点描述丰富化（P0）
 
-### 1.1 定义物品类型体系
+### 1.1 改造 LocationDefs 接口
 
-在 `src/core/data/` 下新建 `ItemDefs.ts`：
-
-```typescript
-// 物品大类
-type ItemCategory = 'food' | 'drink' | 'medicine' | 'tool' | 'clothing' | 'material' | 'luxury' | 'book' | 'weapon' | 'gift';
-
-// 物品稀有度
-type ItemRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
-
-interface ItemDef {
-  id: string;            // 唯一ID，如 "mantou", "herb_medicine"
-  name: string;          // 显示名，如 "馒头", "草药"
-  category: ItemCategory;
-  rarity: ItemRarity;
-  description: string;   // 一句话描述
-  basePrice: number;     // 基础价格（文钱）
-  effects: {
-    hunger?: number;     // 饱食度变化
-    fatigue?: number;    // 精力变化
-    health?: number;     // 健康变化
-    mood?: number;       // 心情变化
-  };
-  stackable: boolean;    // 是否可堆叠
-  maxStack: number;      // 最大堆叠数
-  usable: boolean;       // 是否可以直接使用
-  useNarrative?: string; // 使用时的叙事文本模板
-}
-```
-
-### 1.2 定义至少40种物品
-
-覆盖以下类别，每个类别至少4种：
-
-**食物(food)** — 8种
-- 馒头(5文, +15饥饿)、烧饼(8文, +20饥饿)、包子(10文, +25饥饿, +2心情)
-- 羊肉汤(35文, +40饥饿, +5心情)、面条(15文, +30饥饿)
-- 炊饼(5文, +12饥饿)、糕点(20文, +15饥饿, +8心情)、粽子(12文, +22饥饿)
-
-**饮品(drink)** — 4种
-- 粗茶(3文, +5饥饿, +3疲劳)、好茶(15文, +3饥饿, +5疲劳, +5心情)
-- 米酒(10文, +5心情, -5疲劳)、黄酒(25文, +8心情, -10疲劳)
-
-**药品(medicine)** — 4种
-- 草药(20文, +15健康)、金创药(50文, +30健康)
-- 安神汤(30文, +20疲劳, +10心情)、人参(100文, +25健康, +15疲劳, +10心情)
-
-**工具(tool)** — 4种
-- 锄头(80文, 持有可种田)、鱼竿(60文, 持有可钓鱼)
-- 毛笔(30文, 持有可写字/画画)、算盘(50文, 持有可当账房)
-
-**衣物(clothing)** — 4种
-- 粗麻衣(50文, +3心情)、棉布衫(150文, +5心情, 御寒)
-- 绸缎袍(500文, +12心情, +社交加成)、旧棉袄(80文, 强力御寒)
-
-**材料(material)** — 4种
-- 麻布(30文)、棉线(15文)、木材(20文)、铁矿石(40文)
-
-**奢侈品(luxury)** — 4种
-- 苏绣手帕(200文, +15心情, 礼物佳品)、玉佩(800文, +20心情, 稀有)
-- 古琴(500文, +10心情)、名画(600文, +10心情)
-
-**书籍(book)** — 4种
-- 三字经(20文, 可学基础)、论语(80文, 可学进阶)
-- 算经(50文)、医书(100文)
-
-**礼物(gift)** — 4种
-- 花束(10文, +关系)、点心盒(25文, +关系)、胭脂(60文, +关系大幅)、定情信物(200文, +关系大量)
-
-### 1.3 背包组件与系统
-
-在 ECS 类型中添加：
+在 `src/core/data/LocationDefs.ts` 中：
 
 ```typescript
-// src/core/ecs/types.ts 新增
-export interface InventoryComponent {
-  items: InventorySlot[];
-  capacity: number;  // 最大格子数，默认20
-}
-
-export interface InventorySlot {
-  itemId: string;
-  count: number;
-}
-```
-
-在 WorldEngine 中：
-- 创建玩家时添加 InventoryComponent（初始背包容量20）
-- 添加 `addItem(itemId, count)` / `removeItem(itemId, count)` / `hasItem(itemId)` / `useItem(itemId)` 方法
-- `useItem` 应用物品效果到玩家属性，返回叙事文本
-- 添加 `getInventory()` 获取背包内容
-
-### 1.4 背包UI
-
-在 `src/components/game/` 下新建 `InventoryPanel.vue`：
-- 网格布局显示物品图标（用emoji代替图标资源）
-- 每个格子显示物品名 + 数量
-- 点击可使用物品（如果usable）
-- 背包满时提示
-
----
-
-## 任务二：店铺交易系统（P0，核心刚需）
-
-### 2.1 店铺定义
-
-在 `src/core/data/` 下新建 `ShopDefs.ts`：
-
-```typescript
-interface ShopDef {
-  id: string;
-  name: string;           // 店铺名
-  locationId: string;     // 所在地点
-  sellItems: string[];    // 出售的物品ID列表
-  buyCategories: ItemCategory[];  // 收购的物品类别
-  buyPriceMultiplier: number;  // 收购价倍率（0.4-0.7）
-  sellPriceMultiplier: number; // 出售价倍率（0.8-1.2，受季节影响）
-  shopkeeperNpcProfession: string; // 对应掌柜的职业
-}
-```
-
-定义至少6家店铺：
-
-| 店铺 | 地点 | 出售物品 | 收购物品类 |
-|------|------|---------|-----------|
-| 刘家面馆 | street | 面条、羊肉汤、包子、烧饼 | food |
-| 赵记茶楼 | tea_house | 粗茶、好茶、糕点、米酒 | drink, food |
-| 回春堂 | clinic | 草药、金创药、安神汤、人参 | material, medicine |
-| 王记杂货 | market | 锄头、鱼竿、毛笔、算盘、麻布、棉线 | tool, material |
-| 锦绣坊 | cloth_shop | 粗麻衣、棉布衫、绸缎袍、旧棉袄、苏绣手帕 | clothing, luxury |
-| 文萃轩 | bookshop | 三字经、论语、算经、医书、花束、点心盒 | book |
-
-### 2.2 交易逻辑
-
-在 WorldEngine 中添加：
-
-```typescript
-// 购买物品
-buyItem(shopId: string, itemId: string): { success: boolean; message: string }
-
-// 出售物品
-sellItem(itemId: string): { success: boolean; message: string }
-
-// 获取店铺信息
-getShopInfo(shopId: string): ShopInfo | null
-
-// 获取当前地点的店铺
-getShopsAtLocation(locationId: string): ShopDef[]
-```
-
-购买逻辑：
-1. 检查店铺是否存在且在当前地点
-2. 检查物品是否在该店铺出售
-3. 计算价格（basePrice × sellPriceMultiplier × 季节系数）
-4. 检查玩家铜钱是否足够
-5. 扣除铜钱，添加到背包
-6. 返回叙事文本（如 "你花了35文买了一碗羊肉汤，热气腾腾的..."）
-
-出售逻辑：
-1. 检查背包中是否有该物品
-2. 检查是否有店铺收购该类别
-3. 计算收购价（basePrice × buyPriceMultiplier）
-4. 从背包移除，增加铜钱
-5. 返回叙事文本
-
-### 2.3 交易UI
-
-新建 `ShopPanel.vue`：
-- 左右两栏：左边店铺商品列表（名称+价格），右边玩家背包
-- 购买/出售按钮
-- 铜钱余额显示
-- 买不起的物品显示灰色
-
----
-
-## 任务三：行动系统丰富化（P1）
-
-### 3.1 扩展 ActionRegistry
-
-当前行动系统已有基础框架，需要大幅扩展行动数量和叙事质量。
-
-在 `src/core/ai/ActionRegistry.ts` 中添加至少20个新行动：
-
-**工作类（赚钱）：**
-- `work_porter` — 码头搬运（体力活，+15文，-20疲劳，需在码头）
-- `work_woodcut` — 砍柴（需有斧头，+20文，-25疲劳）
-- `work_fishing` — 钓鱼（需有鱼竿，产出鱼，受天气影响）
-- `work_farming` — 种田（需有锄头，耗时2AP，产出粮食）
-- `work_scribe` — 代写书信（需有毛笔，+25文，需在茶馆/街边）
-- `work_hawker` — 摆摊叫卖（需有可卖物品，收入随机）
-
-**生活类（维持生存）：**
-- `eat_street_food` — 在路边吃小食（花费5-15文，恢复饥饿）
-- `eat_restaurant` — 下馆子（花费50-200文，恢复饥饿+心情）
-- `drink_tea` — 喝茶（花费3-15文，恢复少量疲劳+心情）
-- `rest_inn` — 住客栈（花费30文，大量恢复疲劳）
-- `rest_street` — 露宿街头（免费，少量恢复疲劳，健康-5）
-- `visit_doctor` — 看大夫（花费20-100文，恢复健康）
-
-**社交类：**
-- `buy_drink_for_npc` — 请NPC喝酒（花费10文，+关系）
-- `give_gift` — 送礼（消耗背包中的gift类物品，+关系）
-- `play_chess` — 下棋（需在茶馆，+心情，有机会+关系）
-- `listen_story` — 听书（需在瓦舍，+心情，获取传闻）
-
-**学习类：**
-- `study_book` — 读书（需背包有书，+随机技能经验）
-- `practice_calligraphy` — 练字（需有毛笔，+文化相关）
-- `learn_trade` — 学手艺（需找到对应NPC，消耗AP+铜钱）
-
-### 3.2 每个行动的叙事文本
-
-每个行动至少3种叙事变体，根据天气/时间/心情随机选择：
-
-以 `eat_street_food` 为例：
-- 变体A（晴天）："你在路边摊坐下，要了一份炊饼。阳光照在身上暖洋洋的，炊饼刚出炉，外酥里嫩。"
-- 变体B（雨天）："你冒雨走到一个遮雨棚下，买了一碗热气腾腾的面条。虽然简陋，但雨天里吃碗热面格外舒坦。"
-- 变体C（冬天）："寒风中，你裹紧衣服走向路边摊，一碗羊肉汤下肚，从胃里暖到心里。"
-
----
-
-## 任务四：地点描述丰富化（P1）
-
-### 4.1 扩展 LocationDefs
-
-在 `src/core/data/LocationDefs.ts` 中为每个地点添加丰富的描述：
-
-```typescript
-interface LocationDef {
+export interface LocationDef {
   id: string;
   name: string;
-  description: string;           // 基础描述
-  descriptions: {                 // 根据天气/时间的变体描述
-    morning?: string;
-    afternoon?: string;
-    evening?: string;
-    night?: string;
-    rainy?: string;
-    snowy?: string;
-  };
-  atmosphere: string;             // 氛围词
+  description: string;
   connections: string[];
   // 新增
-  availableActions: string[];     // 该地点可执行的行动ID
-  ambientSounds?: string;         // 环境音描述
-  npcsOftenHere?: string[];       // 常驻NPC职业
+  descriptions: {
+    morning?: string;    // 清晨
+    afternoon?: string;  // 午后
+    evening?: string;    // 黄昏
+    night?: string;      // 夜晚
+    rainy?: string;      // 雨天
+    snowy?: string;      // 雪天
+    spring?: string;     // 春
+    summer?: string;     // 夏
+    autumn?: string;     // 秋
+    winter?: string;     // 冬
+  };
+  atmosphere: string;    // 氛围词（1-2字）
+  ambientDetail?: string; // 环境细节描述
+  availableShops?: string[]; // 该地点的店铺ID
 }
 ```
 
-为所有现有地点（street, tea_house, market, dock, inn, clinic, bookshop, cloth_shop, temple, countryside）添加：
-- 四时段描述（晨/午/昏/夜）
-- 天气变体（雨/雪）
-- 氛围描写
+### 1.2 为现有18个地点全部丰富描述
 
-每个地点至少6条不同描述文本。
+每个地点至少写5条变体描述（时段+天气+季节），体现宋朝汴京的市井氛围。
+
+示例 — 大街(street)：
+- morning: "晨光初照，大街上已经有早起的商贩在支摊。几个挑夫挑着担子匆匆而过，空气中弥漫着豆浆和油条的香气。"
+- afternoon: "午后的阳光洒在青石板路上，大街上人来人往，热闹非凡。卖花的姑娘在街角叫卖，远处传来瓦舍说书先生的声音。"
+- evening: "夕阳西斜，大街上的人渐渐少了。铺子开始收摊，灯笼一盏盏亮起来。更夫敲着梆子走过，提醒人们该回家了。"
+- night: "夜深了，大街上几乎无人。月光洒在空旷的青石板上，只有几条野狗在街角游荡。远处传来更夫的报时声。"
+- rainy: "细雨蒙蒙，大街上的行人撑着油纸伞匆匆而过。雨水顺着屋檐滴落，在青石板上溅起细碎的水花。"
+- snowy: "大雪纷飞，大街上一片银白。几个孩童在路边堆雪人，远处的屋顶上积了厚厚的雪。"
+- spring: "春日暖阳下，大街两旁的柳树抽出新芽。卖花担子上的桃花杏花开得正艳，空气中满是花香。"
+- summer: "盛夏酷暑，大街上热浪滚滚。卖冰饮的小摊前排着长队，人们摇着蒲扇匆匆走在阴凉处。"
+- autumn: "秋风送爽，大街上飘着桂花的香味。卖糖炒栗子的小贩吆喝着，金黄的落叶铺了一地。"
+- winter: "寒冬腊月，大街上冷冷清清。偶尔有几个裹着棉衣的行人匆匆走过，呵出的白气瞬间消散。"
+
+对所有18个地点（street, market, teahouse, clinic, dock, farmland, residential, mountain, workshop, temple, academy, riverside, gambling_den, brothel, government_office, ruins, inn, bookshop）都要写出类似质量的描述。
+
+### 1.3 提供获取动态描述的方法
+
+```typescript
+export function getLocationDescription(
+  locationId: string, 
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night',
+  weather: string,
+  season: string
+): string
+```
+优先级：天气 > 时段 > 季节 > 基础描述
 
 ---
 
-## 任务五：日终结算丰富化（P2）
+## 任务二：日终结算丰富化（P0）
 
-### 5.1 增强 DaySummary
+### 2.1 增强 DayResult 接口
 
-当前的 DaySummary 组件需要展示更丰富的信息：
+在 `src/core/world/WorldEngine.ts` 的 DayResult 中添加：
 
-- 当日收支明细（赚了多少、花了多少、结余）
-- 当日重要事件回顾（最多5条）
-- NPC动态摘要（同地点NPC的今日动向）
-- 身体状态提示（如果饥饿低，提示"肚子咕咕叫"）
+```typescript
+export interface DayResult {
+  // ... 现有字段 ...
+  // 新增
+  dailyIncome: number;       // 当日收入
+  dailyExpense: number;      // 当日支出
+  transactions: string[];    // 交易记录（如 "购买羊肉汤 -35文"）
+  nightEvent: string | null; // 夜间随机事件
+  nextDayWeather: string;    // 次日天气预报
+  healthWarnings: string[];  // 健康警告（如 "肚子咕咕叫"）
+}
+```
+
+### 2.2 在 WorldEngine 中追踪收支
+
+- 添加 `dailyIncome` 和 `dailyExpense` 计数器
+- 在 `buyItem()` 中记录支出
+- 在 `sellItem()` 和工作行动中记录收入
+- 在 `advanceDay()` 时汇总并重置
+
+### 2.3 夜间随机事件
+
+在 `advanceDay()` 中添加夜间事件（30%概率触发）：
+
+定义至少15种夜间事件，分3种类型：
+
+**正面事件（30%）：**
+1. 做了一个好梦 — 心情+5
+2. 月色很美，睡得格外香甜 — 疲劳+10
+3. 邻居送来一碗热汤 — 饥饿+10，心情+3
+4. 梦见了家乡 — 心情+8
+5. 半夜听到更夫的吆喝，觉得安心 — 心情+3
+
+**中性事件（40%）：**
+6. 听到远处传来犬吠声 — 无效果
+7. 半夜醒来听到雨声 — 无效果
+8. 梦到了白天的琐事 — 无效果
+9. 更夫路过报时："天干物燥，小心火烛" — 无效果
+10. 风吹窗户响了一下 — 无效果
+
+**负面事件（30%）：**
+11. 被蚊子吵醒 — 疲劳-5，心情-3
+12. 做了噩梦 — 心情-5
+13. 肚子饿了睡不着 — 饥饿-10
+14. 夜里着了凉 — 健康-5
+15. 被老鼠吵醒 — 心情-3
+
+每个事件有叙事文本（50-100字）。
+
+### 2.4 健康警告
+
+根据玩家状态生成警告文本：
+- 饥饿 < 30: "肚子咕咕叫，该找点吃的了"
+- 饥饿 < 15: "饿得头昏眼花，再不吃东西要出人命了"
+- 疲劳 < 30: "疲惫不堪，需要休息"
+- 疲劳 < 15: "累得几乎站不住了"
+- 健康 < 30: "身体不适，该去看看大夫"
+- 健康 < 15: "病得很重，随时可能倒下"
+- 心情 < 20: "郁郁寡欢，做什么都提不起劲"
+- 铜钱 < 10: "囊中羞涩，该想办法赚点钱了"
+
+### 2.5 增强 DaySummary.vue
+
+在现有组件基础上增加：
+- 收支明细区（今日赚了多少/花了多少）
+- 夜间事件叙事（有动画展示）
+- 健康警告提示（红色闪烁）
 - 次日天气预报
 
-### 5.2 夜间随机事件
+---
 
-在 `advanceDay()` 中增加夜间事件触发：
-- 30%概率触发夜间事件
-- 夜间事件池（至少10种）：被偷、做好梦、偶遇夜归NPC、听到更夫报时、发现路边遗物等
+## 任务三：gameStore 完善（P0）
+
+### 3.1 gameStore 增加背包和交易状态管理
+
+在 `src/stores/gameStore.ts` 中添加：
+
+```typescript
+// 新增状态
+const showInventory = ref(false);
+const showShop = ref<string | null>(null); // 打开的店铺ID
+const transactionLog = ref<string[]>([]); // 交易日志
+```
+
+添加方法：
+- `toggleInventory()` — 切换背包显示
+- `openShop(shopId: string)` — 打开店铺
+- `closeShop()` — 关闭店铺
+- `addTransaction(text: string)` — 记录交易
+
+### 3.2 GameState 扩展
+
+在 GameState 类型中添加：
+```typescript
+export type GameState = 'menu' | 'creating' | 'playing' | 'event' | 'interacting' | 'daySummary' | 'dead' | 'shopping' | 'inventory';
+```
+
+### 3.3 在 App.vue 中正确集成
+
+确保游戏主界面中：
+- 背包按钮始终可见（底部工具栏）
+- 当前地点有店铺时显示"逛街"按钮
+- 打开面板时不影响游戏状态
+- 使用 CSS 过渡动画（滑入/淡入）
+
+---
+
+## 任务四：主界面底部工具栏（P1）
+
+### 4.1 在 App.vue 或新建 GameToolbar.vue
+
+底部工具栏包含以下按钮：
+
+| 按钮 | 功能 | 条件 |
+|------|------|------|
+| 🎒 背包 | 打开背包面板 | 始终可见 |
+| 🏪 逛街 | 打开当前地点店铺 | 当前地点有店铺 |
+| 👥 人际 | 打开关系面板 | 始终可见 |
+| 📜 日志 | 查看行动日志 | 始终可见 |
+| ⚙️ 系统 | 存档/读档/设置 | 始终可见 |
+
+每个按钮有 tooltip 和点击动画效果。
 
 ---
 
@@ -298,24 +205,15 @@ interface LocationDef {
 2. 保持现有 TypeScript 类型风格
 3. 不破坏现有调用链和接口
 4. 最终必须通过 `npx vue-tsc --noEmit` 编译检查
-5. 新文件放置在合理的目录结构中
-6. emoji 作为物品图标（🍚🫖💊🔧👕📚🎁 等）
+5. 叙事文本要有质感，体现宋朝市井氛围
 
 ## 文件修改范围
 
-**新建文件：**
-1. `src/core/data/ItemDefs.ts` — 物品定义
-2. `src/core/data/ShopDefs.ts` — 店铺定义
-3. `src/components/game/InventoryPanel.vue` — 背包UI
-4. `src/components/game/ShopPanel.vue` — 交易UI
+**主要修改：**
+1. `src/core/data/LocationDefs.ts` — 丰富所有18个地点描述
+2. `src/core/world/WorldEngine.ts` — 日终结算增强（收支追踪、夜间事件、健康警告）
+3. `src/components/game/DaySummary.vue` — 结算UI增强
+4. `src/stores/gameStore.ts` — 背包/交易状态管理
+5. `src/App.vue` — 底部工具栏、面板集成
 
-**修改文件：**
-5. `src/core/ecs/types.ts` — 添加 InventoryComponent
-6. `src/core/world/WorldEngine.ts` — 添加背包/交易/行动方法
-7. `src/core/ai/ActionRegistry.ts` — 扩展行动列表
-8. `src/core/data/LocationDefs.ts` — 丰富地点描述
-9. `src/stores/gameStore.ts` — 适配新系统
-10. `src/App.vue` — 集成新UI面板
-11. `src/components/game/DaySummary.vue` — 增强结算信息
-
-开始实现吧！优先保证功能正确和编译通过。物品定义和叙事文本要丰富有质感，体现宋朝市井氛围。
+开始实现！优先完成任务一（地点描述）和任务二（日终结算），确保编译通过。

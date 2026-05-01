@@ -33,6 +33,13 @@ export interface DayResult {
   majorEvents: string[];
   playerDied: boolean;
   deathCause: string;
+  // 新增字段
+  dailyIncome: number;       // 当日收入
+  dailyExpense: number;      // 当日支出
+  transactions: string[];    // 交易记录（如 "购买羊肉汤 -35文"）
+  nightEvent: string | null; // 夜间随机事件
+  nextDayWeather: string;    // 次日天气预报
+  healthWarnings: string[];  // 健康警告（如 "肚子咕咕叫"）
 }
 
 export interface PlayerSnapshot {
@@ -70,6 +77,10 @@ export class WorldEngine {
   private playerId: number | null = null;
   private usedEventIds: string[] = [];  // 冷却中的事件ID
   private activeEvent: ActiveEvent | null = null;
+  // 收支追踪
+  private dailyIncome = 0;
+  private dailyExpense = 0;
+  private transactions: string[] = [];  // 今日交易记录
 
   constructor(seed: number = Date.now()) {
     this.em = new EntityManager();
@@ -213,7 +224,16 @@ export class WorldEngine {
       if (ap) ap.current = ap.max;
     }
 
-    // 8. 死亡检查
+    // 8.5 生成健康警告
+    const healthWarnings = this.generateHealthWarnings();
+
+    // 8.6 生成夜间随机事件
+    const nightEvent = this.generateNightEvent();
+
+    // 8.7 生成次日天气预报
+    const nextDayWeather = this.generateNextDayWeather(season);
+
+    // 9. 死亡检查
     const deathResults = this.death.check(this.em);
     let playerDied = false;
     let deathCause = '';
@@ -223,6 +243,14 @@ export class WorldEngine {
         deathCause = dr.cause;
       }
     }
+
+    // 10. 汇总当日收支并重置
+    const resultIncome = this.dailyIncome;
+    const resultExpense = this.dailyExpense;
+    const resultTransactions = [...this.transactions];
+    this.dailyIncome = 0;
+    this.dailyExpense = 0;
+    this.transactions = [];
 
     return {
       day: this.time.getDay(),
@@ -234,6 +262,12 @@ export class WorldEngine {
       majorEvents: rumorEvents,
       playerDied,
       deathCause,
+      dailyIncome: resultIncome,
+      dailyExpense: resultExpense,
+      transactions: resultTransactions,
+      nightEvent,
+      nextDayWeather,
+      healthWarnings,
     };
   }
 
@@ -994,11 +1028,18 @@ export class WorldEngine {
     // 扣除铜钱
     wallet.copper -= sellItem.price;
 
+    // 记录支出和交易
+    this.dailyExpense += sellItem.price;
+    this.transactions.push(`购买${itemDef.name} -${sellItem.price}文`);
+
     // 添加到背包
     const addResult = this.addItem(itemId, 1);
     if (!addResult.success) {
       // 回退铜钱
       wallet.copper += sellItem.price;
+      // 回退支出记录
+      this.dailyExpense -= sellItem.price;
+      this.transactions.pop();
       return addResult;
     }
 
@@ -1064,6 +1105,10 @@ export class WorldEngine {
 
     wallet.copper += buyPrice;
 
+    // 记录收入和交易
+    this.dailyIncome += buyPrice;
+    this.transactions.push(`出售${itemDef.name} +${buyPrice}文`);
+
     // 生成叙事文本
     const narrative = `你把${itemDef.name}卖给了${targetShop.name}，获得了${buyPrice}文铜钱。`;
 
@@ -1096,5 +1141,156 @@ export class WorldEngine {
     }
 
     return narratives[Math.floor(this.rng.next() * narratives.length)]!;
+  }
+
+  // ==================== 夜间随机事件系统 ====================
+
+  /** 生成夜间随机事件（30%概率触发） */
+  private generateNightEvent(): string | null {
+    if (this.rng.next() > 0.3) return null; // 30%概率触发
+
+    const roll = this.rng.next();
+
+    // 正面事件（30%）
+    if (roll < 0.3) {
+      const positiveEvents = [
+        { text: '你做了一个美梦，梦中桃花烂漫，醒来时心情格外舒畅。', effects: { mood: 5 } },
+        { text: '今夜月色如水，你睡得格外香甜，醒来后精神饱满。', effects: { fatigue: 10 } },
+        { text: '半夜邻居来敲门，送来一碗热腾腾的羊肉汤。你喝完后，胃里暖暖的。', effects: { hunger: 10, mood: 3 } },
+        { text: '梦中回到了故乡，父母的笑脸历历在目。醒来时，眼角还挂着泪珠。', effects: { mood: 8 } },
+        { text: '半夜听到更夫的吆喝声："天干物燥，小心火烛！"这熟悉的声音让你感到安心。', effects: { mood: 3 } },
+      ];
+      const event = positiveEvents[Math.floor(this.rng.next() * positiveEvents.length)]!;
+
+      // 应用效果（如果需要）
+      if (this.playerId !== null) {
+        const vital = this.em.getComponent(this.playerId, 'Vital');
+        if (vital) {
+          if (event.effects.mood) vital.mood = Math.min(100, vital.mood + event.effects.mood);
+          if (event.effects.fatigue) vital.fatigue = Math.min(100, vital.fatigue + event.effects.fatigue);
+          if (event.effects.hunger) vital.hunger = Math.min(100, vital.hunger + event.effects.hunger);
+        }
+      }
+
+      return event.text;
+    }
+
+    // 负面事件（30%）
+    if (roll < 0.6) {
+      const negativeEvents = [
+        { text: '半夜被蚊子的嗡嗡声吵醒，赶走一波又来一波。你一晚上没睡好。', effects: { fatigue: -5, mood: -3 } },
+        { text: '你做了一个噩梦，梦中被怪物追赶，醒来时一身冷汗。', effects: { mood: -5 } },
+        { text: '肚子饿得咕咕叫，你翻来覆去睡不着，只能起来喝几口冷水充饥。', effects: { hunger: -10 } },
+        { text: '夜里受了凉，醒来时头昏脑涨，嗓子有些发干。', effects: { health: -5 } },
+        { text: '半夜被老鼠吵醒，那家伙在房梁上跑来跑去，发出吱吱的叫声。', effects: { mood: -3 } },
+      ];
+      const event = negativeEvents[Math.floor(this.rng.next() * negativeEvents.length)]!;
+
+      // 应用效果
+      if (this.playerId !== null) {
+        const vital = this.em.getComponent(this.playerId, 'Vital');
+        if (vital) {
+          if (event.effects.mood) vital.mood = Math.max(0, vital.mood + event.effects.mood);
+          if (event.effects.fatigue) vital.fatigue = Math.max(0, vital.fatigue + event.effects.fatigue);
+          if (event.effects.hunger) vital.hunger = Math.max(0, vital.hunger + event.effects.hunger);
+          if (event.effects.health) vital.health = Math.max(0, vital.health + event.effects.health);
+        }
+      }
+
+      return event.text;
+    }
+
+    // 中性事件（40%）
+    const neutralEvents = [
+      '半夜听到远处传来犬吠声，好像是哪家的狗在叫个不停。',
+      '你从梦中醒来，听到外面传来淅淅沥沥的雨声。你翻个身继续睡。',
+      '你做了一个梦，梦见白天发生的琐事，醒来时已经记不清细节了。',
+      '更夫路过窗下："天干物燥，小心火烛！"你知道，又平安度过了一天。',
+      '半夜风吹窗户，发出"哐当"一声。你警醒地坐起来，发现只是风。',
+    ];
+    return neutralEvents[Math.floor(this.rng.next() * neutralEvents.length)]!;
+  }
+
+  // ==================== 健康警告系统 ====================
+
+  /** 根据玩家状态生成健康警告 */
+  private generateHealthWarnings(): string[] {
+    const warnings: string[] = [];
+
+    if (this.playerId === null) return warnings;
+
+    const vital = this.em.getComponent(this.playerId, 'Vital');
+    const wallet = this.em.getComponent(this.playerId, 'Wallet');
+    if (!vital || !wallet) return warnings;
+
+    // 饥饿警告
+    if (vital.hunger < 15) {
+      warnings.push('饿得头昏眼花，再不吃东西要出人命了！');
+    } else if (vital.hunger < 30) {
+      warnings.push('肚子咕咕叫，该找点吃的了。');
+    }
+
+    // 疲劳警告
+    if (vital.fatigue < 15) {
+      warnings.push('累得几乎站不住了，急需休息。');
+    } else if (vital.fatigue < 30) {
+      warnings.push('疲惫不堪，需要休息。');
+    }
+
+    // 健康警告
+    if (vital.health < 15) {
+      warnings.push('病得很重，随时可能倒下！');
+    } else if (vital.health < 30) {
+      warnings.push('身体不适，该去看看大夫。');
+    }
+
+    // 心情警告
+    if (vital.mood < 20) {
+      warnings.push('郁郁寡欢，做什么都提不起劲。');
+    }
+
+    // 铜钱警告
+    if (wallet.copper < 10) {
+      warnings.push('囊中羞涩，该想办法赚点钱了。');
+    }
+
+    return warnings;
+  }
+
+  // ==================== 次日天气预报系统 ====================
+
+  /** 生成次日天气预报 */
+  private generateNextDayWeather(currentSeason: string): string {
+    const roll = this.rng.next();
+
+    // 基础天气概率
+    let sunnyChance = 0.6;
+    let rainyChance = 0.25;
+    let snowyChance = 0.15;
+
+    // 根据季节调整概率
+    if (currentSeason === '夏') {
+      sunnyChance = 0.7;
+      rainyChance = 0.3;
+      snowyChance = 0;
+    } else if (currentSeason === '冬') {
+      sunnyChance = 0.4;
+      rainyChance = 0.3;
+      snowyChance = 0.3;
+    } else if (currentSeason === '春') {
+      sunnyChance = 0.5;
+      rainyChance = 0.4;
+      snowyChance = 0.1;
+    }
+
+    if (roll < sunnyChance) {
+      return '明日晴朗';
+    } else if (roll < sunnyChance + rainyChance) {
+      return '明日有雨';
+    } else if (roll < sunnyChance + rainyChance + snowyChance) {
+      return '明日有雪';
+    } else {
+      return '明日晴朗';
+    }
   }
 }
