@@ -219,7 +219,7 @@ if (interStore.lastResult) {
           <span class="option-meta">
             <!-- 相关度评分（星星显示） -->
             <span v-if="opt.relevanceScore !== undefined" class="option-relevance" :style="{ color: relevanceColor(opt.relevanceScore) }">
-              {{ '★'.repeat(Math.ceil(opt.relevanceScore / 20)) }}{{ '☆'.repeat(5 - Math.ceil(opt.relevanceScore / 20)) }}
+              {{ '★'.repeat(Math.min(Math.ceil(opt.relevanceScore / 20), 5)) }}{{ '☆'.repeat(Math.max(5 - Math.ceil(opt.relevanceScore / 20), 0)) }}
             </span>
             <span v-if="opt.costAp" class="option-cost">AP{{ opt.costAp }}</span>
             <span v-if="opt.costCopper" class="option-cost">{{ opt.costCopper }}文</span>
